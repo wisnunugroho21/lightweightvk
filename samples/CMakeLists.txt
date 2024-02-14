@@ -36,8 +36,8 @@ macro(ADD_DEMO app)
 
   # Android
   if(LVK_WITH_SAMPLES_ANDROID)
-    if(NOT DEFINED ENV{ANDROID_NDK})
-      message(FATAL_ERROR "ANDROID_NDK environment variable is not set")
+    if((NOT DEFINED ENV{ANDROID_NDK}) AND (NOT DEFINED ENV{NDK_ROOT}))
+      message(FATAL_ERROR "ANDROID_NDK (or NDK_ROOT) environment variable is not set")
     endif()
 
     # One CMakeLists file is used for generation Android Project and for building native library.
@@ -77,7 +77,11 @@ macro(ADD_DEMO app)
     endif()
 
     if(ANDROID)
-      cmake_path(SET NDK_PATH $ENV{ANDROID_NDK})
+      if(DEFINED ENV{ANDROID_NDK})
+        cmake_path(SET NDK_PATH $ENV{ANDROID_NDK})
+      else()
+        cmake_path(SET NDK_PATH $ENV{NDK_ROOT})
+      endif()
       add_library(lvk_android_native_${app} SHARED 
                   "${app}.cpp"
                   "${NDK_PATH}/sources/android/native_app_glue/android_native_app_glue.c")
