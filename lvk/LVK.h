@@ -774,8 +774,8 @@ class ICommandBuffer {
   virtual void cmdBindIndexBuffer(BufferHandle indexBuffer, IndexFormat indexFormat, uint64_t indexBufferOffset = 0) = 0;
   virtual void cmdPushConstants(const void* data, size_t size, size_t offset = 0) = 0;
   template<typename Struct>
-  void cmdPushConstants(const Struct& data) {
-    this->cmdPushConstants(&data, sizeof(Struct), 0);
+  void cmdPushConstants(const Struct& data, size_t offset = 0) {
+    this->cmdPushConstants(&data, sizeof(Struct), offset);
   }
 
   virtual void cmdDraw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t baseInstance = 0) = 0;
