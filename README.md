@@ -78,8 +78,11 @@ cmake .. -G "Xcode"
 ### Android
 
 :heavy_exclamation_mark: Be sure that [Android Studio](https://developer.android.com/studio) is set up.
+
 :heavy_exclamation_mark: Be sure that the `ANDROID_NDK` environment variable points to your Android NDK.
+
 :heavy_exclamation_mark: Be sure that the `JAVA_HOME` environment variable is set to the path of the Java Runtime.
+
 :heavy_exclamation_mark: Be sure that the `adb` platform tool is in the `PATH` environment variable.
 
 ```
