@@ -14,7 +14,7 @@ There are no plans to keep this fork in sync with the upstream.
 
 ## Supported rendering backends
 
- * Vulkan 1.3 (Windows, Linux)
+ * Vulkan 1.3 (Windows, Linux, Android)
  * Vulkan 1.2 + extensions (MacOS)
 
 ## Supported platforms
@@ -22,13 +22,14 @@ There are no plans to keep this fork in sync with the upstream.
  * Linux
  * Windows
  * MacOS (via MoltenVK)
+ * Android
 
 ## API Support
 
-|                          | Windows                    | Linux                      | MacOS
-| ------------------------ | -------------------------- | -------------------------- | -------------------------- |
-| Vulkan 1.3               | :heavy_check_mark:         | :heavy_check_mark:         | :heavy_exclamation_mark:   |
-| Vulkan 1.2               |                            |                            | :heavy_check_mark:         |
+|                          | Windows                    | Linux                      | MacOS                      | Android                    |
+| ------------------------ | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
+| Vulkan 1.3               | :heavy_check_mark:         | :heavy_check_mark:         | :heavy_exclamation_mark:   | :heavy_check_mark:         |
+| Vulkan 1.2               |                            |                            | :heavy_check_mark:         |                            |
 
 :heavy_exclamation_mark: On MacOS dynamic rendering and subgroup size control required by LightweightVK are available via extensions `VK_KHR_dynamic_rendering` and `VK_EXT_subgroup_size_control`. `VK_KHR_maintenance4` and `VK_KHR_synchronization2` are not currently supported.
 
@@ -71,6 +72,31 @@ cmake .. -G "Unix Makefiles"
 cd build
 cmake .. -G "Xcode"
 ```
+
+### Android
+
+:heavy_exclamation_mark: Be sure that [Android Studio](https://developer.android.com/studio) is set up.
+:heavy_exclamation_mark: Be sure that `ANDROID_NDK` environment variable is set to the path of the Android NDK.
+:heavy_exclamation_mark: Be sure that `JAVA_HOME` environment variable is set to the path of the Java Runtime.
+:heavy_exclamation_mark: Be sure that path to the `adb` platform tool is in the `PATH` environment variable.
+
+```
+cd build
+cmake .. -DLVK_WITH_SAMPLES_ANDROID=ON
+cd android/Tiny                         # or any other sample
+./gradlew assembleDebug                 # or assembleRelease
+```
+or open the project in Android Studio and build it from there.
+
+Before running demos on the device, connect device to desktop and run the deployment script:
+
+```
+python3 deploy_content_android.py
+```
+
+> NOTE: For running on the device, the device should have Vulkan 1.3 support. Please check https://vulkan.gpuinfo.org/listdevices.php?platform=android 
+
+> NOTE: At the moment, input is not supported in demos on Android.
 
 ## Screenshots
 

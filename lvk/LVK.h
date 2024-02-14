@@ -15,6 +15,10 @@
 
 #include <minilog/minilog.h>
 
+#if defined(ANDROID)
+#include <android/native_window.h>
+#endif
+
 // clang-format off
 #if defined(LVK_WITH_TRACY)
   #include "tracy/Tracy.hpp"
@@ -922,6 +926,14 @@ void logShaderSource(const char* text);
  */
 GLFWwindow* initWindow(const char* windowTitle, int& outWidth, int& outHeight, bool resizable = false);
 std::unique_ptr<lvk::IContext> createVulkanContextWithSwapchain(GLFWwindow* window,
+                                                                uint32_t width,
+                                                                uint32_t height,
+                                                                const lvk::ContextConfig& cfg,
+                                                                lvk::HWDeviceType preferredDeviceType = lvk::HWDeviceType_Discrete);
+#endif
+
+#if defined(ANDROID)
+std::unique_ptr<lvk::IContext> createVulkanContextWithSwapchain(ANativeWindow* window,
                                                                 uint32_t width,
                                                                 uint32_t height,
                                                                 const lvk::ContextConfig& cfg,

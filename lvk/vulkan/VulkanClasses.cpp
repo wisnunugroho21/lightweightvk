@@ -1407,7 +1407,11 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
       .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
       .queueFamilyIndexCount = 1,
       .pQueueFamilyIndices = &ctx.deviceQueues_.graphicsQueueFamilyIndex,
+#if defined(ANDROID)
+      .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+#else
       .preTransform = ctx.deviceSurfaceCaps_.currentTransform,
+#endif
       .compositeAlpha = isCompositeAlphaOpaqueSupported ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR : VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
       .presentMode = chooseSwapPresentMode(ctx.devicePresentModes_),
       .clipped = VK_TRUE,
@@ -2483,6 +2487,15 @@ void lvk::CommandBuffer::cmdBindDepthState(const DepthState& desc) {
   const VkCompareOp op = compareOpToVkCompareOp(desc.compareOp);
   vkCmdSetDepthWriteEnable(wrapper_->cmdBuf_, desc.isDepthWriteEnabled ? VK_TRUE : VK_FALSE);
   vkCmdSetDepthTestEnable(wrapper_->cmdBuf_, op != VK_COMPARE_OP_ALWAYS);
+
+#if defined(ANDROID)
+  // This is a workaround for the issue.
+  // On Android (Mali-G715-Immortalis MC11 v1.r38p1-01eac0.c1a71ccca2acf211eb87c5db5322f569) 
+  // if depth-stencil texture is not set, call of vkCmdSetDepthCompareOp leads to disappearing of all content. 
+  if (!framebuffer_.depthStencil.texture) {
+    return;
+  }
+#endif
   vkCmdSetDepthCompareOp(wrapper_->cmdBuf_, op);
 }
 
@@ -4196,6 +4209,8 @@ void lvk::VulkanContext::createInstance() {
     VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #if defined(_WIN32)
     VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+    VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
 #elif defined(__linux__)
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
     VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
@@ -4215,10 +4230,14 @@ void lvk::VulkanContext::createInstance() {
   const uint32_t numInstanceExtensions = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(instanceExtensionNames)
                                                                   : (uint32_t)LVK_ARRAY_NUM_ELEMENTS(instanceExtensionNames) - 1;
 
+#if !defined(ANDROID)
+  // GPU Assisted Validation doesn't work on Android.
+  // It implicitly requires vertexPipelineStoresAndAtomics feature that's not supported even on high-end devices.
   const VkValidationFeatureEnableEXT validationFeaturesEnabled[] = {
       VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
       VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
   };
+#endif
   
 #if defined(__APPLE__)
   // Shader validation doesn't work in MoltenVK for SPIR-V 1.6 under Vulkan 1.3:
@@ -4232,8 +4251,10 @@ void lvk::VulkanContext::createInstance() {
   const VkValidationFeaturesEXT features = {
       .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
       .pNext = nullptr,
+#if !defined(ANDROID)
       .enabledValidationFeatureCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(validationFeaturesEnabled) : 0u,
       .pEnabledValidationFeatures = config_.enableValidation ? validationFeaturesEnabled : nullptr,
+#endif
 #if defined(__APPLE__)
       .disabledValidationFeatureCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(validationFeaturesDisabled) : 0u,
       .pDisabledValidationFeatures = config_.enableValidation ? validationFeaturesDisabled : nullptr,
@@ -4322,6 +4343,13 @@ void lvk::VulkanContext::createSurface(void* window, void* display) {
       .hwnd = (HWND)window,
   };
   VK_ASSERT(vkCreateWin32SurfaceKHR(vkInstance_, &ci, nullptr, &vkSurface_));
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+  const VkAndroidSurfaceCreateInfoKHR ci = {
+      .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR, 
+      .pNext = nullptr, 
+      .flags = 0, 
+      .window = (ANativeWindow*)window};
+  VK_ASSERT(vkCreateAndroidSurfaceKHR(vkInstance_, &ci, nullptr, &vkSurface_));
 #elif defined(VK_USE_PLATFORM_XLIB_KHR)
   const VkXlibSurfaceCreateInfoKHR ci = {
       .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
@@ -4497,16 +4525,20 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   };
 
   VkPhysicalDeviceFeatures deviceFeatures10 = {
-#ifndef __APPLE__
+#if !defined(__APPLE__)
       .geometryShader = VK_TRUE,
       .tessellationShader = VK_TRUE,
 #endif
       .multiDrawIndirect = VK_TRUE,
       .drawIndirectFirstInstance = VK_TRUE,
       .depthBiasClamp = VK_TRUE,
+#if !defined(ANDROID)
       .fillModeNonSolid = VK_TRUE,
+#endif
       .samplerAnisotropy = VK_TRUE,
+#if !defined(ANDROID)
       .textureCompressionBC = VK_TRUE,
+#endif
       .fragmentStoresAndAtomics = VK_TRUE,
   };
   VkPhysicalDeviceVulkan11Features deviceFeatures11 = {

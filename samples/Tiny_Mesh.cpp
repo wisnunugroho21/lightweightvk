@@ -11,10 +11,13 @@
 #endif // _USE_MATH_DEFINES
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <vector>
 
 #include <stdio.h>
+#include <errno.h>
+#include <string.h>
 
 #include <glm/ext.hpp>
 #include <glm/glm.hpp>
@@ -23,7 +26,14 @@
 #include <lvk/LVK.h>
 #include <lvk/HelpersImGui.h>
 
+#if defined(ANDROID)
+#include <android_native_app_glue.h>
+#include <jni.h>
+#include <time.h>
+#else
 #include <GLFW/glfw3.h>
+#endif
+
 #include <stb/stb_image.h>
 
 #include <shared/UtilsFPS.h>
@@ -106,7 +116,6 @@ using glm::vec4;
 
 vec3 axis_[kNumCubes];
 
-GLFWwindow* window_ = nullptr;
 int width_ = 1280;
 int height_ = 1024;
 FramesPerSecondCounter fps_;
@@ -184,9 +193,10 @@ static uint16_t indexData[] = {0,  1,  2,  2,  3,  0,  4,  5,  6,  6,  7,  4,
 
 UniformsPerObject perObject[kNumCubes];
 
-static void initIGL() {
-  ctx_ = lvk::createVulkanContextWithSwapchain(window_, width_, height_, {});
+void initObjects();
+std::filesystem::path getPathToContentFolder();
 
+void init() {
   // Vertex buffer, Index buffer and Vertex Input. Buffers are allocated in GPU memory.
   vb0_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage,
                                 .storage = lvk::StorageType_Device,
@@ -239,22 +249,18 @@ static void initIGL() {
   }
   {
     using namespace std::filesystem;
-    path dir = current_path();
-    const char* contentFolder = "third-party/content/src/";
-    while (dir != current_path().root_path() && !exists(dir / path(contentFolder))) {
-      dir = dir.parent_path();
-    }
+    path dir = getPathToContentFolder();
     int32_t texWidth = 0;
     int32_t texHeight = 0;
     int32_t channels = 0;
-    uint8_t* pixels = stbi_load((dir / path(contentFolder) / path("bistro/BuildingTextures/wood_polished_01_diff.png")).string().c_str(),
+    uint8_t* pixels = stbi_load((dir / path("bistro/BuildingTextures/wood_polished_01_diff.png")).string().c_str(),
                                 &texWidth,
                                 &texHeight,
                                 &channels,
                                 4);
-    LVK_ASSERT_MSG(pixels, "Cannot load textures. Run `deploy_content.py` before running this app.");
+    LVK_ASSERT_MSG(pixels, "Cannot load textures. Run `deploy_content.py`/`deploy_content_android.py` before running this app.");
     if (!pixels) {
-      printf("Cannot load textures. Run `deploy_content.py` before running this app.");
+      printf("Cannot load textures. Run `deploy_content.py`/`deploy_content_android.py` before running this app.");
       std::terminate();
     }
     texture1_ = ctx_->createTexture(
@@ -287,9 +293,30 @@ static void initIGL() {
   for (uint32_t i = 0; i != kNumCubes; i++) {
     axis_[i] = glm::sphericalRand(1.0f);
   }
+
+  initObjects();
+
+  imgui_ = std::make_unique<lvk::ImGuiRenderer>(*ctx_);
 }
 
-static void initObjects() {
+void destroy() {
+  imgui_ = nullptr;
+
+  vb0_ = nullptr;
+  ib0_ = nullptr;
+  ubPerFrame_.clear();
+  ubPerObject_.clear();
+  vert_ = nullptr;
+  frag_ = nullptr;
+  renderPipelineState_Mesh_ = nullptr;
+  texture0_ = nullptr;
+  texture1_ = nullptr;
+  sampler_ = nullptr;
+  framebuffer_ = {};
+  ctx_ = nullptr;
+}
+
+void initObjects() {
   if (renderPipelineState_Mesh_.valid()) {
     return;
   }
@@ -313,14 +340,31 @@ static void initObjects() {
       nullptr);
 }
 
-void render(lvk::TextureHandle nativeDrawable, uint32_t frameIndex) {
+void resize() {
+  if (!width_ || !height_) {
+    return;
+  }
+  ctx_->recreateSwapchain(width_, height_);
+}
+
+void render(uint32_t frameIndex, float time) {
   LVK_PROFILER_FUNCTION();
 
   if (!width_ || !height_) {
     return;
   }
 
-  framebuffer_.color[0].texture = nativeDrawable;
+  lvk::TextureHandle nativeDrawable = ctx_->getCurrentSwapchainTexture();
+  framebuffer_ = {
+      .color = {{.texture = nativeDrawable}},
+  };
+
+  imgui_->beginFrame(framebuffer_);
+
+  // imGui
+  ImGui::Begin("Texture Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+  ImGui::Image(ImTextureID(texture1_.indexAsVoid()), ImVec2(512, 512));
+  ImGui::End();
 
   const float fov = float(45.0f * (M_PI / 180.0f));
   const float aspectRatio = (float)width_ / (float)height_;
@@ -341,8 +385,7 @@ void render(lvk::TextureHandle nativeDrawable, uint32_t frameIndex) {
     const vec3 offset = vec3(-1.5f * sqrt(kNumCubes) + 4.0f * (i % cubesInLine),
                              -1.5f * sqrt(kNumCubes) + 4.0f * (i / cubesInLine),
                              0);
-    perObject[i].model =
-        glm::rotate(glm::translate(mat4(1.0f), offset), direction * (float)glfwGetTime(), axis_[i]);
+    perObject[i].model = glm::rotate(glm::translate(mat4(1.0f), offset), direction * time, axis_[i]);
   }
 
   ctx_->upload(ubPerObject_[frameIndex], &perObject, sizeof(perObject));
@@ -384,18 +427,31 @@ void render(lvk::TextureHandle nativeDrawable, uint32_t frameIndex) {
   ctx_->submit(buffer, nativeDrawable);
 }
 
+#if !defined(ANDROID)
+std::filesystem::path getPathToContentFolder() {
+  using namespace std::filesystem;
+  path dir = current_path();
+  const char* contentFolder = "third-party/content/src/";
+  while (dir != current_path().root_path() && !exists(dir / path(contentFolder))) {
+    dir = dir.parent_path();
+  }
+  return dir / path(contentFolder);
+}
+
 int main(int argc, char* argv[]) {
   minilog::initialize(nullptr, {.threadNames = false});
 
-  window_ = lvk::initWindow("Vulkan Mesh", width_, height_, true);
-  initIGL();
+  GLFWwindow* window = lvk::initWindow("Vulkan Mesh", width_, height_, true);
 
-  initObjects();
+  ctx_ = lvk::createVulkanContextWithSwapchain(window, width_, height_, {});
+  if (!ctx_) {
+    return 1;
+  }
 
-  imgui_ = std::make_unique<lvk::ImGuiRenderer>(*ctx_);
+  init();
 
-  glfwSetCursorPosCallback(window_, [](auto* window, double x, double y) { ImGui::GetIO().MousePos = ImVec2(x, y); });
-  glfwSetMouseButtonCallback(window_, [](auto* window, int button, int action, int mods) {
+  glfwSetCursorPosCallback(window, [](auto* window, double x, double y) { ImGui::GetIO().MousePos = ImVec2(x, y); });
+  glfwSetMouseButtonCallback(window, [](auto* window, int button, int action, int mods) {
     double xpos, ypos;
     glfwGetCursorPos(window, &xpos, &ypos);
     const ImGuiMouseButton_ imguiButton = (button == GLFW_MOUSE_BUTTON_LEFT)
@@ -406,13 +462,13 @@ int main(int argc, char* argv[]) {
     io.MouseDown[imguiButton] = action == GLFW_PRESS;
   });
 
-  glfwSetFramebufferSizeCallback(window_, [](GLFWwindow*, int width, int height) {
+  glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int width, int height) {
     width_ = width;
     height_ = height;
-    ctx_->recreateSwapchain(width, height);
+    resize();
   });
 
-  glfwSetKeyCallback(window_, [](GLFWwindow* window, int key, int, int action, int) {
+  glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int, int action, int) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
       glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
@@ -426,45 +482,91 @@ int main(int argc, char* argv[]) {
   uint32_t frameIndex = 0;
 
   // Main loop
-  while (!glfwWindowShouldClose(window_)) {
+  while (!glfwWindowShouldClose(window)) {
     const double newTime = glfwGetTime();
     fps_.tick(newTime - prevTime);
     prevTime = newTime;
-    if (width_ && height_) {
-      framebuffer_ = {
-          .color = {{.texture = ctx_->getCurrentSwapchainTexture()}},
-      };
-
-      imgui_->beginFrame(framebuffer_);
-
-      ImGui::Begin("Texture Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-      ImGui::Image(ImTextureID(texture1_.indexAsVoid()), ImVec2(512, 512));
-      ImGui::End();
-    }
-
-    render(ctx_->getCurrentSwapchainTexture(), frameIndex);
+    render(frameIndex, (float)newTime);
     glfwPollEvents();
     frameIndex = (frameIndex + 1) % kNumBufferedFrames;
   }
 
-  imgui_ = nullptr;
-
   // destroy all the Vulkan stuff before closing the window
-  vb0_ = nullptr;
-  ib0_ = nullptr;
-  ubPerFrame_.clear();
-  ubPerObject_.clear();
-  vert_ = nullptr;
-  frag_ = nullptr;
-  renderPipelineState_Mesh_ = nullptr;
-  texture0_ = nullptr;
-  texture1_ = nullptr;
-  sampler_ = nullptr;
-  framebuffer_ = {};
-  ctx_ = nullptr;
+  destroy();
 
-  glfwDestroyWindow(window_);
+  glfwDestroyWindow(window);
   glfwTerminate();
 
   return 0;
 }
+#else
+std::filesystem::path getPathToContentFolder() {
+  if (const char* externalStorage = std::getenv("EXTERNAL_STORAGE")) {
+    return std::filesystem::path(externalStorage) / "LVK" / "content" / "src";
+  }
+  return {};
+}
+
+extern "C" {
+void handle_cmd(android_app* app, int32_t cmd) {
+  switch (cmd) {
+  case APP_CMD_INIT_WINDOW:
+    if (app->window != nullptr) {
+      width_ = ANativeWindow_getWidth(app->window);
+      height_ = ANativeWindow_getHeight(app->window);
+      ctx_ = lvk::createVulkanContextWithSwapchain(app->window, width_, height_, {});
+      init();
+    }
+    break;
+  case APP_CMD_TERM_WINDOW:
+    destroy();
+    break;
+  }
+}
+
+void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
+  int w = ANativeWindow_getWidth(window);
+  int h = ANativeWindow_getHeight(window);
+  if (width_ != w || height_ != h) {
+    width_ = w;
+    height_ = h;
+    if (ctx_) {
+      resize();
+    }
+  }
+}
+
+void android_main(android_app* app) {
+  minilog::initialize(nullptr, {.threadNames = false});
+  app->onAppCmd = handle_cmd;
+  app->activity->callbacks->onNativeWindowResized = resize_callback;
+
+  fps_.printFPS_ = false;
+
+  timespec prevTime = {0, 0};
+  clock_gettime(CLOCK_MONOTONIC, &prevTime);
+
+  uint32_t frameIndex = 0;
+
+  int events = 0;
+  android_poll_source* source = nullptr;
+  do {
+    timespec newTime = {0, 0};
+    clock_gettime(CLOCK_MONOTONIC, &newTime);
+    double newTimeSec = ((double)newTime.tv_sec + 1.0e-9 * newTime.tv_nsec);
+    fps_.tick(newTimeSec - ((double)prevTime.tv_sec + 1.0e-9 * prevTime.tv_nsec));
+    LLOGL("FPS: %.1f\n", fps_.getFPS());
+    prevTime = newTime;
+    if (ctx_) {
+      render(frameIndex, (float)newTimeSec);
+    }
+    if (ALooper_pollAll(0, nullptr, &events, (void**)&source) >= 0) {
+      if (source) {
+        source->process(app, source);
+      }
+    }
+    frameIndex = (frameIndex + 1) % kNumBufferedFrames;
+  } while (!app->destroyRequested);
+}
+} // extern "C"
+#endif
