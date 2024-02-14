@@ -111,7 +111,11 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFl
         const char* substr2 = strstr(cbData->pMessage, "Shader Module (Shader Module: ");
         char* shaderModuleDebugName = (char*)alloca(len + 1);
         VkShaderModule shaderModule = VK_NULL_HANDLE;
+#if VK_USE_64_BIT_PTR_DEFINES
         if (substr2 && sscanf(substr2, "Shader Module (Shader Module: %[^)])(%p)", shaderModuleDebugName, &shaderModule) == 2) {
+#else
+        if (substr2 && sscanf(substr2, "Shader Module (Shader Module: %[^)])(%llu)", shaderModuleDebugName, &shaderModule) == 2) {
+#endif // VK_USE_64_BIT_PTR_DEFINES
           ctx->invokeShaderModuleErrorCallback(line, col, shaderModuleDebugName, shaderModule);
         }
       }
