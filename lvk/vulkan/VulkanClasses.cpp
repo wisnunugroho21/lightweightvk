@@ -1792,17 +1792,6 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::getLastSubmitHandle() const {
   return lastSubmitHandle_;
 }
 
-void lvk::RenderPipelineState::destroyPipelines(lvk::VulkanContext* ctx) {
-  for (uint32_t depthBiasEnabled = 0; depthBiasEnabled != VK_TRUE + 1; depthBiasEnabled++) {
-    VkPipeline& vkPipeline = pipelines_[depthBiasEnabled];
-    if (vkPipeline != VK_NULL_HANDLE) {
-      ctx->deferredTask(std::packaged_task<void()>(
-          [device = ctx->getVkDevice(), pipeline = vkPipeline]() { vkDestroyPipeline(device, pipeline, nullptr); }));
-      vkPipeline = VK_NULL_HANDLE;
-    }
-  }
-}
-
 lvk::VulkanPipelineBuilder::VulkanPipelineBuilder() :
   vertexInputState_(VkPipelineVertexInputStateCreateInfo{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -1877,11 +1866,6 @@ lvk::VulkanPipelineBuilder::VulkanPipelineBuilder() :
       .minDepthBounds = 0.0f,
       .maxDepthBounds = 1.0f,
   }) {}
-
-lvk::VulkanPipelineBuilder& lvk::VulkanPipelineBuilder::depthBiasEnable(bool enable) {
-  rasterizationState_.depthBiasEnable = enable ? VK_TRUE : VK_FALSE;
-  return *this;
-}
 
 lvk::VulkanPipelineBuilder& lvk::VulkanPipelineBuilder::dynamicState(VkDynamicState state) {
   LVK_ASSERT(numDynamicStates_ < LVK_MAX_DYNAMIC_STATES);
@@ -2124,9 +2108,7 @@ void lvk::CommandBuffer::cmdBindComputePipeline(lvk::ComputePipelineHandle handl
 
   if (lastPipelineBound_ != pipeline) {
     lastPipelineBound_ = pipeline;
-    if (pipeline != VK_NULL_HANDLE) {
-      vkCmdBindPipeline(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-    }
+    vkCmdBindPipeline(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
   }
 }
 
@@ -2300,9 +2282,6 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
   uint32_t fbWidth = 0;
   uint32_t fbHeight = 0;
 
-  // Process depth attachment
-  dynamicState_.depthBiasEnable_ = false;
-
   VkRenderingAttachmentInfo colorAttachments[LVK_MAX_COLOR_ATTACHMENTS];
 
   for (uint32_t i = 0; i != numFbColorAttachments; i++) {
@@ -2408,6 +2387,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
   ctx_->bindDefaultDescriptorSets(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_GRAPHICS);
 
   vkCmdSetDepthCompareOp(wrapper_->cmdBuf_, VK_COMPARE_OP_ALWAYS);
+  vkCmdSetDepthBiasEnable(wrapper_->cmdBuf_, VK_FALSE);
 
   vkCmdBeginRendering(wrapper_->cmdBuf_, &renderingInfo);
 }
@@ -2478,7 +2458,14 @@ void lvk::CommandBuffer::cmdBindRenderPipeline(lvk::RenderPipelineHandle handle)
     LLOGW("Make sure your render pass and render pipeline both have matching depth attachments");
   }
 
-  lastPipelineBound_ = VK_NULL_HANDLE;
+  VkPipeline pipeline = ctx_->getVkPipeline(currentPipeline_);
+
+  LVK_ASSERT(pipeline != VK_NULL_HANDLE);
+
+  if (lastPipelineBound_ != pipeline) {
+    lastPipelineBound_ = pipeline;
+    vkCmdBindPipeline(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+  }
 }
 
 void lvk::CommandBuffer::cmdBindDepthState(const DepthState& desc) {
@@ -2540,27 +2527,12 @@ void lvk::CommandBuffer::cmdPushConstants(const void* data, size_t size, size_t 
   vkCmdPushConstants(wrapper_->cmdBuf_, ctx_->vkPipelineLayout_, shaderStageFlags, (uint32_t)offset, (uint32_t)size, data);
 }
 
-void lvk::CommandBuffer::bindGraphicsPipeline() {
-  // this whole function can be removed together with dynamicState_ once MoltenVK is capable of VK_EXT_extended_dynamic_state2
-
-  VkPipeline pipeline = ctx_->getVkPipeline(currentPipeline_, dynamicState_);
-
-  if (lastPipelineBound_ != pipeline) {
-    lastPipelineBound_ = pipeline;
-    if (pipeline != VK_NULL_HANDLE) {
-      vkCmdBindPipeline(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-    }
-  }
-}
-
 void lvk::CommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t baseInstance) {
   LVK_PROFILER_FUNCTION();
 
   if (vertexCount == 0) {
     return;
   }
-
-  bindGraphicsPipeline();
 
   vkCmdDraw(wrapper_->cmdBuf_, vertexCount, instanceCount, firstVertex, baseInstance);
 }
@@ -2576,17 +2548,15 @@ void lvk::CommandBuffer::cmdDrawIndexed(uint32_t indexCount,
     return;
   }
 
-  bindGraphicsPipeline();
-
   vkCmdDrawIndexed(wrapper_->cmdBuf_, indexCount, instanceCount, firstIndex, vertexOffset, baseInstance);
 }
 
 void lvk::CommandBuffer::cmdDrawIndirect(BufferHandle indirectBuffer, size_t indirectBufferOffset, uint32_t drawCount, uint32_t stride) {
   LVK_PROFILER_FUNCTION();
 
-  bindGraphicsPipeline();
-
   lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
+
+  LVK_ASSERT(bufIndirect);
 
   vkCmdDrawIndirect(
       wrapper_->cmdBuf_, bufIndirect->vkBuffer_, indirectBufferOffset, drawCount, stride ? stride : sizeof(VkDrawIndirectCommand));
@@ -2598,9 +2568,9 @@ void lvk::CommandBuffer::cmdDrawIndexedIndirect(BufferHandle indirectBuffer,
                                                 uint32_t stride) {
   LVK_PROFILER_FUNCTION();
 
-  bindGraphicsPipeline();
-
   lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
+
+  LVK_ASSERT(bufIndirect);
 
   vkCmdDrawIndexedIndirect(
       wrapper_->cmdBuf_, bufIndirect->vkBuffer_, indirectBufferOffset, drawCount, stride ? stride : sizeof(VkDrawIndexedIndirectCommand));
@@ -2614,10 +2584,11 @@ void lvk::CommandBuffer::cmdDrawIndexedIndirectCount(BufferHandle indirectBuffer
                                                      uint32_t stride) {
   LVK_PROFILER_FUNCTION();
 
-  bindGraphicsPipeline();
-
   lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
   lvk::VulkanBuffer* bufCount = ctx_->buffersPool_.get(countBuffer);
+
+  LVK_ASSERT(bufIndirect);
+  LVK_ASSERT(bufCount);
 
   vkCmdDrawIndexedIndirectCount(wrapper_->cmdBuf_,
                                 bufIndirect->vkBuffer_,
@@ -2633,8 +2604,8 @@ void lvk::CommandBuffer::cmdSetBlendColor(const float color[4]) {
 }
 
 void lvk::CommandBuffer::cmdSetDepthBias(float depthBias, float slopeScale, float clamp) {
-  dynamicState_.depthBiasEnable_ = true;
   vkCmdSetDepthBias(wrapper_->cmdBuf_, depthBias, clamp, slopeScale);
+  vkCmdSetDepthBiasEnable(wrapper_->cmdBuf_, depthBias != 0);
 }
 
 void lvk::CommandBuffer::cmdResetQueryPool(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) {
@@ -3533,7 +3504,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   return {this, handle};
 }
 
-VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle, const RenderPipelineDynamicState& dynamicState) {
+VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
   lvk::RenderPipelineState* rps = renderPipelinesPool_.get(handle);
 
   if (!rps) {
@@ -3541,12 +3512,14 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle, const 
   }
 
   if (rps->pipelineLayout_ != vkPipelineLayout_) {
-    rps->destroyPipelines(this);
+    deferredTask(std::packaged_task<void()>(
+        [device = getVkDevice(), pipeline = rps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
+    rps->pipeline_ = VK_NULL_HANDLE;
     rps->pipelineLayout_ = vkPipelineLayout_;
   }
 
-  if (rps->pipelines_[dynamicState.depthBiasEnable_] != VK_NULL_HANDLE) {
-    return rps->pipelines_[dynamicState.depthBiasEnable_];
+  if (rps->pipeline_ != VK_NULL_HANDLE) {
+    return rps->pipeline_;
   }
 
   // build a new Vulkan pipeline
@@ -3623,12 +3596,13 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle, const 
       .dynamicState(VK_DYNAMIC_STATE_SCISSOR)
       .dynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS)
       .dynamicState(VK_DYNAMIC_STATE_BLEND_CONSTANTS)
-      // from Vulkan 1.3
+      // from Vulkan 1.3 or VK_EXT_extended_dynamic_state
       .dynamicState(VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE)
       .dynamicState(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE)
       .dynamicState(VK_DYNAMIC_STATE_DEPTH_COMPARE_OP)
+      // from Vulkan 1.3 or VK_EXT_extended_dynamic_state2
+      .dynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE)
       .primitiveTopology(topologyToVkPrimitiveTopology(desc.topology))
-      .depthBiasEnable(dynamicState.depthBiasEnable_)
       .rasterizationSamples(getVulkanSampleCountFlags(desc.samplesCount))
       .polygonMode(polygonModeToVkPolygonMode(desc.polygonMode))
       .stencilStateOps(VK_STENCIL_FACE_FRONT_BIT,
@@ -3662,7 +3636,8 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle, const 
       .patchControlPoints(desc.patchControlPoints)
       .build(vkDevice_, pipelineCache_, vkPipelineLayout_, &pipeline, desc.debugName);
 
-  rps->pipelines_[dynamicState.depthBiasEnable_] = pipeline;
+  rps->pipeline_ = pipeline;
+
   return pipeline;
 }
 
@@ -3778,7 +3753,8 @@ void lvk::VulkanContext::destroy(lvk::RenderPipelineHandle handle) {
     return;
   }
 
-  rps->destroyPipelines(this);
+  deferredTask(
+      std::packaged_task<void()>([device = getVkDevice(), pipeline = rps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
 
   renderPipelinesPool_.destroy(handle);
 }
@@ -4528,7 +4504,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 #if !defined(__APPLE__)
       .geometryShader = VK_TRUE,
       .tessellationShader = VK_TRUE,
-#endif
+#endif // !defined(__APPLE__)
       .multiDrawIndirect = VK_TRUE,
       .drawIndirectFirstInstance = VK_TRUE,
       .depthBiasClamp = VK_TRUE,
@@ -4549,9 +4525,9 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   VkPhysicalDeviceVulkan12Features deviceFeatures12 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
       .pNext = &deviceFeatures11,
-#ifndef __APPLE__
+#if !defined(__APPLE__)
       .drawIndirectCount = VK_TRUE,
-#endif
+#endif // !defined(__APPLE__)
       .descriptorIndexing = VK_TRUE,
       .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
       .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
@@ -4786,6 +4762,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   vkCmdSetDepthWriteEnable = vkCmdSetDepthWriteEnableEXT;
   vkCmdSetDepthTestEnable = vkCmdSetDepthTestEnableEXT;
   vkCmdSetDepthCompareOp = vkCmdSetDepthCompareOpEXT;
+  vkCmdSetDepthBiasEnable = vkCmdSetDepthBiasEnableEXT;
 #endif
 
   vkGetDeviceQueue(vkDevice_, deviceQueues_.graphicsQueueFamilyIndex, 0, &deviceQueues_.graphicsQueue);
