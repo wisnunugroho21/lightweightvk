@@ -8,8 +8,9 @@
 /*
  * A brief tutorial how to run this beast:
  *
- * 1) Run the script "deploy_deps.py" from the IGL root folder.
- * 2) Run the script "deploy_content.py" from the IGL root folder.
+ * 1) Run the script "deploy_deps.py" from the LightweightVK root folder.
+ * 2) Run the script "deploy_content.py" from the LightweightVK root folder.
+ *    NOTE: In case of Android, script is "deploy_content_android.py", see README.md
  * 3) Run this app.
  *
  */
@@ -50,15 +51,21 @@
 #include <lvk/HelpersImGui.h>
 #include <implot/implot.h>
 
+#if defined(ANDROID)
+#include <android_native_app_glue.h>
+#include <jni.h>
+#include <time.h>
+#else
 #include <GLFW/glfw3.h>
+#endif
 
 constexpr uint32_t kMeshCacheVersion = 0xC0DE0009;
-#ifndef __APPLE__
+#if !defined(__APPLE__)
 constexpr int kNumSamplesMSAA = 8;
 #else
 constexpr int kNumSamplesMSAA = 4;
 #endif
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(ANDROID)
 constexpr bool kEnableCompression = false;
 #else
 constexpr bool kEnableCompression = true;
@@ -462,7 +469,6 @@ using glm::vec2;
 using glm::vec3;
 using glm::vec4;
 
-GLFWwindow* window_ = nullptr;
 int width_ = 0;
 int height_ = 0;
 FramesPerSecondCounter fps_;
@@ -638,14 +644,14 @@ static void stringReplaceAll(std::string& s,
   }
 }
 
-void initIGL() {
-  ctx_ = lvk::createVulkanContextWithSwapchain(window_,
-                                               width_,
-                                               height_,
-                                               {
-                                                   .enableValidation = kEnableValidationLayers,
-                                               },
-                                               kPreferIntegratedGPU ? lvk::HWDeviceType_Integrated : lvk::HWDeviceType_Discrete);
+bool initModel();
+void loadSkyboxTexture();
+void loadMaterials();
+void createPipelines();
+void createShadowMap();
+void createOffscreenFramebuffer();
+
+bool init() {
   {
     const uint32_t pixel = 0xFFFFFFFF;
     textureDummyWhite_ = ctx_->createTexture(
@@ -723,10 +729,78 @@ void initIGL() {
       .color = {},
       .depth = {.loadOp = lvk::LoadOp_Clear, .storeOp = lvk::StoreOp_Store, .clearDepth = 1.0f},
   };
+
+  fbMain_ = {
+      .color = {{.texture = ctx_->getCurrentSwapchainTexture()}},
+  };
+
+  createShadowMap();
+  createOffscreenFramebuffer();
+  createPipelines();
+
+  imgui_ = std::make_unique<lvk::ImGuiRenderer>(
+      *ctx_, (folderThirdParty + "3D-Graphics-Rendering-Cookbook/data/OpenSans-Light.ttf").c_str(), float(height_) / 70.0f);
+
+  queryPoolTimestamps_ = ctx_->createQueryPool(GPUTimestamp_NUM_TIMESTAMPS, "queryPoolTimestamps_");
+
+  if (!initModel()) {
+    return false;
+  }
+
+  loadSkyboxTexture();
+  loadMaterials();
+
+  return true;
+}
+
+void destroy() {
+  imgui_ = nullptr;
+
+  vb0_ = nullptr;
+  ib0_ = nullptr;
+  sbMaterials_ = nullptr;
+  ubPerFrame_.clear();
+  ubPerFrameShadow_.clear();
+  ubPerObject_.clear();
+  smMeshVert_ = nullptr;
+  smMeshFrag_ = nullptr;
+  smMeshWireframeVert_ = nullptr;
+  smMeshWireframeFrag_ = nullptr;
+  smShadowVert_ = nullptr;
+  smShadowFrag_ = nullptr;
+  smFullscreenVert_ = nullptr;
+  smFullscreenFrag_ = nullptr;
+  smSkyboxVert_ = nullptr;
+  smSkyboxFrag_ = nullptr;
+  smGrayscaleComp_ = nullptr;
+  renderPipelineState_Mesh_ = nullptr;
+  renderPipelineState_MeshWireframe_ = nullptr;
+  renderPipelineState_Shadow_ = nullptr;
+  renderPipelineState_Skybox_ = nullptr;
+  renderPipelineState_Fullscreen_ = nullptr;
+  computePipelineState_Grayscale_ = nullptr;
+  textureDummyWhite_ = nullptr;
+  skyboxTextureReference_ = nullptr;
+  skyboxTextureIrradiance_ = nullptr;
+  textures_.clear();
+  texturesCache_.clear();
+  sampler_ = nullptr;
+  samplerShadow_ = nullptr;
+  ctx_->destroy(fbMain_);
+  ctx_->destroy(fbShadowMap_);
+  fbOffscreenColor_ = nullptr;
+  fbOffscreenDepth_ = nullptr;
+  fbOffscreenResolve_ = nullptr;
+  queryPoolTimestamps_ = nullptr;
+  ctx_ = nullptr;
+
+  printf("Waiting for the loader thread to exit...\n");
+
+  loaderPool_ = nullptr;
 }
 
 void normalizeName(std::string& name) {
-#if defined(__linux__) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(ANDROID)
   std::replace(name.begin(), name.end(), '\\', '/');
 #endif
 }
@@ -1122,15 +1196,82 @@ void createOffscreenFramebuffer() {
   fbOffscreen_ = fb;
 }
 
-void render(lvk::TextureHandle nativeDrawable, uint32_t frameIndex) {
+void resize() {
+  if (!width_ || !height_) {
+    return;
+  }
+  ctx_->recreateSwapchain(width_, height_);
+  createOffscreenFramebuffer();
+}
+
+void showTimeGPU();
+double getCurrentTimestamp();
+
+void render(double delta, uint32_t frameIndex) {
   LVK_PROFILER_FUNCTION();
 
   if (!width_ && !height_)
     return;
 
-  timestampBeginRendering = glfwGetTime();
-
+  lvk::TextureHandle nativeDrawable = ctx_->getCurrentSwapchainTexture();
   fbMain_.color[0].texture = nativeDrawable;
+
+  // imGui
+  {
+    imgui_->beginFrame(fbMain_);
+    ImGui::ShowDemoWindow();
+
+    ImGui::Begin("Keyboard hints:", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+    ImGui::Text("W/S/A/D - camera movement");
+    ImGui::Text("1/2 - camera up/down");
+    ImGui::Text("Shift - fast movement");
+    ImGui::Text("C - toggle compute shader postprocessing");
+    ImGui::Text("N - toggle normals");
+    ImGui::Text("T - toggle wireframe");
+    ImGui::Text("P - show perf stats");
+    ImGui::End();
+
+    if (!textures_[1].diffuse.empty()) {
+      ImGui::Begin("Texture Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+      ImGui::Image(ImTextureID(textures_[1].diffuse.indexAsVoid()), ImVec2(256, 256));
+      ImGui::End();
+    }
+
+    if (uint32_t num = remainingMaterialsToLoad_.load(std::memory_order_acquire)) {
+      ImGui::SetNextWindowPos(ImVec2(0, 0));
+      ImGui::Begin("Loading...", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs);
+      ImGui::ProgressBar(1.0f - float(num) / cachedMaterials_.size(), ImVec2(ImGui::GetIO().DisplaySize.x, 32));
+      ImGui::End();
+    }
+    // a nice FPS counter
+    {
+      const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
+                                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
+      const ImGuiViewport* v = ImGui::GetMainViewport();
+      LVK_ASSERT(v);
+      ImGui::SetNextWindowPos(
+          {
+              v->WorkPos.x + v->WorkSize.x - 15.0f,
+              v->WorkPos.y + 15.0f,
+          },
+          ImGuiCond_Always,
+          {1.0f, 0.0f});
+      ImGui::SetNextWindowBgAlpha(0.30f);
+      ImGui::SetNextWindowSize(ImVec2(ImGui::CalcTextSize("FPS : _______").x, 0));
+      if (ImGui::Begin("##FPS", nullptr, flags)) {
+        ImGui::Text("FPS : %i", (int)fps_.getFPS());
+        ImGui::Text("Ms  : %.1f", 1000.0 / fps_.getFPS());
+      }
+      ImGui::End();
+    }
+
+    if (showPerfStats_)
+      showTimeGPU();
+  }
+
+  positioner_.update(delta, mousePos_, mousePressed_);
+
+  timestampBeginRendering = getCurrentTimestamp();
 
   const float fov = float(45.0f * (M_PI / 180.0f));
   const float aspectRatio = (float)width_ / (float)height_;
@@ -1321,7 +1462,7 @@ void render(lvk::TextureHandle nativeDrawable, uint32_t frameIndex) {
     ctx_->submit(buffer, fbMain_.color[0].texture);
   }
 
-  timestampEndRendering = glfwGetTime();
+  timestampEndRendering = getCurrentTimestamp();
 
   // timestamp stats
   if (showPerfStats_) {
@@ -1754,8 +1895,8 @@ lvk::TextureHandle createTexture(const LoadedImage& img) {
       },
       nullptr);
 
-  // No mip-maps come from files on Apple platform, we need to generate them.
-#ifdef __APPLE__
+  // No mip-maps come from files on Apple and Android platforms, we need to generate them.
+#if defined(__APPLE__) || defined(ANDROID)
   ctx_->generateMipmap(tex);
 #else
   if (!hasCompressedTexture) {
@@ -1927,8 +2068,14 @@ void showTimeGPU() {
 #endif // LVK_WITH_IMPLOT
 }
 
+#if !defined(ANDROID)
+double getCurrentTimestamp() {
+  return glfwGetTime();
+}
+
 int main(int argc, char* argv[]) {
   minilog::initialize(nullptr, {.threadNames = false});
+
   // find the content folder
   {
     using namespace std::filesystem;
@@ -1947,22 +2094,33 @@ int main(int argc, char* argv[]) {
     folderContentRoot = (dir / subdir).string();
   }
 
-  window_ = lvk::initWindow("Vulkan Bistro", width_, height_);
-  initIGL();
-  if (!initModel()) {
+  GLFWwindow* window = lvk::initWindow("Vulkan Bistro", width_, height_);
+  ctx_ = lvk::createVulkanContextWithSwapchain(window,
+                                               width_,
+                                               height_,
+                                               {
+                                                 .enableValidation = kEnableValidationLayers,
+                                               },
+                                               kPreferIntegratedGPU ? lvk::HWDeviceType_Integrated : lvk::HWDeviceType_Discrete);
+  if (!ctx_) {
+    return EXIT_FAILURE;
+  }
+  
+  if (kEnableCompression) {
+    printf("Compressing textures... It can take a while in debug builds...(needs to be done once)\n");
+  }
+
+  if (!init()) {
     return EXIT_FAILURE;
   }
 
-  glfwSetFramebufferSizeCallback(window_, [](GLFWwindow*, int width, int height) {
+  glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int width, int height) {
     width_ = width;
     height_ = height;
-    if (!width || !height)
-      return;
-    ctx_->recreateSwapchain(width, height);
-    createOffscreenFramebuffer();
+    resize();
   });
 
-  glfwSetCursorPosCallback(window_, [](auto* window, double x, double y) {
+  glfwSetCursorPosCallback(window, [](auto* window, double x, double y) {
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     if (width && height) {
@@ -1971,7 +2129,7 @@ int main(int argc, char* argv[]) {
     }
   });
 
-  glfwSetMouseButtonCallback(window_, [](auto* window, int button, int action, int mods) {
+  glfwSetMouseButtonCallback(window, [](auto* window, int button, int action, int mods) {
     if (!ImGui::GetIO().WantCaptureMouse) {
       if (button == GLFW_MOUSE_BUTTON_LEFT) {
         mousePressed_ = (action == GLFW_PRESS);
@@ -1990,13 +2148,13 @@ int main(int argc, char* argv[]) {
     io.MouseDown[imguiButton] = action == GLFW_PRESS;
   });
 
-  glfwSetScrollCallback(window_, [](GLFWwindow* window, double dx, double dy) {
+  glfwSetScrollCallback(window, [](GLFWwindow* window, double dx, double dy) {
     ImGuiIO& io = ImGui::GetIO();
     io.MouseWheelH = (float)dx;
     io.MouseWheel = (float)dy;
   });
 
-  glfwSetKeyCallback(window_, [](GLFWwindow* window, int key, int, int action, int mods) {
+  glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int, int action, int mods) {
     const bool pressed = action != GLFW_RELEASE;
     if (key == GLFW_KEY_ESCAPE && pressed) {
       glfwSetWindowShouldClose(window, GLFW_TRUE);
@@ -2067,35 +2225,15 @@ int main(int argc, char* argv[]) {
     }
   });
 
-  if (kEnableCompression) {
-    printf("Compressing textures... It can take a while in debug builds...(needs to be done once)\n");
-  }
-
-  loadSkyboxTexture();
-  loadMaterials();
-
-  fbMain_ = {
-      .color = {{.texture = ctx_->getCurrentSwapchainTexture()}},
-  };
-  createShadowMap();
-  createOffscreenFramebuffer();
-  createPipelines();
-
-  imgui_ = std::make_unique<lvk::ImGuiRenderer>(
-      *ctx_, (folderThirdParty + "3D-Graphics-Rendering-Cookbook/data/OpenSans-Light.ttf").c_str(), float(height_) / 70.0f);
-
-  double prevTime = glfwGetTime();
-
+  double prevTime = getCurrentTimestamp();
   uint32_t frameIndex = 0;
 
-  queryPoolTimestamps_ = ctx_->createQueryPool(GPUTimestamp_NUM_TIMESTAMPS, "queryPoolTimestamps_");
-
   // Main loop
-  while (!glfwWindowShouldClose(window_)) {
+  while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
     processLoadedMaterials();
 
-    const double newTime = glfwGetTime();
+    const double newTime = getCurrentTimestamp();
     const double delta = newTime - prevTime;
     prevTime = newTime;
 
@@ -2104,114 +2242,112 @@ int main(int argc, char* argv[]) {
 
     fps_.tick(delta);
 
-    {
-      fbMain_.color[0].texture = ctx_->getCurrentSwapchainTexture();
-      imgui_->beginFrame(fbMain_);
-      ImGui::ShowDemoWindow();
-
-      ImGui::Begin("Keyboard hints:", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-      ImGui::Text("W/S/A/D - camera movement");
-      ImGui::Text("1/2 - camera up/down");
-      ImGui::Text("Shift - fast movement");
-      ImGui::Text("C - toggle compute shader postprocessing");
-      ImGui::Text("N - toggle normals");
-      ImGui::Text("T - toggle wireframe");
-      ImGui::Text("P - show perf stats");
-      ImGui::End();
-
-      if (!textures_[1].diffuse.empty()) {
-        ImGui::Begin("Texture Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-        ImGui::Image(ImTextureID(textures_[1].diffuse.indexAsVoid()), ImVec2(256, 256));
-        ImGui::End();
-      }
-
-      if (uint32_t num = remainingMaterialsToLoad_.load(std::memory_order_acquire)) {
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::Begin("Loading...", nullptr, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs);
-        ImGui::ProgressBar(1.0f - float(num) / cachedMaterials_.size(), ImVec2(ImGui::GetIO().DisplaySize.x, 32));
-        ImGui::End();
-      }
-      // a nice FPS counter
-      {
-        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
-                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
-                                       ImGuiWindowFlags_NoMove;
-        const ImGuiViewport* v = ImGui::GetMainViewport();
-        LVK_ASSERT(v);
-        ImGui::SetNextWindowPos(
-            {
-                v->WorkPos.x + v->WorkSize.x - 15.0f,
-                v->WorkPos.y + 15.0f,
-            },
-            ImGuiCond_Always,
-            {1.0f, 0.0f});
-        ImGui::SetNextWindowBgAlpha(0.30f);
-        ImGui::SetNextWindowSize(ImVec2(ImGui::CalcTextSize("FPS : _______").x, 0));
-        if (ImGui::Begin("##FPS", nullptr, flags)) {
-          ImGui::Text("FPS : %i", (int)fps_.getFPS());
-          ImGui::Text("Ms  : %.1f", 1000.0 / fps_.getFPS());
-        }
-        ImGui::End();
-      }
-
-		if (showPerfStats_)
-        showTimeGPU();
-    }
-
-    positioner_.update(delta, mousePos_, mousePressed_);
-    render(ctx_->getCurrentSwapchainTexture(), frameIndex);
+    render(delta, frameIndex);
 
     frameIndex = (frameIndex + 1) % kNumBufferedFrames;
   }
 
-  loaderShouldExit_.store(true, std::memory_order_release);
-
-  imgui_ = nullptr;
   // destroy all the Vulkan stuff before closing the window
-  vb0_ = nullptr;
-  ib0_ = nullptr;
-  sbMaterials_ = nullptr;
-  ubPerFrame_.clear();
-  ubPerFrameShadow_.clear();
-  ubPerObject_.clear();
-  smMeshVert_ = nullptr;
-  smMeshFrag_ = nullptr;
-  smMeshWireframeVert_ = nullptr;
-  smMeshWireframeFrag_ = nullptr;
-  smShadowVert_ = nullptr;
-  smShadowFrag_ = nullptr;
-  smFullscreenVert_ = nullptr;
-  smFullscreenFrag_ = nullptr;
-  smSkyboxVert_ = nullptr;
-  smSkyboxFrag_ = nullptr;
-  smGrayscaleComp_ = nullptr;
-  renderPipelineState_Mesh_ = nullptr;
-  renderPipelineState_MeshWireframe_ = nullptr;
-  renderPipelineState_Shadow_ = nullptr;
-  renderPipelineState_Skybox_ = nullptr;
-  renderPipelineState_Fullscreen_ = nullptr;
-  computePipelineState_Grayscale_ = nullptr;
-  textureDummyWhite_ = nullptr;
-  skyboxTextureReference_ = nullptr;
-  skyboxTextureIrradiance_ = nullptr;
-  textures_.clear();
-  texturesCache_.clear();
-  sampler_ = nullptr;
-  samplerShadow_ = nullptr;
-  ctx_->destroy(fbMain_);
-  ctx_->destroy(fbShadowMap_);
-  fbOffscreenColor_ = nullptr;
-  fbOffscreenDepth_ = nullptr;
-  fbOffscreenResolve_ = nullptr;
-  queryPoolTimestamps_ = nullptr;
-  ctx_ = nullptr;
+  destroy();
 
-  glfwDestroyWindow(window_);
+  glfwDestroyWindow(window);
   glfwTerminate();
-
-  printf("Waiting for the loader thread to exit...\n");
-
-  loaderPool_ = nullptr;
 
   return 0;
 }
+#else
+double getCurrentTimestamp() {
+  timespec t = {0, 0};
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (double)t.tv_sec + 1.0e-9 * t.tv_nsec;
+}
+
+extern "C" {
+void handle_cmd(android_app* app, int32_t cmd) {
+  switch (cmd) {
+  case APP_CMD_INIT_WINDOW:
+    if (app->window != nullptr) {
+      width_ = ANativeWindow_getWidth(app->window);
+      height_ = ANativeWindow_getHeight(app->window);
+      ctx_ = lvk::createVulkanContextWithSwapchain(app->window,
+                                                   width_,
+                                                   height_,
+                                                   {
+                                                     .enableValidation = kEnableValidationLayers,
+                                                   },
+                                                   kPreferIntegratedGPU ? lvk::HWDeviceType_Integrated : 
+                                                                          lvk::HWDeviceType_Discrete);
+      if (!init()) {
+        LLOGW("Failed to initialize the app\n");
+        std::terminate();
+      }
+    }
+    break;
+  case APP_CMD_TERM_WINDOW:
+    destroy();
+    break;
+  }
+}
+
+void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
+  int w = ANativeWindow_getWidth(window);
+  int h = ANativeWindow_getHeight(window);
+  if (width_ != w || height_ != h) {
+    width_ = w;
+    height_ = h;
+    if (ctx_) {
+      resize();
+    }
+  }
+}
+
+void android_main(android_app* app) {
+  minilog::initialize(nullptr, {.threadNames = false});
+  app->onAppCmd = handle_cmd;
+  app->activity->callbacks->onNativeWindowResized = resize_callback;
+
+  // find the content folder
+  {
+    using namespace std::filesystem;
+    if (const char* externalStorage = std::getenv("EXTERNAL_STORAGE")) {
+      folderThirdParty = (std::filesystem::path(externalStorage) / "LVK" / "deps" / "src").string() + "/";
+      folderContentRoot = (std::filesystem::path(externalStorage) / "LVK" / "content").string() + "/";
+      if (!exists(folderThirdParty) || !exists(folderContentRoot)) {
+        LLOGW("Cannot find the content directory. Run `deploy_content_android.py` before running this app.\n");
+        LVK_ASSERT(false);
+        std::terminate();
+      }
+    } else {
+      LLOGW("Cannot find EXTERNAL_STORAGE.\n");
+      LVK_ASSERT(false);
+      std::terminate();
+    }
+  }
+
+  fps_.printFPS_ = false;
+
+  double prevTime = getCurrentTimestamp();
+  uint32_t frameIndex = 0;
+
+  int events = 0;
+  android_poll_source* source = nullptr;
+  do {
+    double newTime = getCurrentTimestamp();
+    double delta = newTime - prevTime;
+    fps_.tick(delta);
+    LLOGL("FPS: %.1f\n", fps_.getFPS());
+    prevTime = newTime;
+    if (ctx_) {
+      render(delta, frameIndex);
+      processLoadedMaterials();
+    }
+    if (ALooper_pollAll(0, nullptr, &events, (void**)&source) >= 0) {
+      if (source) {
+        source->process(app, source);
+      }
+    }
+    frameIndex = (frameIndex + 1) % kNumBufferedFrames;
+  } while (!app->destroyRequested);
+}
+} // extern "C"
+#endif

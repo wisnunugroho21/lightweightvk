@@ -1,0 +1,48 @@
+plugins {
+  id 'com.android.application'
+}
+
+android {
+  namespace 'org.lvk.samples'
+  compileSdk 34
+
+  defaultConfig {
+    applicationId "org.lvk.samples.@APP_NAME@"
+    minSdk 24
+    targetSdk 34
+    versionCode 1
+    versionName "1.0"
+    externalNativeBuild {
+      cmake {
+        targets "lvk_android_native_@APP_NAME@"
+        cppFlags "-std=c++20"
+        arguments "-DLVK_DEPLOY_DEPS=OFF", "-DLVK_WITH_GLFW=OFF", "-DLVK_WITH_SAMPLES=ON", "-DLVK_WITH_SAMPLES_ANDROID=ON", "-DLVK_WITH_TRACY=OFF", "-DLVK_WITH_VULKAN_PORTABILITY=OFF", "-DLVK_WITH_WAYLAND=OFF", "-DLVK_WITH_IMPLOT=ON", "-DLVK_WITH_OPENXR=OFF"
+      }
+    }
+  }
+
+  aaptOptions {
+    noCompress 'png', 'ktx', 'data'
+  }
+
+  buildTypes {
+    release {
+      signingConfig signingConfigs.debug
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_1_8
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+  ndkVersion "26.1.10909125"
+  externalNativeBuild {
+    cmake {
+      path file('../../../../CMakeLists.txt')
+      version '3.22.1'
+    }
+  }
+  buildFeatures {
+    viewBinding true
+  }
+}

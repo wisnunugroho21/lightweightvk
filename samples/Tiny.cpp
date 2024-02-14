@@ -8,7 +8,13 @@
 #include <shared/UtilsFPS.h>
 
 #include <lvk/LVK.h>
+#if defined(ANDROID)
+#include <android_native_app_glue.h>
+#include <jni.h>
+#include <time.h>
+#else
 #include <GLFW/glfw3.h>
+#endif
 
 const char* codeVS = R"(
 #version 460
@@ -41,7 +47,6 @@ void main() {
 };
 )";
 
-GLFWwindow* window_ = nullptr;
 int width_ = 800;
 int height_ = 600;
 FramesPerSecondCounter fps_;
@@ -50,6 +55,8 @@ std::unique_ptr<lvk::IContext> ctx_;
 
 struct VulkanObjects {
   void init();
+  void destroy();
+  void resize();
   void createFramebuffer();
   void render();
   lvk::Framebuffer fb_ = {};
@@ -59,8 +66,6 @@ struct VulkanObjects {
 } vk;
 
 void VulkanObjects::init() {
-  ctx_ = lvk::createVulkanContextWithSwapchain(window_, width_, height_, {});
-
   createFramebuffer();
 
   vert_ = ctx_->createShaderModule({codeVS, lvk::Stage_Vert, "Shader Module: main (vert)"});
@@ -77,6 +82,23 @@ void VulkanObjects::init() {
       },
       nullptr);
   LVK_ASSERT(renderPipelineState_Triangle_.valid());
+}
+
+void VulkanObjects::destroy() {
+  ctx_->destroy(vk.fb_.color[1].texture);
+  ctx_->destroy(vk.fb_.color[2].texture);
+  ctx_->destroy(vk.fb_.color[3].texture);
+  vk = {};
+
+  ctx_ = nullptr;
+}
+
+void VulkanObjects::resize() {
+  if (!width_ || !height_) {
+    return;
+  }
+  ctx_->recreateSwapchain(width_, height_);
+  createFramebuffer();
 }
 
 void VulkanObjects::createFramebuffer() {
@@ -125,25 +147,27 @@ void VulkanObjects::render() {
   ctx_->submit(buffer, fb_.color[0].texture);
 }
 
+#if !defined(ANDROID)
 int main(int argc, char* argv[]) {
   minilog::initialize(nullptr, {.threadNames = false});
 
-  window_ = lvk::initWindow("Vulkan Triangle", width_, height_, true);
+  GLFWwindow* window = lvk::initWindow("Vulkan Triangle", width_, height_, true);
+  ctx_ = lvk::createVulkanContextWithSwapchain(window, width_, height_, {});
+  if (!ctx_) {
+    return 1;
+  }
   vk.init();
 
-  glfwSetFramebufferSizeCallback(window_, [](GLFWwindow*, int width, int height) {
+  glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int width, int height) {
     width_ = width;
     height_ = height;
-    ctx_->recreateSwapchain(width, height);
-    if (width && height) {
-      vk.createFramebuffer();
-    }
+    vk.resize();
   });
 
   double prevTime = glfwGetTime();
 
   // main loop
-  while (!glfwWindowShouldClose(window_)) {
+  while (!glfwWindowShouldClose(window)) {
     const double newTime = glfwGetTime();
     fps_.tick(newTime - prevTime);
     prevTime = newTime;
@@ -152,15 +176,71 @@ int main(int argc, char* argv[]) {
   }
 
   // destroy all the Vulkan stuff before closing the window
-  ctx_->destroy(vk.fb_.color[1].texture);
-  ctx_->destroy(vk.fb_.color[2].texture);
-  ctx_->destroy(vk.fb_.color[3].texture);
-  vk = {};
+  vk.destroy();
 
-  ctx_ = nullptr;
-
-  glfwDestroyWindow(window_);
+  glfwDestroyWindow(window);
   glfwTerminate();
 
   return 0;
 }
+#else
+extern "C" {
+void handle_cmd(android_app* app, int32_t cmd) {
+  switch (cmd) {
+  case APP_CMD_INIT_WINDOW:
+    if (app->window != nullptr) {
+      width_ = ANativeWindow_getWidth(app->window);
+      height_ = ANativeWindow_getHeight(app->window);
+      ctx_ = lvk::createVulkanContextWithSwapchain(app->window, width_, height_, {});
+      vk.init();
+    }
+    break;
+  case APP_CMD_TERM_WINDOW:
+    vk.destroy();
+    break;
+  }
+}
+
+void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
+  int w = ANativeWindow_getWidth(window);
+  int h = ANativeWindow_getHeight(window);
+  if (width_ != w || height_ != h) {
+    width_ = w;
+    height_ = h;
+    if (ctx_) {
+      vk.resize();
+    }
+  }
+}
+
+void android_main(android_app* app) {
+  minilog::initialize(nullptr, {.threadNames = false});
+  app->onAppCmd = handle_cmd;
+  app->activity->callbacks->onNativeWindowResized = resize_callback;
+
+  fps_.printFPS_ = false;
+
+  timespec prevTime = {0, 0};
+  clock_gettime(CLOCK_MONOTONIC, &prevTime);
+
+  int events = 0;
+  android_poll_source* source = nullptr;
+  do {
+    timespec newTime = {0, 0};
+    clock_gettime(CLOCK_MONOTONIC, &newTime);
+    fps_.tick(((double)newTime.tv_sec + 1.0e-9 * newTime.tv_nsec) - 
+              ((double)prevTime.tv_sec + 1.0e-9 * prevTime.tv_nsec));
+    LLOGL("FPS: %.1f\n", fps_.getFPS());
+    prevTime = newTime;
+    if (ctx_) {
+      vk.render();
+    }
+    if (ALooper_pollAll(0, nullptr, &events, (void**)&source) >= 0) {
+      if (source) {
+        source->process(app, source);
+      }
+    }
+  } while (!app->destroyRequested);
+}
+} // extern "C"
+#endif

@@ -83,6 +83,44 @@ static constexpr TextureFormatProperties properties[] = {
     PROPS(Z_F32_S_UI8, 5, .depth = true, .stencil = true),
 };
 
+bool initVulkanContextWithSwapchain(std::unique_ptr<lvk::VulkanContext>& ctx,
+                                    uint32_t width,
+                                    uint32_t height,
+                                    lvk::HWDeviceType preferredDeviceType) {
+  using namespace lvk;
+  HWDeviceDesc device;
+  uint32_t numDevices = ctx->queryDevices(preferredDeviceType, &device, 1);
+
+  if (!numDevices) {
+    if (preferredDeviceType == HWDeviceType_Discrete) {
+      numDevices = ctx->queryDevices(HWDeviceType_Integrated, &device);
+    } else if (preferredDeviceType == HWDeviceType_Integrated) {
+      numDevices = ctx->queryDevices(HWDeviceType_Discrete, &device);
+    }
+  }
+
+  if (!numDevices) {
+    LVK_ASSERT_MSG(false, "GPU is not found");
+    return false;
+  }
+
+  Result res = ctx->initContext(device);
+
+  if (!res.isOk()) {
+    LVK_ASSERT_MSG(false, "Failed initContext()");
+    return false;
+  }
+
+  if (width > 0 && height > 0) {
+    res = ctx->initSwapchain(width, height);
+    if (!res.isOk()) {
+      LVK_ASSERT_MSG(false, "Failed to create swapchain");
+      return false;
+    }
+  }
+  return true;
+}
+
 } // namespace
 
 #if __APPLE__ && LVK_WITH_GLFW
@@ -350,39 +388,25 @@ std::unique_ptr<lvk::IContext> lvk::createVulkanContextWithSwapchain(GLFWwindow*
 #else
 #error Unsupported OS
 #endif
-
-  HWDeviceDesc device;
-  uint32_t numDevices = ctx->queryDevices(preferredDeviceType, &device, 1);
-
-  if (!numDevices) {
-    if (preferredDeviceType == HWDeviceType_Discrete) {
-      numDevices = ctx->queryDevices(HWDeviceType_Integrated, &device);
-    }
-    else if (preferredDeviceType == HWDeviceType_Integrated) {
-      numDevices = ctx->queryDevices(HWDeviceType_Discrete, &device);
-    }
-  }
-
-  if (!numDevices) {
-    LVK_ASSERT_MSG(false, "GPU is not found");
+  if (!initVulkanContextWithSwapchain(ctx, width, height, preferredDeviceType)) {
     return nullptr;
-  }
-
-  Result res = ctx->initContext(device);
-
-  if (!res.isOk()) {
-    LVK_ASSERT_MSG(false, "Failed initContext()");
-    return nullptr;
-  }
-
-  if (width > 0 && height > 0) {
-    res = ctx->initSwapchain(width, height);
-    if (!res.isOk()) {
-      LVK_ASSERT_MSG(false, "Failed to create swapchain");
-      return nullptr;
-    }
   }
 
   return std::move(ctx);
 }
 #endif // LVK_WITH_GLFW
+
+#if defined(ANDROID)
+std::unique_ptr<lvk::IContext> lvk::createVulkanContextWithSwapchain(ANativeWindow* window,
+                                                                     uint32_t width,
+                                                                     uint32_t height,
+                                                                     const lvk::ContextConfig& cfg,
+                                                                     lvk::HWDeviceType preferredDeviceType) {
+  using namespace lvk;
+  std::unique_ptr<VulkanContext> ctx = std::make_unique<VulkanContext>(cfg, (void*)window);
+  if (!initVulkanContextWithSwapchain(ctx, width, height, preferredDeviceType)) {
+    return nullptr;
+  }
+  return std::move(ctx);
+}
+#endif
