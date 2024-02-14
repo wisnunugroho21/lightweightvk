@@ -7,6 +7,71 @@ on:
     branches: [ "**" ]
 
 jobs:
+  build:
+    name: "Android (Ubuntu)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up NDK
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r26b
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: 'oracle'
+
+      - name: Install Ubuntu packages
+        shell: bash          
+        run: |
+            sudo sed -i 's/azure\.//' /etc/apt/sources.list
+            sudo apt-get update
+            sudo apt-get install -y cmake gcc-12 clang-15 xorg-dev libxinerama-dev libxcursor-dev libgles2-mesa-dev libegl1-mesa-dev libglfw3-dev libglew-dev libstdc++-12-dev extra-cmake-modules libxkbcommon-x11-dev wayland-protocols
+
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.0
+        with:
+          vulkan-query-version: 1.3.204.0
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - name: Generate Android projects
+        shell: bash
+        env:
+          CC: "clang-15"
+          CXX: "clang++-15"
+        run: |
+          cmake -G "Unix Makefiles" -S "${{ github.workspace }}" -B build -DLVK_WITH_SAMPLES_ANDROID=ON
+
+      - name: Assemble HelloTriangle APK
+        run: |
+          cd build/android/HelloTriangle
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      - name: Assemble Tiny APK
+        run: |
+          cd build/android/Tiny
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      - name: Assemble Tiny_Mesh APK
+        run: |
+          cd build/android/Tiny_Mesh
+          chmod +x ./gradlew
+          ./gradlew assembleDebug  
+
+      - name: Assemble Tiny_MeshLarge APK
+        run: |
+          cd build/android/Tiny_MeshLarge
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
   cmake-build:
       strategy:
         fail-fast: false
