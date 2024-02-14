@@ -88,7 +88,7 @@ cmake .. -DLVK_WITH_SAMPLES_ANDROID=ON
 cd android/Tiny                         # or any other sample
 ./gradlew assembleDebug                 # or assembleRelease
 ```
-Yoy can also open the project in Android Studio and build it from there.
+You can also open the project in Android Studio and build it from there.
 
 Before running demo apps on your device, connect the device to a desktop machine and run the deployment script:
 
@@ -98,7 +98,7 @@ python3 deploy_content_android.py
 
 > NOTE: To run demos on an Android device, it should support Vulkan 1.3. Please check https://vulkan.gpuinfo.org/listdevices.php?platform=android 
 
-> NOTE: At the moment, demo apps support no touch input on Android.
+> NOTE: At the moment, no touch input is supported on Android.
 
 ## Screenshots
 
