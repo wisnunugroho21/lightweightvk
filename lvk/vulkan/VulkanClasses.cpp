@@ -30,13 +30,13 @@
 uint32_t lvk::VulkanPipelineBuilder::numPipelinesCreated_ = 0;
 
 static_assert(lvk::HWDeviceDesc::LVK_MAX_PHYSICAL_DEVICE_NAME_SIZE == VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
-static_assert(lvk::Swizzle_Default == VK_COMPONENT_SWIZZLE_IDENTITY);
-static_assert(lvk::Swizzle_0 == VK_COMPONENT_SWIZZLE_ZERO);
-static_assert(lvk::Swizzle_1 == VK_COMPONENT_SWIZZLE_ONE);
-static_assert(lvk::Swizzle_R == VK_COMPONENT_SWIZZLE_R);
-static_assert(lvk::Swizzle_G == VK_COMPONENT_SWIZZLE_G);
-static_assert(lvk::Swizzle_B == VK_COMPONENT_SWIZZLE_B);
-static_assert(lvk::Swizzle_A == VK_COMPONENT_SWIZZLE_A);
+static_assert(lvk::Swizzle_Default == (uint32_t)VK_COMPONENT_SWIZZLE_IDENTITY);
+static_assert(lvk::Swizzle_0 == (uint32_t)VK_COMPONENT_SWIZZLE_ZERO);
+static_assert(lvk::Swizzle_1 == (uint32_t)VK_COMPONENT_SWIZZLE_ONE);
+static_assert(lvk::Swizzle_R == (uint32_t)VK_COMPONENT_SWIZZLE_R);
+static_assert(lvk::Swizzle_G == (uint32_t)VK_COMPONENT_SWIZZLE_G);
+static_assert(lvk::Swizzle_B == (uint32_t)VK_COMPONENT_SWIZZLE_B);
+static_assert(lvk::Swizzle_A == (uint32_t)VK_COMPONENT_SWIZZLE_A);
 
 namespace {
 
