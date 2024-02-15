@@ -31,9 +31,10 @@ There are no plans to keep this fork in sync with the upstream.
 | Vulkan 1.3               | :heavy_check_mark:         | :heavy_check_mark:         | :heavy_exclamation_mark:   | :heavy_check_mark:         |
 | Vulkan 1.2               |                            |                            | :heavy_check_mark:         |                            |
 
-On MacOS, features required by LightweightVK are available via extensions `VK_KHR_dynamic_rendering`, `VK_EXT_subgroup_size_control`, `VK_EXT_extended_dynamic_state`, and `VK_EXT_extended_dynamic_state2`.
+On MacOS, features required by LightweightVK are available via extensions `VK_KHR_dynamic_rendering`, `VK_EXT_subgroup_size_control`,
+`VK_EXT_extended_dynamic_state`, `VK_EXT_extended_dynamic_state2`, and `VK_KHR_synchronization2`.
 
-:heavy_exclamation_mark: `VK_KHR_maintenance4` and `VK_KHR_synchronization2` are not currently supported in MoltenVK :heavy_exclamation_mark:
+:heavy_exclamation_mark: `VK_KHR_maintenance4` is not yet supported in MoltenVK :heavy_exclamation_mark:
 
 Check the status of [Vulkan 1.3 support](https://github.com/KhronosGroup/MoltenVK/issues/1930) in MoltenVK.
 

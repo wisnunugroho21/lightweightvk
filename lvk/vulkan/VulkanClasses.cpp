@@ -4566,7 +4566,13 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     .extendedDynamicState2 = VK_TRUE,
   };
 
-  const void* createInfoNext = &dynamicState2Feature;
+  VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2Feature = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
+      .pNext = &dynamicState2Feature,
+      .synchronization2 = VK_TRUE,
+  };
+
+  const void* createInfoNext = &synchronization2Feature;
 #else
   const void* createInfoNext = &deviceFeatures13;
 #endif
