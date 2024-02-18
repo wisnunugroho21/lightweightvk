@@ -1,5 +1,5 @@
 diff --git a/SPIRV/GlslangToSpv.cpp b/SPIRV/GlslangToSpv.cpp
-index 1d375ef25..35313ead9 100755
+index 1d375ef25..35313ead9 100644
 --- a/SPIRV/GlslangToSpv.cpp
 +++ b/SPIRV/GlslangToSpv.cpp
 @@ -9249,7 +9249,10 @@ spv::Id TGlslangToSpvTraverser::createMiscOperation(glslang::TOperator op, spv::
