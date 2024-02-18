@@ -12,6 +12,9 @@ android {
     targetSdk 34
     versionCode 1
     versionName "1.0"
+    ndk {
+      abiFilters @ANDROID_ABI_FILTERS@
+    }
     externalNativeBuild {
       cmake {
         targets "lvk_android_native_@APP_NAME@"
