@@ -266,11 +266,11 @@ struct RenderPipelineState final {
   VkVertexInputBindingDescription vkBindings_[VertexInput::LVK_VERTEX_BUFFER_MAX] = {};
   VkVertexInputAttributeDescription vkAttributes_[VertexInput::LVK_VERTEX_ATTRIBUTES_MAX] = {};
 
-  //VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-
   // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (if the context has a new layout, invalidate all VkPipeline objects)
   VkDescriptorSetLayout lastVkDescriptorSetLayout_ = VK_NULL_HANDLE;
 
+  VkShaderStageFlags shaderStageFlags_ = 0;
+  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
 
@@ -338,11 +338,10 @@ class VulkanPipelineBuilder final {
 struct ComputePipelineState final {
   ComputePipelineDesc desc_;
 
-  // VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-
   // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (invalidate all VkPipeline objects on new layout)
   VkDescriptorSetLayout lastVkDescriptorSetLayout_ = VK_NULL_HANDLE;
 
+  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
 
@@ -427,7 +426,8 @@ class CommandBuffer final : public ICommandBuffer {
 
   bool isRendering_ = false;
 
-  lvk::RenderPipelineHandle currentPipeline_ = {};
+  lvk::RenderPipelineHandle currentPipelineGraphics_ = {};
+  lvk::ComputePipelineHandle currentPipelineCompute_ = {};
 };
 
 class VulkanStagingDevice final {
@@ -590,7 +590,7 @@ class VulkanContext final : public IContext {
   void* getVmaAllocator() const;
 
   void checkAndUpdateDescriptorSets();
-  void bindDefaultDescriptorSets(VkCommandBuffer cmdBuf, VkPipelineBindPoint bindPoint) const;
+  void bindDefaultDescriptorSets(VkCommandBuffer cmdBuf, VkPipelineBindPoint bindPoint, VkPipelineLayout layout) const;
 
   // for shaders debugging
   void invokeShaderModuleErrorCallback(int line, int col, const char* debugName, VkShaderModule sm);
@@ -645,7 +645,6 @@ class VulkanContext final : public IContext {
   std::unique_ptr<lvk::VulkanStagingDevice> stagingDevice_;
   uint32_t currentMaxTextures_ = 16;
   uint32_t currentMaxSamplers_ = 16;
-  VkPipelineLayout vkPipelineLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout vkDSL_ = VK_NULL_HANDLE;
   VkDescriptorPool vkDPool_ = VK_NULL_HANDLE;
   VkDescriptorSet vkDSet_ = VK_NULL_HANDLE;
