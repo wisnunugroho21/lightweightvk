@@ -341,6 +341,11 @@ struct ComputePipelineState final {
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
 
+struct ShaderModuleState final {
+  VkShaderModule sm = VK_NULL_HANDLE;
+  uint32_t pushConstantsSize = 0;
+};
+
 class CommandBuffer final : public ICommandBuffer {
  public:
   CommandBuffer() = default;
@@ -516,7 +521,7 @@ class VulkanContext final : public IContext {
   ColorSpace getSwapChainColorSpace() const override;
   uint32_t getNumSwapchainImages() const override;
   void recreateSwapchain(int newWidth, int newHeight) override;
-  
+
   uint32_t getFramebufferMSAABitMask() const override;
 
   double getTimestampPeriodToMs() const override;
@@ -592,8 +597,8 @@ class VulkanContext final : public IContext {
   void processDeferredTasks() const;
   void waitDeferredTasks();
   lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers);
-  VkShaderModule createShaderModuleFromSPIRV(const void* spirv, size_t numBytes, const char* debugName, Result* outResult) const;
-  VkShaderModule createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
+  ShaderModuleState createShaderModuleFromSPIRV(const void* spirv, size_t numBytes, const char* debugName, Result* outResult) const;
+  ShaderModuleState createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
 
  private:
   friend class lvk::VulkanSwapchain;
@@ -651,7 +656,7 @@ class VulkanContext final : public IContext {
 
   lvk::ContextConfig config_;
 
-  lvk::Pool<lvk::ShaderModule, VkShaderModule> shaderModulesPool_;
+  lvk::Pool<lvk::ShaderModule, lvk::ShaderModuleState> shaderModulesPool_;
   lvk::Pool<lvk::RenderPipeline, lvk::RenderPipelineState> renderPipelinesPool_;
   lvk::Pool<lvk::ComputePipeline, lvk::ComputePipelineState> computePipelinesPool_;
   lvk::Pool<lvk::Sampler, VkSampler> samplersPool_;
