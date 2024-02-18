@@ -57,6 +57,7 @@ macro(ADD_DEMO app)
            DESTINATION "${CMAKE_BINARY_DIR}/android/${app}/gradle/wrapper")
 
       set(APP_NAME ${app})
+      set(ANDROID_ABI_FILTERS ${LVK_ANDROID_ABI})
       configure_file("${LVK_ROOT_DIR}/android/settings.gradle.in"
                      "${CMAKE_BINARY_DIR}/android/${app}/settings.gradle")
       configure_file("${LVK_ROOT_DIR}/android/app/build.gradle.in"
@@ -65,15 +66,17 @@ macro(ADD_DEMO app)
                      "${CMAKE_BINARY_DIR}/android/${app}/app/src/main/AndroidManifest.xml")
       configure_file("${LVK_ROOT_DIR}/android/app/MainActivity.java.in"
                      "${CMAKE_BINARY_DIR}/android/${app}/app/src/main/java/org/lvk/samples/MainActivity.java")
-
-      file(COPY "${LVK_ROOT_DIR}/third-party/deps/src/android-validation-layers/arm64-v8a/libVkLayer_khronos_validation.so"
-           DESTINATION "${CMAKE_BINARY_DIR}/android/${app}/app/src/main/jniLibs/arm64-v8a")
-      file(COPY "${LVK_ROOT_DIR}/third-party/deps/src/android-validation-layers/armeabi-v7a/libVkLayer_khronos_validation.so"
-           DESTINATION "${CMAKE_BINARY_DIR}/android/${app}/app/src/main/jniLibs/armeabi-v7a")
-      file(COPY "${LVK_ROOT_DIR}/third-party/deps/src/android-validation-layers/x86/libVkLayer_khronos_validation.so"
-           DESTINATION "${CMAKE_BINARY_DIR}/android/${app}/app/src/main/jniLibs/x86")
-      file(COPY "${LVK_ROOT_DIR}/third-party/deps/src/android-validation-layers/x86_64/libVkLayer_khronos_validation.so"
-           DESTINATION "${CMAKE_BINARY_DIR}/android/${app}/app/src/main/jniLibs/x86_64")         
+      
+      if(LVK_WITH_ANDROID_VALIDATION)
+        list(APPEND abdroid_abi arm64-v8a armeabi-v7a x86 x86_64)
+        foreach(abi ${abdroid_abi})
+          string(FIND ${LVK_ANDROID_ABI} "${abi}" abi_substr_index)
+          if(abi_substr_index GREATER -1)
+            file(COPY "${LVK_ROOT_DIR}/third-party/deps/src/android-validation-layers/${abi}/libVkLayer_khronos_validation.so"
+                 DESTINATION "${CMAKE_BINARY_DIR}/android/${app}/app/src/main/jniLibs/${abi}")
+          endif()
+        endforeach()
+      endif()
     endif()
 
     if(ANDROID)

@@ -12,17 +12,20 @@ project("LVK" CXX C)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # cmake-format: off
-option(LVK_CUSTOM_MOLTENVK_PATH "Path to custom MoltenVK"                 "")
-option(LVK_DEPLOY_DEPS          "Deploy dependencies via CMake"           ON)
-option(LVK_WITH_GLFW            "Enable GLFW"                             ON)
-option(LVK_WITH_SAMPLES         "Enable sample demo apps"                 ON)
-option(LVK_WITH_SAMPLES_ANDROID "Generate Android projects for demo apps" OFF)
-option(LVK_WITH_TRACY           "Enable Tracy profiler"                   ON)
-option(LVK_WITH_WAYLAND         "Enable Wayland"                          OFF)
-option(LVK_WITH_IMPLOT          "Enable ImPlot"                           ON)
-option(LVK_WITH_OPENXR          "Enable OpenXR"                           OFF)
+option(LVK_DEPLOY_DEPS             "Deploy dependencies via CMake"           ON)
+option(LVK_WITH_GLFW               "Enable GLFW"                             ON)
+option(LVK_WITH_SAMPLES            "Enable sample demo apps"                 ON)
+option(LVK_WITH_SAMPLES_ANDROID    "Generate Android projects for demo apps" OFF)
+option(LVK_WITH_TRACY              "Enable Tracy profiler"                   ON)
+option(LVK_WITH_WAYLAND            "Enable Wayland"                          OFF)
+option(LVK_WITH_IMPLOT             "Enable ImPlot"                           ON)
+option(LVK_WITH_OPENXR             "Enable OpenXR"                           OFF)
+option(LVK_WITH_ANDROID_VALIDATION "Enable validation layers on Android"     ON)
 
 cmake_dependent_option(LVK_WITH_VULKAN_PORTABILITY "Enable portability extension" ON "APPLE" OFF)
+
+set(LVK_ANDROID_ABI "\'arm64-v8a\'" CACHE STRING "Enabled ABI on Android")
+set(LVK_CUSTOM_MOLTENVK_PATH "" CACHE STRING "Path to custom MoltenVK")
 # cmake-format: on
 
 if(LVK_WITH_SAMPLES AND NOT LVK_WITH_GLFW)
@@ -79,6 +82,13 @@ message(STATUS "LVK_WITH_VULKAN_PORTABILITY = ${LVK_WITH_VULKAN_PORTABILITY}")
 message(STATUS "LVK_WITH_WAYLAND            = ${LVK_WITH_WAYLAND}")
 message(STATUS "LVK_WITH_IMPLOT             = ${LVK_WITH_IMPLOT}")
 message(STATUS "LVK_WITH_OPENXR             = ${LVK_WITH_OPENXR}")
+# cmake-format: on
+
+# cmake-format: off
+if(LVK_WITH_SAMPLES_ANDROID)
+  message(STATUS "LVK_ANDROID_ABI             = ${LVK_ANDROID_ABI}")
+  message(STATUS "LVK_WITH_ANDROID_VALIDATION = ${LVK_WITH_ANDROID_VALIDATION}")
+endif()
 # cmake-format: on
 
 if(NOT DEFINED CMAKE_BUILD_TYPE)
