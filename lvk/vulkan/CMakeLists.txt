@@ -35,6 +35,12 @@ lvk_set_folder(SPIRV              "third-party/glslang")
 lvk_set_folder(glslang-default-resource-limits "third-party/glslang")
 # cmake-format: on
 
+# SPIRV-Reflect
+set(SPIRV_REFLECT_EXECUTABLE OFF CACHE BOOL "")
+set(SPIRV_REFLECT_STATIC_LIB ON  CACHE BOOL "")
+add_subdirectory(${LVK_ROOT_DIR}/third-party/deps/src/SPIRV-Reflect "SPIRV-Reflect")
+lvk_set_folder(spirv-reflect-static "third-party")
+
 if(NOT LVK_USE_CUSTOM_MOLTENVK)
   find_package(Vulkan REQUIRED)
 endif()
@@ -45,6 +51,8 @@ endif()
 
 target_link_libraries(LVKVulkan PRIVATE LVKLibrary)
 target_link_libraries(LVKVulkan PRIVATE glslang SPIRV glslang-default-resource-limits)
+target_link_libraries(LVKVulkan PRIVATE spirv-reflect-static)
+
 if(LVK_USE_CUSTOM_MOLTENVK)
   target_include_directories(LVKVulkan PUBLIC "${LVK_CUSTOM_MOLTENVK_PATH}/include")
   target_link_libraries(LVKVulkan PUBLIC "${LVK_CUSTOM_MOLTENVK_PATH}/dylib/macOS/libMoltenVK.dylib")
