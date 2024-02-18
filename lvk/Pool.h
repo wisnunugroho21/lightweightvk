@@ -68,6 +68,13 @@ class Pool {
     assert(handle.gen() == objects_[index].gen_); // accessing deleted object
     return &objects_[index].obj_;
   }
+  Handle<ObjectType> getHandle(uint32_t index) const {
+    assert(index < objects_.size());
+    if (index >= objects_.size())
+      return {};
+
+    return Handle<ObjectType>(index, objects_[index].gen_);
+  }
   Handle<ObjectType> findObject(const ImplObjectType* obj) {
     if (!obj)
       return {};
