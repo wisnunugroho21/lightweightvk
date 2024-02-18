@@ -3516,11 +3516,11 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
     return VK_NULL_HANDLE;
   }
 
-  if (rps->pipelineLayout_ != vkPipelineLayout_) {
+  if (rps->lastVkDescriptorSetLayout_ != vkDSL_) {
     deferredTask(std::packaged_task<void()>(
         [device = getVkDevice(), pipeline = rps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
     rps->pipeline_ = VK_NULL_HANDLE;
-    rps->pipelineLayout_ = vkPipelineLayout_;
+    rps->lastVkDescriptorSetLayout_ = vkDSL_;
   }
 
   if (rps->pipeline_ != VK_NULL_HANDLE) {
@@ -3654,11 +3654,11 @@ VkPipeline lvk::VulkanContext::getVkPipeline(ComputePipelineHandle handle) {
     return VK_NULL_HANDLE;
   }
 
-  if (cps->pipelineLayout_ != vkPipelineLayout_) {
+  if (cps->lastVkDescriptorSetLayout_ != vkDSL_) {
     deferredTask(
         std::packaged_task<void()>([device = vkDevice_, pipeline = cps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
     cps->pipeline_ = VK_NULL_HANDLE;
-    cps->pipelineLayout_ = vkPipelineLayout_;
+    cps->lastVkDescriptorSetLayout_ = vkDSL_;
   }
 
   if (cps->pipeline_ == VK_NULL_HANDLE) {

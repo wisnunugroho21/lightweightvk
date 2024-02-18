@@ -266,8 +266,10 @@ struct RenderPipelineState final {
   VkVertexInputBindingDescription vkBindings_[VertexInput::LVK_VERTEX_BUFFER_MAX] = {};
   VkVertexInputAttributeDescription vkAttributes_[VertexInput::LVK_VERTEX_ATTRIBUTES_MAX] = {};
 
-  // non-owning, cached the last pipeline layout from the context (if the context has a new layout, invalidate all VkPipeline objects)
-  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+  //VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+
+  // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (if the context has a new layout, invalidate all VkPipeline objects)
+  VkDescriptorSetLayout lastVkDescriptorSetLayout_ = VK_NULL_HANDLE;
 
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
@@ -335,8 +337,11 @@ class VulkanPipelineBuilder final {
 
 struct ComputePipelineState final {
   ComputePipelineDesc desc_;
-  // non-owning, cached the last pipeline layout from the context
-  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+
+  // VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+
+  // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (invalidate all VkPipeline objects on new layout)
+  VkDescriptorSetLayout lastVkDescriptorSetLayout_ = VK_NULL_HANDLE;
 
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
