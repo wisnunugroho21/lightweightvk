@@ -17,6 +17,7 @@
 #include "VulkanUtils.h"
 
 #include <glslang/Include/glslang_c_interface.h>
+#include <SPIRV-Reflect/spirv_reflect.h>
 #include <ldrutils/lutils/ScopeExit.h>
 
 #ifndef VK_USE_PLATFORM_WIN32_KHR
@@ -3990,12 +3991,8 @@ lvk::Format lvk::VulkanContext::getFormat(TextureHandle handle) const {
 
 lvk::Holder<lvk::ShaderModuleHandle> lvk::VulkanContext::createShaderModule(const ShaderModuleDesc& desc, Result* outResult) {
   Result result;
-  VkShaderModule sm = desc.dataSize ?
-                                    // binary
-                          createShaderModule(desc.data, desc.dataSize, desc.debugName, &result)
-                                    :
-                                    // text
-                          createShaderModule(desc.stage, desc.data, desc.debugName, &result);
+  VkShaderModule sm = desc.dataSize ? createShaderModuleFromSPIRV(desc.data, desc.dataSize, desc.debugName, &result) // binary
+                                    : createShaderModuleFromGLSL(desc.stage, desc.data, desc.debugName, &result); // text
 
   if (!result.isOk()) {
     Result::setResult(outResult, result);
@@ -4006,13 +4003,16 @@ lvk::Holder<lvk::ShaderModuleHandle> lvk::VulkanContext::createShaderModule(cons
   return {this, shaderModulesPool_.create(std::move(sm))};
 }
 
-VkShaderModule lvk::VulkanContext::createShaderModule(const void* data, size_t length, const char* debugName, Result* outResult) const {
+VkShaderModule lvk::VulkanContext::createShaderModuleFromSPIRV(const void* spirv,
+                                                               size_t numBytes,
+                                                               const char* debugName,
+                                                               Result* outResult) const {
   VkShaderModule vkShaderModule = VK_NULL_HANDLE;
 
   const VkShaderModuleCreateInfo ci = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = length,
-      .pCode = (const uint32_t*)data,
+      .codeSize = numBytes,
+      .pCode = (const uint32_t*)spirv,
   };
   const VkResult result = vkCreateShaderModule(vkDevice_, &ci, nullptr, &vkShaderModule);
 
@@ -4029,10 +4029,10 @@ VkShaderModule lvk::VulkanContext::createShaderModule(const void* data, size_t l
   return vkShaderModule;
 }
 
-VkShaderModule lvk::VulkanContext::createShaderModule(ShaderStage stage,
-                                                      const char* source,
-                                                      const char* debugName,
-                                                      Result* outResult) const {
+VkShaderModule lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStage stage,
+                                                              const char* source,
+                                                              const char* debugName,
+                                                              Result* outResult) const {
   const VkShaderStageFlagBits vkStage = shaderStageToVkShaderStage(stage);
   LVK_ASSERT(vkStage != VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM);
   LVK_ASSERT(source);
@@ -4103,20 +4103,10 @@ VkShaderModule lvk::VulkanContext::createShaderModule(ShaderStage stage,
 
   const glslang_resource_t glslangResource = lvk::getGlslangResource(getVkPhysicalDeviceProperties().limits);
 
-  VkShaderModule vkShaderModule = VK_NULL_HANDLE;
-  const Result result = lvk::compileShader(vkDevice_, vkStage, source, &vkShaderModule, &glslangResource);
+  std::vector<uint8_t> spirv;
+  const Result result = lvk::compileShader(vkStage, source, &spirv, &glslangResource);
 
-  Result::setResult(outResult, result);
-
-  if (!result.isOk()) {
-    return VK_NULL_HANDLE;
-  }
-
-  VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_SHADER_MODULE, (uint64_t)vkShaderModule, debugName));
-
-  LVK_ASSERT(vkShaderModule != VK_NULL_HANDLE);
-
-  return vkShaderModule;
+  return createShaderModuleFromSPIRV(spirv.data(), spirv.size(), debugName, outResult);
 }
 
 lvk::Format lvk::VulkanContext::getSwapchainFormat() const {
@@ -4217,7 +4207,7 @@ void lvk::VulkanContext::createInstance() {
       VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
       VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
   };
-#endif
+#endif // ANDROID
   
 #if defined(__APPLE__)
   // Shader validation doesn't work in MoltenVK for SPIR-V 1.6 under Vulkan 1.3:
@@ -4226,7 +4216,7 @@ void lvk::VulkanContext::createInstance() {
     VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT,
     VK_VALIDATION_FEATURE_DISABLE_SHADER_VALIDATION_CACHE_EXT,
   };
-#endif
+#endif // __APPLE__
 
   const VkValidationFeaturesEXT features = {
       .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
@@ -4252,7 +4242,7 @@ void lvk::VulkanContext::createInstance() {
     .settingCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(settings),
     .pSettings = settings
   };
-#endif
+#endif // __APPLE__
 
   const VkApplicationInfo appInfo = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,

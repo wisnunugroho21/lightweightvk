@@ -592,8 +592,8 @@ class VulkanContext final : public IContext {
   void processDeferredTasks() const;
   void waitDeferredTasks();
   lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers);
-  VkShaderModule createShaderModule(const void* data, size_t length, const char* debugName, Result* outResult) const;
-  VkShaderModule createShaderModule(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
+  VkShaderModule createShaderModuleFromSPIRV(const void* spirv, size_t numBytes, const char* debugName, Result* outResult) const;
+  VkShaderModule createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
 
  private:
   friend class lvk::VulkanSwapchain;
