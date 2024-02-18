@@ -573,15 +573,14 @@ static glslang_stage_t getGLSLangShaderStage(VkShaderStageFlagBits stage) {
   return GLSLANG_STAGE_COUNT;
 }
 
-lvk::Result lvk::compileShader(VkDevice device,
-                               VkShaderStageFlagBits stage,
+lvk::Result lvk::compileShader(VkShaderStageFlagBits stage,
                                const char* code,
-                               VkShaderModule* outShaderModule,
+                               std::vector<uint8_t>* outSPIRV,
                                const glslang_resource_t* glslLangResource) {
   LVK_PROFILER_FUNCTION();
 
-  if (!outShaderModule) {
-    return Result(Result::Code::ArgumentOutOfRange, "outShaderModule is NULL");
+  if (!outSPIRV) {
+    return Result(Result::Code::ArgumentOutOfRange, "outSPIRV is NULL");
   }
 
   const glslang_input_t input = {
@@ -655,12 +654,10 @@ lvk::Result lvk::compileShader(VkDevice device,
     LLOGW("%s\n", glslang_program_SPIRV_get_messages(program));
   }
 
-  const VkShaderModuleCreateInfo ci = {
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = glslang_program_SPIRV_get_size(program) * sizeof(uint32_t),
-      .pCode = glslang_program_SPIRV_get_ptr(program),
-  };
-  VK_ASSERT_RETURN(vkCreateShaderModule(device, &ci, nullptr, outShaderModule));
+  const uint8_t* spirv = reinterpret_cast<const uint8_t*>(glslang_program_SPIRV_get_ptr(program));
+  const size_t numBytes = glslang_program_SPIRV_get_size(program) * sizeof(uint32_t);
+
+  *outSPIRV = std::vector(spirv, spirv + numBytes);
 
   return Result();
 }

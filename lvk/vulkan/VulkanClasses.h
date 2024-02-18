@@ -266,9 +266,11 @@ struct RenderPipelineState final {
   VkVertexInputBindingDescription vkBindings_[VertexInput::LVK_VERTEX_BUFFER_MAX] = {};
   VkVertexInputAttributeDescription vkAttributes_[VertexInput::LVK_VERTEX_ATTRIBUTES_MAX] = {};
 
-  // non-owning, cached the last pipeline layout from the context (if the context has a new layout, invalidate all VkPipeline objects)
-  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+  // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (if the context has a new layout, invalidate all VkPipeline objects)
+  VkDescriptorSetLayout lastVkDescriptorSetLayout_ = VK_NULL_HANDLE;
 
+  VkShaderStageFlags shaderStageFlags_ = 0;
+  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 };
 
@@ -335,10 +337,17 @@ class VulkanPipelineBuilder final {
 
 struct ComputePipelineState final {
   ComputePipelineDesc desc_;
-  // non-owning, cached the last pipeline layout from the context
-  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
 
+  // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (invalidate all VkPipeline objects on new layout)
+  VkDescriptorSetLayout lastVkDescriptorSetLayout_ = VK_NULL_HANDLE;
+
+  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
+};
+
+struct ShaderModuleState final {
+  VkShaderModule sm = VK_NULL_HANDLE;
+  uint32_t pushConstantsSize = 0;
 };
 
 class CommandBuffer final : public ICommandBuffer {
@@ -417,7 +426,8 @@ class CommandBuffer final : public ICommandBuffer {
 
   bool isRendering_ = false;
 
-  lvk::RenderPipelineHandle currentPipeline_ = {};
+  lvk::RenderPipelineHandle currentPipelineGraphics_ = {};
+  lvk::ComputePipelineHandle currentPipelineCompute_ = {};
 };
 
 class VulkanStagingDevice final {
@@ -516,7 +526,7 @@ class VulkanContext final : public IContext {
   ColorSpace getSwapChainColorSpace() const override;
   uint32_t getNumSwapchainImages() const override;
   void recreateSwapchain(int newWidth, int newHeight) override;
-  
+
   uint32_t getFramebufferMSAABitMask() const override;
 
   double getTimestampPeriodToMs() const override;
@@ -580,7 +590,7 @@ class VulkanContext final : public IContext {
   void* getVmaAllocator() const;
 
   void checkAndUpdateDescriptorSets();
-  void bindDefaultDescriptorSets(VkCommandBuffer cmdBuf, VkPipelineBindPoint bindPoint) const;
+  void bindDefaultDescriptorSets(VkCommandBuffer cmdBuf, VkPipelineBindPoint bindPoint, VkPipelineLayout layout) const;
 
   // for shaders debugging
   void invokeShaderModuleErrorCallback(int line, int col, const char* debugName, VkShaderModule sm);
@@ -592,8 +602,8 @@ class VulkanContext final : public IContext {
   void processDeferredTasks() const;
   void waitDeferredTasks();
   lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers);
-  VkShaderModule createShaderModule(const void* data, size_t length, const char* debugName, Result* outResult) const;
-  VkShaderModule createShaderModule(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
+  ShaderModuleState createShaderModuleFromSPIRV(const void* spirv, size_t numBytes, const char* debugName, Result* outResult) const;
+  ShaderModuleState createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
 
  private:
   friend class lvk::VulkanSwapchain;
@@ -635,7 +645,6 @@ class VulkanContext final : public IContext {
   std::unique_ptr<lvk::VulkanStagingDevice> stagingDevice_;
   uint32_t currentMaxTextures_ = 16;
   uint32_t currentMaxSamplers_ = 16;
-  VkPipelineLayout vkPipelineLayout_ = VK_NULL_HANDLE;
   VkDescriptorSetLayout vkDSL_ = VK_NULL_HANDLE;
   VkDescriptorPool vkDPool_ = VK_NULL_HANDLE;
   VkDescriptorSet vkDSet_ = VK_NULL_HANDLE;
@@ -651,7 +660,7 @@ class VulkanContext final : public IContext {
 
   lvk::ContextConfig config_;
 
-  lvk::Pool<lvk::ShaderModule, VkShaderModule> shaderModulesPool_;
+  lvk::Pool<lvk::ShaderModule, lvk::ShaderModuleState> shaderModulesPool_;
   lvk::Pool<lvk::RenderPipeline, lvk::RenderPipelineState> renderPipelinesPool_;
   lvk::Pool<lvk::ComputePipeline, lvk::ComputePipelineState> computePipelinesPool_;
   lvk::Pool<lvk::Sampler, VkSampler> samplersPool_;

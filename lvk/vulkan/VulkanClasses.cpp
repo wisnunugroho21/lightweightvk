@@ -17,6 +17,7 @@
 #include "VulkanUtils.h"
 
 #include <glslang/Include/glslang_c_interface.h>
+#include <SPIRV-Reflect/spirv_reflect.h>
 #include <ldrutils/lutils/ScopeExit.h>
 
 #ifndef VK_USE_PLATFORM_WIN32_KHR
@@ -2106,13 +2107,21 @@ void lvk::CommandBuffer::cmdBindComputePipeline(lvk::ComputePipelineHandle handl
     return;
   }
 
+  currentPipelineGraphics_ = {};
+  currentPipelineCompute_ = handle;
+
   VkPipeline pipeline = ctx_->getVkPipeline(handle);
 
+  const lvk::ComputePipelineState* cps = ctx_->computePipelinesPool_.get(handle);
+
+  LVK_ASSERT(cps);
   LVK_ASSERT(pipeline != VK_NULL_HANDLE);
 
   if (lastPipelineBound_ != pipeline) {
     lastPipelineBound_ = pipeline;
     vkCmdBindPipeline(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+    ctx_->checkAndUpdateDescriptorSets();
+    ctx_->bindDefaultDescriptorSets(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_COMPUTE, cps->pipelineLayout_);
   }
 }
 
@@ -2128,9 +2137,6 @@ void lvk::CommandBuffer::cmdDispatchThreadGroups(const Dimensions& threadgroupCo
     bufferBarrier(
         deps.buffers[i], VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   }
-
-  ctx_->checkAndUpdateDescriptorSets();
-  ctx_->bindDefaultDescriptorSets(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_COMPUTE);
 
   vkCmdDispatch(wrapper_->cmdBuf_, threadgroupCount.width, threadgroupCount.height, threadgroupCount.depth);
 }
@@ -2388,7 +2394,6 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
   cmdBindDepthState({});
 
   ctx_->checkAndUpdateDescriptorSets();
-  ctx_->bindDefaultDescriptorSets(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_GRAPHICS);
 
   vkCmdSetDepthCompareOp(wrapper_->cmdBuf_, VK_COMPARE_OP_ALWAYS);
   vkCmdSetDepthBiasEnable(wrapper_->cmdBuf_, VK_FALSE);
@@ -2448,7 +2453,8 @@ void lvk::CommandBuffer::cmdBindRenderPipeline(lvk::RenderPipelineHandle handle)
     return;
   }
 
-  currentPipeline_ = handle;
+  currentPipelineGraphics_ = handle;
+  currentPipelineCompute_ = {};
 
   const lvk::RenderPipelineState* rps = ctx_->renderPipelinesPool_.get(handle);
 
@@ -2462,13 +2468,14 @@ void lvk::CommandBuffer::cmdBindRenderPipeline(lvk::RenderPipelineHandle handle)
     LLOGW("Make sure your render pass and render pipeline both have matching depth attachments");
   }
 
-  VkPipeline pipeline = ctx_->getVkPipeline(currentPipeline_);
+  VkPipeline pipeline = ctx_->getVkPipeline(handle);
 
   LVK_ASSERT(pipeline != VK_NULL_HANDLE);
 
   if (lastPipelineBound_ != pipeline) {
     lastPipelineBound_ = pipeline;
     vkCmdBindPipeline(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    ctx_->bindDefaultDescriptorSets(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_GRAPHICS, rps->pipelineLayout_);
   }
 }
 
@@ -2524,11 +2531,20 @@ void lvk::CommandBuffer::cmdPushConstants(const void* data, size_t size, size_t 
     LLOGW("Push constants size exceeded %u (max %u bytes)", size + offset, limits.maxPushConstantsSize);
   }
 
-  const VkShaderStageFlags shaderStageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                              VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
-                                              VK_SHADER_STAGE_COMPUTE_BIT;
+  if (currentPipelineGraphics_.empty() && currentPipelineCompute_.empty()) {
+    LVK_ASSERT_MSG(false, "No pipeline bound - cannot set push constants");
+    return;
+  }
 
-  vkCmdPushConstants(wrapper_->cmdBuf_, ctx_->vkPipelineLayout_, shaderStageFlags, (uint32_t)offset, (uint32_t)size, data);
+  const lvk::RenderPipelineState* stateGraphics = ctx_->renderPipelinesPool_.get(currentPipelineGraphics_);
+  const lvk::ComputePipelineState* stateCompute = ctx_->computePipelinesPool_.get(currentPipelineCompute_);
+
+  LVK_ASSERT(stateGraphics || stateCompute);
+
+  VkPipelineLayout layout = stateGraphics ? stateGraphics->pipelineLayout_ : stateCompute->pipelineLayout_;
+  VkShaderStageFlags shaderStageFlags = stateGraphics ? stateGraphics->shaderStageFlags_ : VK_SHADER_STAGE_COMPUTE_BIT;
+
+  vkCmdPushConstants(wrapper_->cmdBuf_, layout, shaderStageFlags, (uint32_t)offset, (uint32_t)size, data);
 }
 
 void lvk::CommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t baseInstance) {
@@ -3154,7 +3170,6 @@ lvk::VulkanContext::~VulkanContext() {
   immediate_.reset(nullptr);
 
   vkDestroyDescriptorSetLayout(vkDevice_, vkDSL_, nullptr);
-  vkDestroyPipelineLayout(vkDevice_, vkPipelineLayout_, nullptr);
   vkDestroyDescriptorPool(vkDevice_, vkDPool_, nullptr);
   vkDestroySurfaceKHR(vkInstance_, vkSurface_, nullptr);
   vkDestroyPipelineCache(vkDevice_, pipelineCache_, nullptr);
@@ -3515,11 +3530,13 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
     return VK_NULL_HANDLE;
   }
 
-  if (rps->pipelineLayout_ != vkPipelineLayout_) {
+  if (rps->lastVkDescriptorSetLayout_ != vkDSL_) {
     deferredTask(std::packaged_task<void()>(
         [device = getVkDevice(), pipeline = rps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
+    deferredTask(std::packaged_task<void()>(
+        [device = getVkDevice(), layout = rps->pipelineLayout_]() { vkDestroyPipelineLayout(device, layout, nullptr); }));
     rps->pipeline_ = VK_NULL_HANDLE;
-    rps->pipelineLayout_ = vkPipelineLayout_;
+    rps->lastVkDescriptorSetLayout_ = vkDSL_;
   }
 
   if (rps->pipeline_ != VK_NULL_HANDLE) {
@@ -3528,6 +3545,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
 
   // build a new Vulkan pipeline
 
+  VkPipelineLayout layout = VK_NULL_HANDLE;
   VkPipeline pipeline = VK_NULL_HANDLE;
 
   const RenderPipelineDesc& desc = rps->desc_;
@@ -3567,11 +3585,11 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
     }
   }
 
-  const VkShaderModule* vertModule = shaderModulesPool_.get(desc.smVert);
-  const VkShaderModule* tescModule = shaderModulesPool_.get(desc.smTesc);
-  const VkShaderModule* teseModule = shaderModulesPool_.get(desc.smTese);
-  const VkShaderModule* geomModule = shaderModulesPool_.get(desc.smGeom);
-  const VkShaderModule* fragModule = shaderModulesPool_.get(desc.smFrag);
+  const lvk::ShaderModuleState* vertModule = shaderModulesPool_.get(desc.smVert);
+  const lvk::ShaderModuleState* tescModule = shaderModulesPool_.get(desc.smTesc);
+  const lvk::ShaderModuleState* teseModule = shaderModulesPool_.get(desc.smTese);
+  const lvk::ShaderModuleState* geomModule = shaderModulesPool_.get(desc.smGeom);
+  const lvk::ShaderModuleState* fragModule = shaderModulesPool_.get(desc.smFrag);
 
   LVK_ASSERT(vertModule);
   LVK_ASSERT(fragModule);
@@ -3593,6 +3611,52 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
   VkSpecializationMapEntry entries[SpecializationConstantDesc::LVK_SPECIALIZATION_CONSTANTS_MAX] = {};
 
   const VkSpecializationInfo si = lvk::getPipelineShaderStageSpecializationInfo(desc.specInfo, entries);
+
+  // create pipeline layout
+  {
+#define UPDATE_PUSH_CONSTANT_SIZE(sm, bit)                                  \
+  if (sm) {                                                                 \
+    pushConstantsSize = std::max(pushConstantsSize, sm->pushConstantsSize); \
+    rps->shaderStageFlags_ |= bit;                                          \
+  }
+    rps->shaderStageFlags_ = 0;
+    uint32_t pushConstantsSize = 0;
+    UPDATE_PUSH_CONSTANT_SIZE(vertModule, VK_SHADER_STAGE_VERTEX_BIT);
+    UPDATE_PUSH_CONSTANT_SIZE(tescModule, VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT);
+    UPDATE_PUSH_CONSTANT_SIZE(teseModule, VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT);
+    UPDATE_PUSH_CONSTANT_SIZE(geomModule, VK_SHADER_STAGE_GEOMETRY_BIT);
+    UPDATE_PUSH_CONSTANT_SIZE(fragModule, VK_SHADER_STAGE_FRAGMENT_BIT);
+#undef UPDATE_PUSH_CONSTANT_SIZE
+
+    // maxPushConstantsSize is guaranteed to be at least 128 bytes
+    // https://www.khronos.org/registry/vulkan/specs/1.3/html/vkspec.html#features-limits
+    // Table 32. Required Limits
+    const VkPhysicalDeviceLimits& limits = getVkPhysicalDeviceProperties().limits;
+    if (!LVK_VERIFY(pushConstantsSize <= limits.maxPushConstantsSize)) {
+      LLOGW("Push constants size exceeded %u (max %u bytes)", pushConstantsSize, limits.maxPushConstantsSize);
+    }
+
+    // duplicate for MoltenVK
+    const VkDescriptorSetLayout dsls[] = {vkDSL_, vkDSL_, vkDSL_, vkDSL_};
+    const VkPushConstantRange range = {
+        .stageFlags = rps->shaderStageFlags_,
+        .offset = 0,
+        .size = pushConstantsSize,
+    };
+    const VkPipelineLayoutCreateInfo ci = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(dsls),
+        .pSetLayouts = dsls,
+        .pushConstantRangeCount = pushConstantsSize ? 1u : 0u,
+        .pPushConstantRanges = pushConstantsSize ? &range : nullptr,
+    };
+    VK_ASSERT(vkCreatePipelineLayout(vkDevice_, &ci, nullptr, &layout));
+    char pipelineLayoutName[256] = {0};
+    if (rps->desc_.debugName) {
+      snprintf(pipelineLayoutName, sizeof(pipelineLayoutName) - 1, "Pipeline Layout: %s", rps->desc_.debugName);
+    }
+    VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)layout, pipelineLayoutName));
+  }
 
   lvk::VulkanPipelineBuilder()
       // from Vulkan 1.0
@@ -3621,16 +3685,17 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
                        compareOpToVkCompareOp(desc.backFaceStencil.stencilCompareOp))
       .stencilMasks(VK_STENCIL_FACE_FRONT_BIT, 0xFF, desc.frontFaceStencil.writeMask, desc.frontFaceStencil.readMask)
       .stencilMasks(VK_STENCIL_FACE_BACK_BIT, 0xFF, desc.backFaceStencil.writeMask, desc.backFaceStencil.readMask)
-      .shaderStage(lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, *vertModule, desc.entryPointVert, &si))
-      .shaderStage(lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, *fragModule, desc.entryPointFrag, &si))
+      .shaderStage(lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertModule->sm, desc.entryPointVert, &si))
+      .shaderStage(lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragModule->sm, desc.entryPointFrag, &si))
       .shaderStage(tescModule ? lvk::getPipelineShaderStageCreateInfo(
-                                    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, *tescModule, desc.entryPointTesc, &si)
+                                    VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, tescModule->sm, desc.entryPointTesc, &si)
                               : VkPipelineShaderStageCreateInfo{.module = VK_NULL_HANDLE})
       .shaderStage(teseModule ? lvk::getPipelineShaderStageCreateInfo(
-                                    VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, *teseModule, desc.entryPointTese, &si)
+                                    VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT, teseModule->sm, desc.entryPointTese, &si)
                               : VkPipelineShaderStageCreateInfo{.module = VK_NULL_HANDLE})
-      .shaderStage(geomModule ? lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_GEOMETRY_BIT, *geomModule, desc.entryPointGeom, &si)
-                              : VkPipelineShaderStageCreateInfo{.module = VK_NULL_HANDLE})
+      .shaderStage(geomModule
+                       ? lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_GEOMETRY_BIT, geomModule->sm, desc.entryPointGeom, &si)
+                       : VkPipelineShaderStageCreateInfo{.module = VK_NULL_HANDLE})
       .cullMode(cullModeToVkCullMode(desc.cullMode))
       .frontFace(windingModeToVkFrontFace(desc.frontFaceWinding))
       .vertexInputState(ciVertexInputState)
@@ -3638,9 +3703,10 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
       .depthAttachmentFormat(formatToVkFormat(desc.depthFormat))
       .stencilAttachmentFormat(formatToVkFormat(desc.stencilFormat))
       .patchControlPoints(desc.patchControlPoints)
-      .build(vkDevice_, pipelineCache_, vkPipelineLayout_, &pipeline, desc.debugName);
+      .build(vkDevice_, pipelineCache_, layout, &pipeline, desc.debugName);
 
   rps->pipeline_ = pipeline;
+  rps->pipelineLayout_ = layout;
 
   return pipeline;
 }
@@ -3652,15 +3718,18 @@ VkPipeline lvk::VulkanContext::getVkPipeline(ComputePipelineHandle handle) {
     return VK_NULL_HANDLE;
   }
 
-  if (cps->pipelineLayout_ != vkPipelineLayout_) {
+  if (cps->lastVkDescriptorSetLayout_ != vkDSL_) {
     deferredTask(
         std::packaged_task<void()>([device = vkDevice_, pipeline = cps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
+    deferredTask(
+        std::packaged_task<void()>([device = vkDevice_, layout = cps->pipelineLayout_]() { vkDestroyPipelineLayout(device, layout, nullptr); }));
     cps->pipeline_ = VK_NULL_HANDLE;
-    cps->pipelineLayout_ = vkPipelineLayout_;
+    cps->pipelineLayout_ = VK_NULL_HANDLE;
+    cps->lastVkDescriptorSetLayout_ = vkDSL_;
   }
 
   if (cps->pipeline_ == VK_NULL_HANDLE) {
-    const VkShaderModule* sm = shaderModulesPool_.get(cps->desc_.smComp);
+    const lvk::ShaderModuleState* sm = shaderModulesPool_.get(cps->desc_.smComp);
 
     LVK_ASSERT(sm);
 
@@ -3668,11 +3737,35 @@ VkPipeline lvk::VulkanContext::getVkPipeline(ComputePipelineHandle handle) {
 
     const VkSpecializationInfo siComp = lvk::getPipelineShaderStageSpecializationInfo(cps->desc_.specInfo, entries);
 
+    // create pipeline layout
+    {
+      // duplicate for MoltenVK
+      const VkDescriptorSetLayout dsls[] = {vkDSL_, vkDSL_, vkDSL_, vkDSL_};
+      const VkPushConstantRange range = {
+          .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
+          .offset = 0,
+          .size = sm->pushConstantsSize,
+      };
+      const VkPipelineLayoutCreateInfo ci = {
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+          .setLayoutCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(dsls),
+          .pSetLayouts = dsls,
+          .pushConstantRangeCount = 1,
+          .pPushConstantRanges = &range,
+      };
+      VK_ASSERT(vkCreatePipelineLayout(vkDevice_, &ci, nullptr, &cps->pipelineLayout_));
+      char pipelineLayoutName[256] = {0};
+      if (cps->desc_.debugName) {
+        snprintf(pipelineLayoutName, sizeof(pipelineLayoutName) - 1, "Pipeline Layout: %s", cps->desc_.debugName);
+      }
+      VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)cps->pipelineLayout_, pipelineLayoutName));
+    }
+
     const VkComputePipelineCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
         .flags = 0,
-        .stage = lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, *sm, cps->desc_.entryPoint, &siComp),
-        .layout = vkPipelineLayout_,
+        .stage = lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, sm->sm, cps->desc_.entryPoint, &siComp),
+        .layout = cps->pipelineLayout_,
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = -1,
     };
@@ -3746,6 +3839,8 @@ void lvk::VulkanContext::destroy(lvk::ComputePipelineHandle handle) {
 
   deferredTask(
       std::packaged_task<void()>([device = getVkDevice(), pipeline = cps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
+  deferredTask(std::packaged_task<void()>(
+      [device = getVkDevice(), layout = cps->pipelineLayout_]() { vkDestroyPipelineLayout(device, layout, nullptr); }));
 
   computePipelinesPool_.destroy(handle);
 }
@@ -3759,21 +3854,23 @@ void lvk::VulkanContext::destroy(lvk::RenderPipelineHandle handle) {
 
   deferredTask(
       std::packaged_task<void()>([device = getVkDevice(), pipeline = rps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
+  deferredTask(std::packaged_task<void()>(
+      [device = getVkDevice(), layout = rps->pipelineLayout_]() { vkDestroyPipelineLayout(device, layout, nullptr); }));
 
   renderPipelinesPool_.destroy(handle);
 }
 
 void lvk::VulkanContext::destroy(lvk::ShaderModuleHandle handle) {
-  const VkShaderModule* sm = shaderModulesPool_.get(handle);
+  const lvk::ShaderModuleState* state = shaderModulesPool_.get(handle);
 
-  if (!sm) {
+  if (!state) {
     return;
   }
 
-  if (*sm != VK_NULL_HANDLE) {
+  if (state->sm != VK_NULL_HANDLE) {
     // a shader module can be destroyed while pipelines created using its shaders are still in use
     // https://registry.khronos.org/vulkan/specs/1.3/html/chap9.html#vkDestroyShaderModule
-    vkDestroyShaderModule(getVkDevice(), *sm, nullptr);
+    vkDestroyShaderModule(getVkDevice(), state->sm, nullptr);
   }
 
   shaderModulesPool_.destroy(handle);
@@ -3990,12 +4087,8 @@ lvk::Format lvk::VulkanContext::getFormat(TextureHandle handle) const {
 
 lvk::Holder<lvk::ShaderModuleHandle> lvk::VulkanContext::createShaderModule(const ShaderModuleDesc& desc, Result* outResult) {
   Result result;
-  VkShaderModule sm = desc.dataSize ?
-                                    // binary
-                          createShaderModule(desc.data, desc.dataSize, desc.debugName, &result)
-                                    :
-                                    // text
-                          createShaderModule(desc.stage, desc.data, desc.debugName, &result);
+  ShaderModuleState sm = desc.dataSize ? createShaderModuleFromSPIRV(desc.data, desc.dataSize, desc.debugName, &result) // binary
+                                    : createShaderModuleFromGLSL(desc.stage, desc.data, desc.debugName, &result); // text
 
   if (!result.isOk()) {
     Result::setResult(outResult, result);
@@ -4006,33 +4099,56 @@ lvk::Holder<lvk::ShaderModuleHandle> lvk::VulkanContext::createShaderModule(cons
   return {this, shaderModulesPool_.create(std::move(sm))};
 }
 
-VkShaderModule lvk::VulkanContext::createShaderModule(const void* data, size_t length, const char* debugName, Result* outResult) const {
+lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromSPIRV(const void* spirv,
+                                                                       size_t numBytes,
+                                                                       const char* debugName,
+                                                                       Result* outResult) const {
   VkShaderModule vkShaderModule = VK_NULL_HANDLE;
 
   const VkShaderModuleCreateInfo ci = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = length,
-      .pCode = (const uint32_t*)data,
+      .codeSize = numBytes,
+      .pCode = (const uint32_t*)spirv,
   };
-  const VkResult result = vkCreateShaderModule(vkDevice_, &ci, nullptr, &vkShaderModule);
 
-  lvk::setResultFrom(outResult, result);
+  {
+    const VkResult result = vkCreateShaderModule(vkDevice_, &ci, nullptr, &vkShaderModule);
 
-  if (result != VK_SUCCESS) {
-    return VK_NULL_HANDLE;
+    lvk::setResultFrom(outResult, result);
+
+    if (result != VK_SUCCESS) {
+      return {.sm = VK_NULL_HANDLE};
+    }
   }
 
   VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_SHADER_MODULE, (uint64_t)vkShaderModule, debugName));
 
   LVK_ASSERT(vkShaderModule != VK_NULL_HANDLE);
 
-  return vkShaderModule;
+  SpvReflectShaderModule mdl;
+  SpvReflectResult result = spvReflectCreateShaderModule(numBytes, spirv, &mdl);
+  LVK_ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
+  SCOPE_EXIT {
+    spvReflectDestroyShaderModule(&mdl);
+  };
+
+  uint32_t pushConstantsSize = 0;
+
+  for (uint32_t i = 0; i < mdl.push_constant_block_count; ++i) {
+    const SpvReflectBlockVariable* block = &mdl.push_constant_blocks[i];
+    pushConstantsSize = std::max(pushConstantsSize, block->offset + block->size);
+  }
+
+  return {
+      .sm = vkShaderModule,
+      .pushConstantsSize = pushConstantsSize,
+  };
 }
 
-VkShaderModule lvk::VulkanContext::createShaderModule(ShaderStage stage,
-                                                      const char* source,
-                                                      const char* debugName,
-                                                      Result* outResult) const {
+lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStage stage,
+                                                              const char* source,
+                                                              const char* debugName,
+                                                              Result* outResult) const {
   const VkShaderStageFlagBits vkStage = shaderStageToVkShaderStage(stage);
   LVK_ASSERT(vkStage != VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM);
   LVK_ASSERT(source);
@@ -4041,7 +4157,7 @@ VkShaderModule lvk::VulkanContext::createShaderModule(ShaderStage stage,
 
   if (!source || !*source) {
     Result::setResult(outResult, Result::Code::ArgumentOutOfRange, "Shader source is empty");
-    return VK_NULL_HANDLE;
+    return {};
   }
 
   if (strstr(source, "#version ") == nullptr) {
@@ -4103,20 +4219,10 @@ VkShaderModule lvk::VulkanContext::createShaderModule(ShaderStage stage,
 
   const glslang_resource_t glslangResource = lvk::getGlslangResource(getVkPhysicalDeviceProperties().limits);
 
-  VkShaderModule vkShaderModule = VK_NULL_HANDLE;
-  const Result result = lvk::compileShader(vkDevice_, vkStage, source, &vkShaderModule, &glslangResource);
+  std::vector<uint8_t> spirv;
+  const Result result = lvk::compileShader(vkStage, source, &spirv, &glslangResource);
 
-  Result::setResult(outResult, result);
-
-  if (!result.isOk()) {
-    return VK_NULL_HANDLE;
-  }
-
-  VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_SHADER_MODULE, (uint64_t)vkShaderModule, debugName));
-
-  LVK_ASSERT(vkShaderModule != VK_NULL_HANDLE);
-
-  return vkShaderModule;
+  return createShaderModuleFromSPIRV(spirv.data(), spirv.size(), debugName, outResult);
 }
 
 lvk::Format lvk::VulkanContext::getSwapchainFormat() const {
@@ -4217,7 +4323,7 @@ void lvk::VulkanContext::createInstance() {
       VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
       VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
   };
-#endif
+#endif // ANDROID
   
 #if defined(__APPLE__)
   // Shader validation doesn't work in MoltenVK for SPIR-V 1.6 under Vulkan 1.3:
@@ -4226,7 +4332,7 @@ void lvk::VulkanContext::createInstance() {
     VK_VALIDATION_FEATURE_DISABLE_SHADERS_EXT,
     VK_VALIDATION_FEATURE_DISABLE_SHADER_VALIDATION_CACHE_EXT,
   };
-#endif
+#endif // __APPLE__
 
   const VkValidationFeaturesEXT features = {
       .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
@@ -4252,7 +4358,7 @@ void lvk::VulkanContext::createInstance() {
     .settingCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(settings),
     .pSettings = settings
   };
-#endif
+#endif // __APPLE__
 
   const VkApplicationInfo appInfo = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -4930,10 +5036,6 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
   if (vkDPool_ != VK_NULL_HANDLE) {
     deferredTask(std::packaged_task<void()>([device = vkDevice_, dp = vkDPool_]() { vkDestroyDescriptorPool(device, dp, nullptr); }));
   }
-  if (vkPipelineLayout_ != VK_NULL_HANDLE) {
-    deferredTask(std::packaged_task<void()>(
-        [device = vkDevice_, layout = vkPipelineLayout_]() { vkDestroyPipelineLayout(device, layout, nullptr); }));
-  }
 
   // create default descriptor set layout which is going to be shared by graphics pipelines
   const VkDescriptorSetLayoutBinding bindings[kBinding_NumBindings] = {
@@ -4987,37 +5089,6 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
     VK_ASSERT_RETURN(vkAllocateDescriptorSets(vkDevice_, &ai, &vkDSet_));
   }
 
-  // create pipeline layout
-  {
-    // maxPushConstantsSize is guaranteed to be at least 128 bytes
-    // https://www.khronos.org/registry/vulkan/specs/1.3/html/vkspec.html#features-limits
-    // Table 32. Required Limits
-    const uint32_t kPushConstantsSize = 128;
-    const VkPhysicalDeviceLimits& limits = getVkPhysicalDeviceProperties().limits;
-    if (!LVK_VERIFY(kPushConstantsSize <= limits.maxPushConstantsSize)) {
-      LLOGW("Push constants size exceeded %u (max %u bytes)", kPushConstantsSize, limits.maxPushConstantsSize);
-    }
-
-    // duplicate for MoltenVK
-    const VkDescriptorSetLayout dsls[] = {vkDSL_, vkDSL_, vkDSL_, vkDSL_};
-    const VkPushConstantRange range = {
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
-                      VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
-        .offset = 0,
-        .size = kPushConstantsSize,
-    };
-    const VkPipelineLayoutCreateInfo ci = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(dsls),
-        .pSetLayouts = dsls,
-        .pushConstantRangeCount = 1,
-        .pPushConstantRanges = &range,
-    };
-    VK_ASSERT(vkCreatePipelineLayout(vkDevice_, &ci, nullptr, &vkPipelineLayout_));
-    VK_ASSERT(lvk::setDebugObjectName(
-        vkDevice_, VK_OBJECT_TYPE_PIPELINE_LAYOUT, (uint64_t)vkPipelineLayout_, "Pipeline Layout: VulkanContext::pipelineLayout_"));
-  }
-
   return Result();
 }
 
@@ -5064,10 +5135,10 @@ std::shared_ptr<lvk::VulkanImage> lvk::VulkanContext::createImage(VkImageType im
       *this, vkDevice_, extent, imageType, format, numLevels, numLayers, tiling, usageFlags, memFlags, flags, samples, debugName);
 }
 
-void lvk::VulkanContext::bindDefaultDescriptorSets(VkCommandBuffer cmdBuf, VkPipelineBindPoint bindPoint) const {
+void lvk::VulkanContext::bindDefaultDescriptorSets(VkCommandBuffer cmdBuf, VkPipelineBindPoint bindPoint, VkPipelineLayout layout) const {
   LVK_PROFILER_FUNCTION();
   const VkDescriptorSet dsets[4] = {vkDSet_, vkDSet_, vkDSet_, vkDSet_};
-  vkCmdBindDescriptorSets(cmdBuf, bindPoint, vkPipelineLayout_, 0, (uint32_t)LVK_ARRAY_NUM_ELEMENTS(dsets), dsets, 0, nullptr);
+  vkCmdBindDescriptorSets(cmdBuf, bindPoint, layout, 0, (uint32_t)LVK_ARRAY_NUM_ELEMENTS(dsets), dsets, 0, nullptr);
 }
 
 void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
@@ -5296,7 +5367,13 @@ void lvk::VulkanContext::invokeShaderModuleErrorCallback(int line, int col, cons
     return;
   }
 
-  lvk::ShaderModuleHandle handle = shaderModulesPool_.findObject(&sm);
+  lvk::ShaderModuleHandle handle;
+
+  for (uint32_t i = 0; i != shaderModulesPool_.objects_.size(); i++) {
+    if (shaderModulesPool_.objects_[i].obj_.sm == sm) {
+      handle = shaderModulesPool_.getHandle(i);
+    }
+  }
 
   if (!handle.empty()) {
     config_.shaderModuleErrorCallback(this, handle, line, col, debugName);

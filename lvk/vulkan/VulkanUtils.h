@@ -23,6 +23,8 @@
 
 #include <cassert>
 #include <cstdio>
+#include <vector>
+
 #include <volk.h>
 #include <vk_mem_alloc.h>
 #include <lvk/LVK.h>
@@ -70,10 +72,9 @@ VkResult allocateMemory(VkPhysicalDevice physDev,
                         VkDeviceMemory* outMemory);
 
 glslang_resource_t getGlslangResource(const VkPhysicalDeviceLimits& limits);
-Result compileShader(VkDevice device,
-                     VkShaderStageFlagBits stage,
+Result compileShader(VkShaderStageFlagBits stage,
                      const char* code,
-                     VkShaderModule* outShaderModule,
+                     std::vector<uint8_t>* outSPIRV,
                      const glslang_resource_t* glslLangResource = nullptr);
 
 VkSamplerCreateInfo samplerStateDescToVkSamplerCreateInfo(const lvk::SamplerStateDesc& desc, const VkPhysicalDeviceLimits& limits);

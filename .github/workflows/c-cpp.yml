@@ -48,18 +48,6 @@ jobs:
         run: |
           cmake -G "Unix Makefiles" -S "${{ github.workspace }}" -B build -DLVK_WITH_SAMPLES_ANDROID=ON
 
-      - name: Assemble HelloTriangle APK
-        run: |
-          cd build/android/HelloTriangle
-          chmod +x ./gradlew
-          ./gradlew assembleDebug
-
-      - name: Assemble Tiny APK
-        run: |
-          cd build/android/Tiny
-          chmod +x ./gradlew
-          ./gradlew assembleDebug
-
       - name: Assemble Tiny_Mesh APK
         run: |
           cd build/android/Tiny_Mesh
