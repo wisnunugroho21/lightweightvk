@@ -60,6 +60,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFl
   }
 
   const bool isError = (msgSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) != 0;
+  const bool isWarning = (msgSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) != 0;
 
   const size_t len = cbData->pMessage ? strlen(cbData->pMessage) : 128u;
 
@@ -75,6 +76,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFl
   if (isError) {
     lvk::VulkanContext* ctx = static_cast<lvk::VulkanContext*>(userData);
     level = ctx->config_.terminateOnValidationError ? minilog::FatalError : minilog::Warning;
+  }
+
+  if (!isError && !isWarning && cbData->pMessageIdName) {
+    if (strcmp(cbData->pMessageIdName, "Loader Message") == 0) {
+      return VK_FALSE;
+    }
   }
 
   if (sscanf(cbData->pMessage,
