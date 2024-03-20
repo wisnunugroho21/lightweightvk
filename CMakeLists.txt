@@ -106,6 +106,9 @@ find_package(Python3 COMPONENTS Interpreter)
 
 message(STATUS "LVK_ROOT_DIR = " ${LVK_ROOT_DIR})
 
+# enable multithreaded builds for Visual Studio
+add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
+
 if(LVK_DEPLOY_DEPS)
   # deploy dependencies during configuration
   execute_process(COMMAND ${Python3_EXECUTABLE} deploy_deps.py WORKING_DIRECTORY ${LVK_ROOT_DIR} COMMAND_ERROR_IS_FATAL ANY)
