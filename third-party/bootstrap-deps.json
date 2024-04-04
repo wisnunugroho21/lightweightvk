@@ -36,11 +36,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/tinyobjloader/tinyobjloader.git",
-        "revision": "2945a967c5303b2c8c14174117c45f3302591150"
-    },
-    "postprocess": {
-       "type": "script",
-       "file": "tinyobjloader.py"
+        "revision": "cab4ad7254cbf7eaaafdb73d272f99e92f166df8"
     }
 },
 {
