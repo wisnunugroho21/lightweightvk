@@ -80,7 +80,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/KhronosGroup/KTX-Software.git",
-        "revision": "408cde7212840fcef7106224365a070e674afcdc"
+        "revision": "v4.3.2"
     }
 },
 {
