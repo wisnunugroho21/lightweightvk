@@ -578,7 +578,7 @@ void transitionToColorAttachment(VkCommandBuffer buffer, lvk::VulkanTexture* col
     return;
   }
 
-  const lvk::VulkanImage& colorImg = *colorTex->image_.get();
+  const lvk::VulkanImage& colorImg = colorTex->image_;
   if (!LVK_VERIFY(!colorImg.isDepthFormat_ && !colorImg.isStencilFormat_)) {
     LVK_ASSERT_MSG(false, "Color attachments cannot have depth/stencil formats");
     return;
@@ -903,6 +903,51 @@ void lvk::VulkanBuffer::bufferSubData(size_t offset, size_t size, const void* da
   }
 }
 
+lvk::VulkanImage::VulkanImage(VulkanImage&& img) : ctx_(img.ctx_) {
+  std::swap(vkDevice_, img.vkDevice_);
+  std::swap(vkImage_, img.vkImage_);
+  std::swap(vkUsageFlags_, img.vkUsageFlags_);
+  std::swap(vkMemory_, img.vkMemory_);
+  std::swap(vmaAllocInfo_, img.vmaAllocInfo_);
+  std::swap(vmaAllocation_, img.vmaAllocation_);
+  std::swap(vkFormatProperties_, img.vkFormatProperties_);
+  std::swap(vkExtent_, img.vkExtent_);
+  std::swap(vkType_, img.vkType_);
+  std::swap(vkImageFormat_, img.vkImageFormat_);
+  std::swap(vkSamples_, img.vkSamples_);
+  std::swap(mappedPtr_, img.mappedPtr_);
+  std::swap(isSwapchainImage_, img.isSwapchainImage_);
+  std::swap(numLevels_, img.numLevels_);
+  std::swap(numLayers_, img.numLayers_);
+  std::swap(isDepthFormat_, img.isDepthFormat_);
+  std::swap(isStencilFormat_, img.isStencilFormat_);
+  std::swap(vkImageLayout_, img.vkImageLayout_);
+  img.ctx_ = nullptr;
+}
+
+lvk::VulkanImage& lvk::VulkanImage::operator=(VulkanImage&& img) {
+  std::swap(ctx_, img.ctx_);
+  std::swap(vkDevice_, img.vkDevice_);
+  std::swap(vkImage_, img.vkImage_);
+  std::swap(vkUsageFlags_, img.vkUsageFlags_);
+  std::swap(vkMemory_, img.vkMemory_);
+  std::swap(vmaAllocInfo_, img.vmaAllocInfo_);
+  std::swap(vmaAllocation_, img.vmaAllocation_);
+  std::swap(vkFormatProperties_, img.vkFormatProperties_);
+  std::swap(vkExtent_, img.vkExtent_);
+  std::swap(vkType_, img.vkType_);
+  std::swap(vkImageFormat_, img.vkImageFormat_);
+  std::swap(vkSamples_, img.vkSamples_);
+  std::swap(mappedPtr_, img.mappedPtr_);
+  std::swap(isSwapchainImage_, img.isSwapchainImage_);
+  std::swap(numLevels_, img.numLevels_);
+  std::swap(numLayers_, img.numLayers_);
+  std::swap(isDepthFormat_, img.isDepthFormat_);
+  std::swap(isStencilFormat_, img.isStencilFormat_);
+  std::swap(vkImageLayout_, img.vkImageLayout_);
+  return *this;
+}
+
 lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
                               VkDevice device,
                               VkImage image,
@@ -910,7 +955,7 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
                               VkFormat imageFormat,
                               VkExtent3D extent,
                               const char* debugName) :
-  ctx_(ctx),
+  ctx_(&ctx),
   vkDevice_(device),
   vkImage_(image),
   vkUsageFlags_(usageFlags),
@@ -936,7 +981,7 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
                               VkImageCreateFlags createFlags,
                               VkSampleCountFlagBits samples,
                               const char* debugName) :
-  ctx_(ctx),
+  ctx_(&ctx),
   vkDevice_(device),
   vkUsageFlags_(usageFlags),
   vkExtent_(extent),
@@ -977,7 +1022,7 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
 
   if (LVK_VULKAN_USE_VMA) {
     vmaAllocInfo_.usage = memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_AUTO;
-    VkResult result = vmaCreateImage((VmaAllocator)ctx_.getVmaAllocator(), &ci, &vmaAllocInfo_, &vkImage_, &vmaAllocation_, nullptr);
+    VkResult result = vmaCreateImage((VmaAllocator)ctx_->getVmaAllocator(), &ci, &vmaAllocInfo_, &vkImage_, &vmaAllocation_, nullptr);
 
     if (!LVK_VERIFY(result == VK_SUCCESS)) {
       LLOGW("failed: error result: %d, memflags: %d,  imageformat: %d\n", result, memFlags, vkImageFormat_);
@@ -985,7 +1030,7 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
 
     // handle memory-mapped buffers
     if (memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-      vmaMapMemory((VmaAllocator)ctx_.getVmaAllocator(), vmaAllocation_, &mappedPtr_);
+      vmaMapMemory((VmaAllocator)ctx_->getVmaAllocator(), vmaAllocation_, &mappedPtr_);
     }
   } else {
     // create image
@@ -996,7 +1041,7 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
       VkMemoryRequirements memRequirements;
       vkGetImageMemoryRequirements(device, vkImage_, &memRequirements);
 
-      VK_ASSERT(lvk::allocateMemory(ctx.getVkPhysicalDevice(), vkDevice_, &memRequirements, memFlags, &vkMemory_));
+      VK_ASSERT(lvk::allocateMemory(ctx_->getVkPhysicalDevice(), vkDevice_, &memRequirements, memFlags, &vkMemory_));
       VK_ASSERT(vkBindImageMemory(vkDevice_, vkImage_, vkMemory_, 0));
     }
 
@@ -1009,31 +1054,33 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
   VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_IMAGE, (uint64_t)vkImage_, debugName));
 
   // Get physical device's properties for the image's format
-  vkGetPhysicalDeviceFormatProperties(ctx.getVkPhysicalDevice(), vkImageFormat_, &vkFormatProperties_);
+  vkGetPhysicalDeviceFormatProperties(ctx_->getVkPhysicalDevice(), vkImageFormat_, &vkFormatProperties_);
 }
 
 lvk::VulkanImage::~VulkanImage() {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_DESTROY);
 
-  if (!isSwapchainImage_) {
-    if (LVK_VULKAN_USE_VMA) {
-      if (mappedPtr_) {
-        vmaUnmapMemory((VmaAllocator)ctx_.getVmaAllocator(), vmaAllocation_);
-      }
-      ctx_.deferredTask(std::packaged_task<void()>([vma = ctx_.getVmaAllocator(), image = vkImage_, allocation = vmaAllocation_]() {
-        vmaDestroyImage((VmaAllocator)vma, image, allocation);
-      }));
-    } else {
-      if (mappedPtr_) {
-        vkUnmapMemory(vkDevice_, vkMemory_);
-      }
-      ctx_.deferredTask(std::packaged_task<void()>([device = vkDevice_, image = vkImage_, memory = vkMemory_]() {
-        vkDestroyImage(device, image, nullptr);
-        if (memory != VK_NULL_HANDLE) {
-          vkFreeMemory(device, memory, nullptr);
-        }
-      }));
+  if (!ctx_ || isSwapchainImage_) {
+    return;
+  }
+
+  if (LVK_VULKAN_USE_VMA) {
+    if (mappedPtr_) {
+      vmaUnmapMemory((VmaAllocator)ctx_->getVmaAllocator(), vmaAllocation_);
     }
+    ctx_->deferredTask(std::packaged_task<void()>([vma = ctx_->getVmaAllocator(), image = vkImage_, allocation = vmaAllocation_]() {
+      vmaDestroyImage((VmaAllocator)vma, image, allocation);
+    }));
+  } else {
+    if (mappedPtr_) {
+      vkUnmapMemory(vkDevice_, vkMemory_);
+    }
+    ctx_->deferredTask(std::packaged_task<void()>([device = vkDevice_, image = vkImage_, memory = vkMemory_]() {
+      vkDestroyImage(device, image, nullptr);
+      if (memory != VK_NULL_HANDLE) {
+        vkFreeMemory(device, memory, nullptr);
+      }
+    }));
   }
 }
 
@@ -1286,34 +1333,34 @@ bool lvk::VulkanImage::isStencilFormat(VkFormat format) {
          (format == VK_FORMAT_D32_SFLOAT_S8_UINT);
 }
 
-lvk::VulkanTexture::VulkanTexture(std::shared_ptr<VulkanImage> image, VkImageView imageView) :
+lvk::VulkanTexture::VulkanTexture(VulkanImage&& image, VkImageView imageView) :
   image_(std::move(image)), imageView_(imageView) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
 
-  LVK_ASSERT(image_.get());
   LVK_ASSERT(imageView_ != VK_NULL_HANDLE);
 }
 
 lvk::VulkanTexture::~VulkanTexture() {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_DESTROY);
 
-  if (image_) {
-    image_->ctx_.deferredTask(std::packaged_task<void()>(
-        [device = image_->ctx_.getVkDevice(), imageView = imageView_]() { vkDestroyImageView(device, imageView, nullptr); }));
-    for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
-      for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]); j++) {
-        VkImageView v = imageViewForFramebuffer_[i][j];
-        if (v != VK_NULL_HANDLE) {
-          image_->ctx_.deferredTask(std::packaged_task<void()>(
-              [device = image_->ctx_.getVkDevice(), imageView = v]() { vkDestroyImageView(device, imageView, nullptr); }));
-        }
+  if (!image_.ctx_) {
+    return;
+  }
+
+  image_.ctx_->deferredTask(std::packaged_task<void()>(
+      [device = image_.ctx_->getVkDevice(), imageView = imageView_]() { vkDestroyImageView(device, imageView, nullptr); }));
+  for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
+    for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]); j++) {
+      VkImageView v = imageViewForFramebuffer_[i][j];
+      if (v != VK_NULL_HANDLE) {
+        image_.ctx_->deferredTask(std::packaged_task<void()>(
+            [device = image_.ctx_->getVkDevice(), imageView = v]() { vkDestroyImageView(device, imageView, nullptr); }));
       }
     }
   }
 }
 
-lvk::VulkanTexture::VulkanTexture(VulkanTexture&& other) {
-  std::swap(image_, other.image_);
+lvk::VulkanTexture::VulkanTexture(VulkanTexture&& other) : image_(std::move(other.image_)) {
   std::swap(imageView_, other.imageView_);
   for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
     for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]); j++) {
@@ -1323,7 +1370,7 @@ lvk::VulkanTexture::VulkanTexture(VulkanTexture&& other) {
 }
 
 lvk::VulkanTexture& lvk::VulkanTexture::operator=(VulkanTexture&& other) {
-  std::swap(image_, other.image_);
+  image_ = std::move(other.image_);
   std::swap(imageView_, other.imageView_);
   for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
     for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]); j++) {
@@ -1334,11 +1381,10 @@ lvk::VulkanTexture& lvk::VulkanTexture::operator=(VulkanTexture&& other) {
 }
 
 VkImageView lvk::VulkanTexture::getOrCreateVkImageViewForFramebuffer(uint8_t level, uint16_t layer) {
-  LVK_ASSERT(image_ != nullptr);
   LVK_ASSERT(level < LVK_MAX_MIP_LEVELS);
   LVK_ASSERT(layer < LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]));
 
-  if (!image_ || level >= LVK_MAX_MIP_LEVELS) {
+  if (level >= LVK_MAX_MIP_LEVELS || layer >= LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0])) {
     return VK_NULL_HANDLE;
   }
 
@@ -1347,7 +1393,7 @@ VkImageView lvk::VulkanTexture::getOrCreateVkImageViewForFramebuffer(uint8_t lev
   }
 
   imageViewForFramebuffer_[level][layer] =
-      image_->createImageView(VK_IMAGE_VIEW_TYPE_2D, image_->vkImageFormat_, image_->getImageAspectFlags(), level, 1u, layer, 1u);
+      image_.createImageView(VK_IMAGE_VIEW_TYPE_2D, image_.vkImageFormat_, image_.getImageAspectFlags(), level, 1u, layer, 1u);
 
   return imageViewForFramebuffer_[level][layer];
 }
@@ -1448,14 +1494,14 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
   for (uint32_t i = 0; i < numSwapchainImages_; i++) {
     snprintf(debugNameImage, sizeof(debugNameImage) - 1, "Image: swapchain %u", i);
     snprintf(debugNameImageView, sizeof(debugNameImageView) - 1, "Image View: swapchain %u", i);
-    std::shared_ptr<VulkanImage> image = std::make_shared<VulkanImage>(ctx_,
-                                                                       device_,
-                                                                       swapchainImages[i],
-                                                                       usageFlags,
-                                                                       surfaceFormat_.format,
-                                                                       VkExtent3D{.width = width_, .height = height_, .depth = 1},
-                                                                       debugNameImage);
-    VkImageView imageView = image->createImageView(
+    VulkanImage image = VulkanImage(ctx_,
+                                    device_,
+                                    swapchainImages[i],
+                                    usageFlags,
+                                    surfaceFormat_.format,
+                                    VkExtent3D{.width = width_, .height = height_, .depth = 1},
+                                    debugNameImage);
+    VkImageView imageView = image.createImageView(
         VK_IMAGE_VIEW_TYPE_2D, surfaceFormat_.format, VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, 1, {}, debugNameImageView);
     swapchainTextures_[i] = ctx_.texturesPool_.create(VulkanTexture(std::move(image), std::move(imageView)));
   }
@@ -1476,7 +1522,7 @@ lvk::VulkanSwapchain::~VulkanSwapchain() {
 VkImage lvk::VulkanSwapchain::getCurrentVkImage() const {
   if (LVK_VERIFY(currentImageIndex_ < numSwapchainImages_)) {
     lvk::VulkanTexture* tex = ctx_.texturesPool_.get(swapchainTextures_[currentImageIndex_]);
-    return tex->image_->vkImage_;
+    return tex->image_.vkImage_;
   }
   return VK_NULL_HANDLE;
 }
@@ -2082,28 +2128,28 @@ void lvk::CommandBuffer::transitionToShaderReadOnly(TextureHandle handle) const 
   LVK_PROFILER_FUNCTION();
 
   const lvk::VulkanTexture& tex = *ctx_->texturesPool_.get(handle);
-  const lvk::VulkanImage* img = tex.image_.get();
+  const lvk::VulkanImage& img = tex.image_;
 
-  LVK_ASSERT(!img->isSwapchainImage_);
+  LVK_ASSERT(!img.isSwapchainImage_);
 
   // transition only non-multisampled images - MSAA images cannot be accessed from shaders
-  if (img->vkSamples_ == VK_SAMPLE_COUNT_1_BIT) {
-    const VkImageAspectFlags flags = tex.image_->getImageAspectFlags();
+  if (img.vkSamples_ == VK_SAMPLE_COUNT_1_BIT) {
+    const VkImageAspectFlags flags = tex.image_.getImageAspectFlags();
     VkPipelineStageFlags srcStage = 0;
-    if (tex.image_->isSampledImage()) {
-      srcStage |= isDepthOrStencilVkFormat(tex.image_->vkImageFormat_) ? VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT
-                                                                       : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    if (tex.image_.isSampledImage()) {
+      srcStage |= isDepthOrStencilVkFormat(tex.image_.vkImageFormat_) ? VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT
+                                                                      : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
     }
-    if (tex.image_->isStorageImage()) {
+    if (tex.image_.isStorageImage()) {
       srcStage |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
     }
     // set the result of the previous render pass
-    img->transitionLayout(wrapper_->cmdBuf_,
-                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                          srcStage,
-                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // wait for subsequent
-                                                                                                        // fragment/compute shaders
-                          VkImageSubresourceRange{flags, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS});
+    img.transitionLayout(wrapper_->cmdBuf_,
+                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         srcStage,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // wait for subsequent
+                                                                                                       // fragment/compute shaders
+                         VkImageSubresourceRange{flags, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS});
   }
 }
 
@@ -2193,7 +2239,7 @@ void lvk::CommandBuffer::useComputeTexture(TextureHandle handle) {
 
   LVK_ASSERT(!handle.empty());
   lvk::VulkanTexture* tex = ctx_->texturesPool_.get(handle);
-  const lvk::VulkanImage& vkImage = *tex->image_.get();
+  const lvk::VulkanImage& vkImage = tex->image_;
   if (!vkImage.isStorageImage()) {
     LVK_ASSERT_MSG(false, "Did you forget to specify TextureUsageBits::Storage on your texture?");
     return;
@@ -2283,15 +2329,15 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
   TextureHandle depthTex = fb.depthStencil.texture;
   if (depthTex) {
     lvk::VulkanTexture& vkDepthTex = *ctx_->texturesPool_.get(depthTex);
-    const lvk::VulkanImage* depthImg = vkDepthTex.image_.get();
-    LVK_ASSERT_MSG(depthImg->vkImageFormat_ != VK_FORMAT_UNDEFINED, "Invalid depth attachment format");
-    const VkImageAspectFlags flags = vkDepthTex.image_->getImageAspectFlags();
-    depthImg->transitionLayout(wrapper_->cmdBuf_,
-                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                               VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                               VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, // wait for all subsequent
-                                                                                                               // operations
-                               VkImageSubresourceRange{flags, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS});
+    const lvk::VulkanImage& depthImg = vkDepthTex.image_;
+    LVK_ASSERT_MSG(depthImg.vkImageFormat_ != VK_FORMAT_UNDEFINED, "Invalid depth attachment format");
+    const VkImageAspectFlags flags = depthImg.getImageAspectFlags();
+    depthImg.transitionLayout(wrapper_->cmdBuf_,
+                              VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                              VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                              VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, // wait for all subsequent
+                                                                                                              // operations
+                              VkImageSubresourceRange{flags, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS});
   }
 
   VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
@@ -2320,7 +2366,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
     mipLevel = descColor.level;
     fbWidth = dim.width;
     fbHeight = dim.height;
-    samples = colorTexture.image_->vkSamples_;
+    samples = colorTexture.image_.vkSamples_;
     colorAttachments[i] = {
         .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
         .pNext = nullptr,
@@ -2422,13 +2468,13 @@ void lvk::CommandBuffer::cmdEndRendering() {
     const auto& attachment = framebuffer_.color[i];
     const VulkanTexture& tex = *ctx_->texturesPool_.get(attachment.texture);
     // this must match the final layout of the render pass
-    tex.image_->vkImageLayout_ = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    tex.image_.vkImageLayout_ = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   }
 
   if (framebuffer_.depthStencil.texture) {
     const VulkanTexture& tex = *ctx_->texturesPool_.get(framebuffer_.depthStencil.texture);
     // this must match the final layout of the render pass
-    tex.image_->vkImageLayout_ = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    tex.image_.vkImageLayout_ = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
   }
 
   framebuffer_ = {};
@@ -3219,13 +3265,13 @@ lvk::SubmitHandle lvk::VulkanContext::submit(lvk::ICommandBuffer& commandBuffer,
   if (present) {
     const lvk::VulkanTexture& tex = *texturesPool_.get(present);
 
-    LVK_ASSERT(tex.image_->isSwapchainImage_);
+    LVK_ASSERT(tex.image_.isSwapchainImage_);
 
     // prepare image for presentation the image might be coming from a compute shader
-    const VkPipelineStageFlagBits srcStage = (tex.image_->vkImageLayout_ == VK_IMAGE_LAYOUT_GENERAL)
+    const VkPipelineStageFlagBits srcStage = (tex.image_.vkImageLayout_ == VK_IMAGE_LAYOUT_GENERAL)
                                                  ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
                                                  : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    tex.image_->transitionLayout(
+    tex.image_.transitionLayout(
         vkCmdBuffer->wrapper_->cmdBuf_,
         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         srcStage,
@@ -3463,32 +3509,28 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   }
 
   Result result;
-  std::shared_ptr<lvk::VulkanImage> image = createImage(imageType,
-                                                        VkExtent3D{desc.dimensions.width, desc.dimensions.height, desc.dimensions.depth},
-                                                        vkFormat,
-                                                        desc.numMipLevels,
-                                                        arrayLayerCount,
-                                                        VK_IMAGE_TILING_OPTIMAL,
-                                                        usageFlags,
-                                                        memFlags,
-                                                        createFlags,
-                                                        samples,
-                                                        &result,
-                                                        debugNameImage);
+  lvk::VulkanImage image = createImage(imageType,
+                                       VkExtent3D{desc.dimensions.width, desc.dimensions.height, desc.dimensions.depth},
+                                       vkFormat,
+                                       desc.numMipLevels,
+                                       arrayLayerCount,
+                                       VK_IMAGE_TILING_OPTIMAL,
+                                       usageFlags,
+                                       memFlags,
+                                       createFlags,
+                                       samples,
+                                       &result,
+                                       debugNameImage);
   if (!LVK_VERIFY(result.isOk())) {
     Result::setResult(outResult, result);
     return {};
   }
-  if (!LVK_VERIFY(image.get())) {
-    Result::setResult(outResult, Result::Code::RuntimeError, "Cannot create VulkanImage");
-    return {};
-  }
 
   VkImageAspectFlags aspect = 0;
-  if (image->isDepthFormat_ || image->isStencilFormat_) {
-    if (image->isDepthFormat_) {
+  if (image.isDepthFormat_ || image.isStencilFormat_) {
+    if (image.isDepthFormat_) {
       aspect |= VK_IMAGE_ASPECT_DEPTH_BIT;
-    } else if (image->isStencilFormat_) {
+    } else if (image.isStencilFormat_) {
       aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
     }
   } else {
@@ -3503,7 +3545,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   };
 
   VkImageView view =
-      image->createImageView(imageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, arrayLayerCount, mapping, debugNameImageView);
+      image.createImageView(imageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, arrayLayerCount, mapping, debugNameImageView);
 
   if (!LVK_VERIFY(view != VK_NULL_HANDLE)) {
     Result::setResult(outResult, Result::Code::RuntimeError, "Cannot create VkImageView");
@@ -3917,7 +3959,7 @@ void lvk::VulkanContext::destroy(Framebuffer& fb) {
       if (handle.empty())
         return;
       lvk::VulkanTexture* tex = texturesPool_.get(handle);
-      if (!tex || tex->image_->isSwapchainImage_)
+      if (!tex || tex->image_.isSwapchainImage_)
         return;
       destroy(handle);
       handle = {};
@@ -3991,23 +4033,23 @@ lvk::Result lvk::VulkanContext::download(lvk::TextureHandle handle, const Textur
 
   LVK_ASSERT(texture);
 
-  const Result result = validateRange(texture->getExtent(), texture->image_->numLevels_, range);
+  const Result result = validateRange(texture->getExtent(), texture->image_.numLevels_, range);
 
   if (!LVK_VERIFY(result.isOk())) {
     return result;
   }
 
-  stagingDevice_->getImageData(*texture->image_.get(),
+  stagingDevice_->getImageData(texture->image_,
                                VkOffset3D{(int32_t)range.x, (int32_t)range.y, (int32_t)range.z},
                                VkExtent3D{range.dimensions.width, range.dimensions.height, range.dimensions.depth},
                                VkImageSubresourceRange{
-                                   .aspectMask = texture->image_->getImageAspectFlags(),
+                                   .aspectMask = texture->image_.getImageAspectFlags(),
                                    .baseMipLevel = range.mipLevel,
                                    .levelCount = range.numMipLevels,
                                    .baseArrayLayer = range.layer,
                                    .layerCount = range.numLayers,
                                },
-                               texture->image_->vkImageFormat_,
+                               texture->image_.vkImageFormat_,
                                outData);
 
   return Result();
@@ -4020,7 +4062,7 @@ lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureR
 
   lvk::VulkanTexture* texture = texturesPool_.get(handle);
 
-  const Result result = validateRange(texture->getExtent(), texture->image_->numLevels_, range);
+  const Result result = validateRange(texture->getExtent(), texture->image_.numLevels_, range);
 
   if (!LVK_VERIFY(result.isOk())) {
     return result;
@@ -4028,11 +4070,11 @@ lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureR
 
   const uint32_t numLayers = std::max(range.numLayers, 1u);
 
-  const VkImageType type = texture->image_->vkType_;
-  VkFormat vkFormat = texture->image_->vkImageFormat_;
+  const VkImageType type = texture->image_.vkType_;
+  VkFormat vkFormat = texture->image_.vkImageFormat_;
 
   if (type == VK_IMAGE_TYPE_3D) {
-    stagingDevice_->imageData3D(*texture->image_.get(),
+    stagingDevice_->imageData3D(texture->image_,
                                 VkOffset3D{(int32_t)range.x, (int32_t)range.y, (int32_t)range.z},
                                 VkExtent3D{range.dimensions.width, range.dimensions.height, range.dimensions.depth},
                                 vkFormat,
@@ -4043,7 +4085,7 @@ lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureR
         .extent = {.width = range.dimensions.width, .height = range.dimensions.height},
     };
     stagingDevice_->imageData2D(
-        *texture->image_.get(), imageRegion, range.mipLevel, range.numMipLevels, range.layer, range.numLayers, vkFormat, data);
+        texture->image_, imageRegion, range.mipLevel, range.numMipLevels, range.layer, range.numLayers, vkFormat, data);
   }
 
   return Result();
@@ -4058,14 +4100,14 @@ lvk::Dimensions lvk::VulkanContext::getDimensions(TextureHandle handle) const {
 
   LVK_ASSERT(tex);
 
-  if (!tex || !tex->image_) {
+  if (!tex) {
     return {};
   }
 
   return {
-      .width = tex->image_->vkExtent_.width,
-      .height = tex->image_->vkExtent_.height,
-      .depth = tex->image_->vkExtent_.depth,
+      .width = tex->image_.vkExtent_.width,
+      .height = tex->image_.vkExtent_.height,
+      .depth = tex->image_.vkExtent_.depth,
   };
 }
 
@@ -4076,10 +4118,10 @@ void lvk::VulkanContext::generateMipmap(TextureHandle handle) const {
 
   const lvk::VulkanTexture* tex = texturesPool_.get(handle);
 
-  if (tex->image_->numLevels_ > 1) {
-    LVK_ASSERT(tex->image_->vkImageLayout_ != VK_IMAGE_LAYOUT_UNDEFINED);
+  if (tex->image_.numLevels_ > 1) {
+    LVK_ASSERT(tex->image_.vkImageLayout_ != VK_IMAGE_LAYOUT_UNDEFINED);
     const auto& wrapper = immediate_->acquire();
-    tex->image_->generateMipmap(wrapper.cmdBuf_);
+    tex->image_.generateMipmap(wrapper.cmdBuf_);
     immediate_->submit(wrapper);
   }
 }
@@ -4089,7 +4131,7 @@ lvk::Format lvk::VulkanContext::getFormat(TextureHandle handle) const {
     return Format_Invalid;
   }
 
-  return vkFormatToFormat(texturesPool_.get(handle)->image_->vkImageFormat_);
+  return vkFormatToFormat(texturesPool_.get(handle)->image_.vkImageFormat_);
 }
 
 lvk::Holder<lvk::ShaderModuleHandle> lvk::VulkanContext::createShaderModule(const ShaderModuleDesc& desc, Result* outResult) {
@@ -4262,7 +4304,7 @@ lvk::TextureHandle lvk::VulkanContext::getCurrentSwapchainTexture() {
     return {};
   }
 
-  LVK_ASSERT_MSG(texturesPool_.get(tex)->image_->vkImageFormat_ != VK_FORMAT_UNDEFINED, "Invalid image format");
+  LVK_ASSERT_MSG(texturesPool_.get(tex)->image_.vkImageFormat_ != VK_FORMAT_UNDEFINED, "Invalid image format");
 
   return tex;
 }
@@ -4926,41 +4968,37 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     const VkFormat dummyTextureFormat = VK_FORMAT_R8G8B8A8_UNORM;
     const VkMemoryPropertyFlags memFlags = useStaging_ ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
     Result result;
-    std::shared_ptr<lvk::VulkanImage> image =
-        createImage(VK_IMAGE_TYPE_2D,
-                    VkExtent3D{1, 1, 1},
-                    dummyTextureFormat,
-                    1,
-                    1,
-                    VK_IMAGE_TILING_OPTIMAL,
-                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-                    memFlags,
-                    0,
-                    VK_SAMPLE_COUNT_1_BIT,
-                    &result,
-                    "Image: dummy 1x1");
+    lvk::VulkanImage image = createImage(VK_IMAGE_TYPE_2D,
+                                         VkExtent3D{1, 1, 1},
+                                         dummyTextureFormat,
+                                         1,
+                                         1,
+                                         VK_IMAGE_TILING_OPTIMAL,
+                                         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
+                                         memFlags,
+                                         0,
+                                         VK_SAMPLE_COUNT_1_BIT,
+                                         &result,
+                                         "Image: dummy 1x1");
     if (!LVK_VERIFY(result.isOk())) {
       return result;
     }
-    if (!LVK_VERIFY(image.get())) {
-      return Result(Result::Code::RuntimeError, "Cannot create VulkanImage");
-    }
-    VkImageView imageView = image->createImageView(VK_IMAGE_VIEW_TYPE_2D,
-                                                   dummyTextureFormat,
-                                                   VK_IMAGE_ASPECT_COLOR_BIT,
-                                                   0,
-                                                   VK_REMAINING_MIP_LEVELS,
-                                                   0,
-                                                   1,
-                                                   {},
-                                                   "Image View: dummy 1x1");
+    VkImageView imageView = image.createImageView(VK_IMAGE_VIEW_TYPE_2D,
+                                                  dummyTextureFormat,
+                                                  VK_IMAGE_ASPECT_COLOR_BIT,
+                                                  0,
+                                                  VK_REMAINING_MIP_LEVELS,
+                                                  0,
+                                                  1,
+                                                  {},
+                                                  "Image View: dummy 1x1");
     if (!LVK_VERIFY(imageView != VK_NULL_HANDLE)) {
       return Result(Result::Code::RuntimeError, "Cannot create VkImageView");
     }
     VulkanTexture dummyTexture(std::move(image), imageView);
     const uint32_t pixel = 0xFF000000;
     const VkRect2D imageRegion = {.offset = {.x = 0, .y = 0}, .extent = {.width = 1, .height = 1}};
-    stagingDevice_->imageData2D(*dummyTexture.image_.get(), imageRegion, 0, 1, 0, 1, dummyTextureFormat, &pixel);
+    stagingDevice_->imageData2D(dummyTexture.image_, imageRegion, 0, 1, 0, 1, dummyTextureFormat, &pixel);
     texturesPool_.create(std::move(dummyTexture));
     LVK_ASSERT(texturesPool_.numObjects() == 1);
   }
@@ -5122,23 +5160,23 @@ lvk::BufferHandle lvk::VulkanContext::createBuffer(VkDeviceSize bufferSize,
   return buffersPool_.create(VulkanBuffer(this, vkDevice_, bufferSize, usageFlags, memFlags, debugName));
 }
 
-std::shared_ptr<lvk::VulkanImage> lvk::VulkanContext::createImage(VkImageType imageType,
-                                                                  VkExtent3D extent,
-                                                                  VkFormat format,
-                                                                  uint32_t numLevels,
-                                                                  uint32_t numLayers,
-                                                                  VkImageTiling tiling,
-                                                                  VkImageUsageFlags usageFlags,
-                                                                  VkMemoryPropertyFlags memFlags,
-                                                                  VkImageCreateFlags flags,
-                                                                  VkSampleCountFlagBits samples,
-                                                                  lvk::Result* outResult,
-                                                                  const char* debugName) {
+lvk::VulkanImage lvk::VulkanContext::createImage(VkImageType imageType,
+                                                 VkExtent3D extent,
+                                                 VkFormat format,
+                                                 uint32_t numLevels,
+                                                 uint32_t numLayers,
+                                                 VkImageTiling tiling,
+                                                 VkImageUsageFlags usageFlags,
+                                                 VkMemoryPropertyFlags memFlags,
+                                                 VkImageCreateFlags flags,
+                                                 VkSampleCountFlagBits samples,
+                                                 lvk::Result* outResult,
+                                                 const char* debugName) {
   if (!validateImageLimits(imageType, samples, extent, getVkPhysicalDeviceProperties().limits, outResult)) {
-    return nullptr;
+    return {};
   }
 
-  return std::make_shared<VulkanImage>(
+  return lvk::VulkanImage(
       *this, vkDevice_, extent, imageType, format, numLevels, numLayers, tiling, usageFlags, memFlags, flags, samples, debugName);
 }
 
@@ -5187,12 +5225,12 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   VkImageView dummyImageView = texturesPool_.objects_[0].obj_.imageView_;
 
   for (const auto& obj : texturesPool_.objects_) {
-    const VulkanImage* img = obj.obj_.image_.get();
+    const VulkanImage& img = obj.obj_.image_;
     const VkImageView view = obj.obj_.imageView_;
     // multisampled images cannot be directly accessed from shaders
-    const bool isTextureAvailable = img && ((img->vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT);
-    const bool isSampledImage = isTextureAvailable && img->isSampledImage();
-    const bool isStorageImage = isTextureAvailable && img->isStorageImage();
+    const bool isTextureAvailable = (img.vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
+    const bool isSampledImage = isTextureAvailable && img.isSampledImage();
+    const bool isStorageImage = isTextureAvailable && img.isStorageImage();
     infoSampledImages.push_back({VK_NULL_HANDLE, isSampledImage ? view : dummyImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
     LVK_ASSERT(infoSampledImages.back().imageView != VK_NULL_HANDLE);
     infoStorageImages.push_back({VK_NULL_HANDLE, isStorageImage ? view : dummyImageView, VK_IMAGE_LAYOUT_GENERAL});

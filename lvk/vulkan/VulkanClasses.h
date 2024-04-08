@@ -73,6 +73,7 @@ class VulkanBuffer final {
 
 class VulkanImage final {
  public:
+  VulkanImage() = default;
   VulkanImage(lvk::VulkanContext& ctx,
               VkDevice device,
               VkExtent3D extent,
@@ -97,6 +98,9 @@ class VulkanImage final {
 
   VulkanImage(const VulkanImage&) = delete;
   VulkanImage& operator=(const VulkanImage&) = delete;
+
+  VulkanImage(VulkanImage&& img);
+  VulkanImage& operator=(VulkanImage&&);
 
   // clang-format off
   bool isSampledImage() const { return (vkUsageFlags_ & VK_IMAGE_USAGE_SAMPLED_BIT) > 0; }
@@ -134,7 +138,7 @@ class VulkanImage final {
   static bool isStencilFormat(VkFormat format);
 
  public:
-  lvk::VulkanContext& ctx_;
+  lvk::VulkanContext* ctx_ = nullptr;
   VkDevice vkDevice_ = VK_NULL_HANDLE;
   VkImage vkImage_ = VK_NULL_HANDLE;
   VkImageUsageFlags vkUsageFlags_ = 0;
@@ -158,7 +162,7 @@ class VulkanImage final {
 
 struct VulkanTexture final {
   VulkanTexture() = default;
-  VulkanTexture(std::shared_ptr<lvk::VulkanImage> image, VkImageView imageView);
+  VulkanTexture(lvk::VulkanImage&& image, VkImageView imageView);
   ~VulkanTexture();
 
   VulkanTexture(const VulkanTexture&) = delete;
@@ -168,14 +172,13 @@ struct VulkanTexture final {
   VulkanTexture& operator=(VulkanTexture&& other);
 
   VkExtent3D getExtent() const {
-    LVK_ASSERT(image_.get());
-    return image_->vkExtent_;
+    return image_.vkExtent_;
   }
 
   // framebuffers can render only into one level/layer
   VkImageView getOrCreateVkImageViewForFramebuffer(uint8_t level, uint16_t layer);
 
-  std::shared_ptr<lvk::VulkanImage> image_;
+  lvk::VulkanImage image_;
   VkImageView imageView_ = VK_NULL_HANDLE; // all mip-levels
   VkImageView imageViewForFramebuffer_[LVK_MAX_MIP_LEVELS][6] = {}; // max 6 faces for cubemap rendering
 };
@@ -542,18 +545,18 @@ class VulkanContext final : public IContext {
   lvk::Result initContext(const HWDeviceDesc& desc);
   lvk::Result initSwapchain(uint32_t width, uint32_t height);
 
-  std::shared_ptr<VulkanImage> createImage(VkImageType imageType,
-                                           VkExtent3D extent,
-                                           VkFormat format,
-                                           uint32_t numLevels,
-                                           uint32_t numLayers,
-                                           VkImageTiling tiling,
-                                           VkImageUsageFlags usageFlags,
-                                           VkMemoryPropertyFlags memFlags,
-                                           VkImageCreateFlags flags,
-                                           VkSampleCountFlagBits samples,
-                                           lvk::Result* outResult,
-                                           const char* debugName = nullptr);
+  VulkanImage createImage(VkImageType imageType,
+                          VkExtent3D extent,
+                          VkFormat format,
+                          uint32_t numLevels,
+                          uint32_t numLayers,
+                          VkImageTiling tiling,
+                          VkImageUsageFlags usageFlags,
+                          VkMemoryPropertyFlags memFlags,
+                          VkImageCreateFlags flags,
+                          VkSampleCountFlagBits samples,
+                          lvk::Result* outResult,
+                          const char* debugName = nullptr);
   BufferHandle createBuffer(VkDeviceSize bufferSize,
                             VkBufferUsageFlags usageFlags,
                             VkMemoryPropertyFlags memFlags,
