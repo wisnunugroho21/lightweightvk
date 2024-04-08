@@ -758,11 +758,9 @@ void lvk::VulkanBuffer::bufferSubData(const VulkanContext& ctx, size_t offset, s
 }
 
 lvk::VulkanImage::VulkanImage(VulkanImage&& img) : ctx_(img.ctx_) {
-  std::swap(vkDevice_, img.vkDevice_);
   std::swap(vkImage_, img.vkImage_);
   std::swap(vkUsageFlags_, img.vkUsageFlags_);
   std::swap(vkMemory_, img.vkMemory_);
-  std::swap(vmaAllocInfo_, img.vmaAllocInfo_);
   std::swap(vmaAllocation_, img.vmaAllocation_);
   std::swap(vkFormatProperties_, img.vkFormatProperties_);
   std::swap(vkExtent_, img.vkExtent_);
@@ -781,11 +779,9 @@ lvk::VulkanImage::VulkanImage(VulkanImage&& img) : ctx_(img.ctx_) {
 
 lvk::VulkanImage& lvk::VulkanImage::operator=(VulkanImage&& img) {
   std::swap(ctx_, img.ctx_);
-  std::swap(vkDevice_, img.vkDevice_);
   std::swap(vkImage_, img.vkImage_);
   std::swap(vkUsageFlags_, img.vkUsageFlags_);
   std::swap(vkMemory_, img.vkMemory_);
-  std::swap(vmaAllocInfo_, img.vmaAllocInfo_);
   std::swap(vmaAllocation_, img.vmaAllocation_);
   std::swap(vkFormatProperties_, img.vkFormatProperties_);
   std::swap(vkExtent_, img.vkExtent_);
@@ -810,7 +806,6 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
                               VkExtent3D extent,
                               const char* debugName) :
   ctx_(&ctx),
-  vkDevice_(device),
   vkImage_(image),
   vkUsageFlags_(usageFlags),
   isSwapchainImage_(true),
@@ -819,7 +814,7 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
   vkImageFormat_(imageFormat),
   isDepthFormat_(isDepthFormat(imageFormat)),
   isStencilFormat_(isStencilFormat(imageFormat)) {
-  VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_IMAGE, (uint64_t)vkImage_, debugName));
+  VK_ASSERT(lvk::setDebugObjectName(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)vkImage_, debugName));
 }
 
 lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
@@ -836,7 +831,6 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
                               VkSampleCountFlagBits samples,
                               const char* debugName) :
   ctx_(&ctx),
-  vkDevice_(device),
   vkUsageFlags_(usageFlags),
   vkExtent_(extent),
   vkType_(type),
@@ -875,8 +869,11 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
   };
 
   if (LVK_VULKAN_USE_VMA) {
-    vmaAllocInfo_.usage = memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_AUTO;
-    VkResult result = vmaCreateImage((VmaAllocator)ctx_->getVmaAllocator(), &ci, &vmaAllocInfo_, &vkImage_, &vmaAllocation_, nullptr);
+    VmaAllocationCreateInfo vmaAllocInfo = {
+        .usage = memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_AUTO,
+    };
+
+    VkResult result = vmaCreateImage((VmaAllocator)ctx_->getVmaAllocator(), &ci, &vmaAllocInfo, &vkImage_, &vmaAllocation_, nullptr);
 
     if (!LVK_VERIFY(result == VK_SUCCESS)) {
       LLOGW("failed: error result: %d, memflags: %d,  imageformat: %d\n", result, memFlags, vkImageFormat_);
@@ -888,24 +885,24 @@ lvk::VulkanImage::VulkanImage(lvk::VulkanContext& ctx,
     }
   } else {
     // create image
-    VK_ASSERT(vkCreateImage(vkDevice_, &ci, nullptr, &vkImage_));
+    VK_ASSERT(vkCreateImage(device, &ci, nullptr, &vkImage_));
 
     // back the image with some memory
     {
       VkMemoryRequirements memRequirements;
       vkGetImageMemoryRequirements(device, vkImage_, &memRequirements);
 
-      VK_ASSERT(lvk::allocateMemory(ctx_->getVkPhysicalDevice(), vkDevice_, &memRequirements, memFlags, &vkMemory_));
-      VK_ASSERT(vkBindImageMemory(vkDevice_, vkImage_, vkMemory_, 0));
+      VK_ASSERT(lvk::allocateMemory(ctx_->getVkPhysicalDevice(), device, &memRequirements, memFlags, &vkMemory_));
+      VK_ASSERT(vkBindImageMemory(device, vkImage_, vkMemory_, 0));
     }
 
     // handle memory-mapped images
     if (memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-      VK_ASSERT(vkMapMemory(vkDevice_, vkMemory_, 0, VK_WHOLE_SIZE, 0, &mappedPtr_));
+      VK_ASSERT(vkMapMemory(device, vkMemory_, 0, VK_WHOLE_SIZE, 0, &mappedPtr_));
     }
   }
 
-  VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_IMAGE, (uint64_t)vkImage_, debugName));
+  VK_ASSERT(lvk::setDebugObjectName(device, VK_OBJECT_TYPE_IMAGE, (uint64_t)vkImage_, debugName));
 
   // Get physical device's properties for the image's format
   vkGetPhysicalDeviceFormatProperties(ctx_->getVkPhysicalDevice(), vkImageFormat_, &vkFormatProperties_);
@@ -927,9 +924,9 @@ lvk::VulkanImage::~VulkanImage() {
     }));
   } else {
     if (mappedPtr_) {
-      vkUnmapMemory(vkDevice_, vkMemory_);
+      vkUnmapMemory(ctx_->getVkDevice(), vkMemory_);
     }
-    ctx_->deferredTask(std::packaged_task<void()>([device = vkDevice_, image = vkImage_, memory = vkMemory_]() {
+    ctx_->deferredTask(std::packaged_task<void()>([device = ctx_->getVkDevice(), image = vkImage_, memory = vkMemory_]() {
       vkDestroyImage(device, image, nullptr);
       if (memory != VK_NULL_HANDLE) {
         vkFreeMemory(device, memory, nullptr);
@@ -958,8 +955,8 @@ VkImageView lvk::VulkanImage::createImageView(VkImageViewType type,
       .subresourceRange = {aspectMask, baseLevel, numLevels ? numLevels : numLevels_, baseLayer, numLayers},
   };
   VkImageView vkView = VK_NULL_HANDLE;
-  VK_ASSERT(vkCreateImageView(vkDevice_, &ci, nullptr, &vkView));
-  VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)vkView, debugName));
+  VK_ASSERT(vkCreateImageView(ctx_->getVkDevice(), &ci, nullptr, &vkView));
+  VK_ASSERT(lvk::setDebugObjectName(ctx_->getVkDevice(), VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)vkView, debugName));
 
   return vkView;
 }

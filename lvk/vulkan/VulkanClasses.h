@@ -31,10 +31,10 @@ struct DeviceQueues final {
 struct VulkanBuffer final {
   void bufferSubData(const VulkanContext& ctx, size_t offset, size_t size, const void* data);
   void getBufferSubData(const VulkanContext& ctx, size_t offset, size_t size, void* data);
-  inline [[nodiscard]] uint8_t* getMappedPtr() const {
+  [[nodiscard]] inline uint8_t* getMappedPtr() const {
     return static_cast<uint8_t*>(mappedPtr_);
   }
-  inline [[nodiscard]] bool isMapped() const {
+  [[nodiscard]] inline bool isMapped() const {
     return mappedPtr_ != nullptr;
   }
   void flushMappedMemory(const VulkanContext& ctx, VkDeviceSize offset, VkDeviceSize size) const;
@@ -84,26 +84,26 @@ class VulkanImage final {
   VulkanImage& operator=(VulkanImage&&);
 
   // clang-format off
-  bool isSampledImage() const { return (vkUsageFlags_ & VK_IMAGE_USAGE_SAMPLED_BIT) > 0; }
-  bool isStorageImage() const { return (vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) > 0; }
+  [[nodiscard]] inline bool isSampledImage() const { return (vkUsageFlags_ & VK_IMAGE_USAGE_SAMPLED_BIT) > 0; }
+  [[nodiscard]] inline bool isStorageImage() const { return (vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) > 0; }
   // clang-format on
 
   /*
    * Setting `numLevels` to a non-zero value will override `mipLevels_` value from the original Vulkan image, and can be used to create
    * image views with different number of levels.
    */
-  VkImageView createImageView(VkImageViewType type,
-                              VkFormat format,
-                              VkImageAspectFlags aspectMask,
-                              uint32_t baseLevel,
-                              uint32_t numLevels = VK_REMAINING_MIP_LEVELS,
-                              uint32_t baseLayer = 0,
-                              uint32_t numLayers = 1,
-                              const VkComponentMapping mapping = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
-                                                                  .g = VK_COMPONENT_SWIZZLE_IDENTITY,
-                                                                  .b = VK_COMPONENT_SWIZZLE_IDENTITY,
-                                                                  .a = VK_COMPONENT_SWIZZLE_IDENTITY},
-                              const char* debugName = nullptr) const;
+  [[nodiscard]] VkImageView createImageView(VkImageViewType type,
+                                            VkFormat format,
+                                            VkImageAspectFlags aspectMask,
+                                            uint32_t baseLevel,
+                                            uint32_t numLevels = VK_REMAINING_MIP_LEVELS,
+                                            uint32_t baseLayer = 0,
+                                            uint32_t numLayers = 1,
+                                            const VkComponentMapping mapping = {.r = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                                                .g = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                                                .b = VK_COMPONENT_SWIZZLE_IDENTITY,
+                                                                                .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+                                            const char* debugName = nullptr) const;
 
   void generateMipmap(VkCommandBuffer commandBuffer) const;
 
@@ -120,11 +120,9 @@ class VulkanImage final {
 
  public:
   lvk::VulkanContext* ctx_ = nullptr;
-  VkDevice vkDevice_ = VK_NULL_HANDLE;
   VkImage vkImage_ = VK_NULL_HANDLE;
   VkImageUsageFlags vkUsageFlags_ = 0;
   VkDeviceMemory vkMemory_ = VK_NULL_HANDLE;
-  VmaAllocationCreateInfo vmaAllocInfo_ = {};
   VmaAllocation vmaAllocation_ = VK_NULL_HANDLE;
   VkFormatProperties vkFormatProperties_ = {};
   VkExtent3D vkExtent_ = {0, 0, 0};
