@@ -19,7 +19,7 @@ namespace lvk {
 
 class VulkanContext;
 
-struct DeviceQueues {
+struct DeviceQueues final {
   const static uint32_t INVALID = 0xFFFFFFFF;
   uint32_t graphicsQueueFamilyIndex = INVALID;
   uint32_t computeQueueFamilyIndex = INVALID;
@@ -28,40 +28,21 @@ struct DeviceQueues {
   VkQueue computeQueue = VK_NULL_HANDLE;
 };
 
-class VulkanBuffer final {
- public:
-  VulkanBuffer() = default;
-  VulkanBuffer(lvk::VulkanContext* ctx,
-               VkDevice device,
-               VkDeviceSize bufferSize,
-               VkBufferUsageFlags usageFlags,
-               VkMemoryPropertyFlags memFlags,
-               const char* debugName = nullptr);
-  ~VulkanBuffer();
-
-  VulkanBuffer(const VulkanBuffer&) = delete;
-  VulkanBuffer& operator=(const VulkanBuffer&) = delete;
-
-  VulkanBuffer(VulkanBuffer&& other);
-  VulkanBuffer& operator=(VulkanBuffer&& other);
-
-  void bufferSubData(size_t offset, size_t size, const void* data);
-  void getBufferSubData(size_t offset, size_t size, void* data);
-  [[nodiscard]] uint8_t* getMappedPtr() const {
+struct VulkanBuffer final {
+  void bufferSubData(const VulkanContext& ctx, size_t offset, size_t size, const void* data);
+  void getBufferSubData(const VulkanContext& ctx, size_t offset, size_t size, void* data);
+  inline [[nodiscard]] uint8_t* getMappedPtr() const {
     return static_cast<uint8_t*>(mappedPtr_);
   }
-  bool isMapped() const {
+  inline [[nodiscard]] bool isMapped() const {
     return mappedPtr_ != nullptr;
   }
-  void flushMappedMemory(VkDeviceSize offset, VkDeviceSize size) const;
-  void invalidateMappedMemory(VkDeviceSize offset, VkDeviceSize size) const;
+  void flushMappedMemory(const VulkanContext& ctx, VkDeviceSize offset, VkDeviceSize size) const;
+  void invalidateMappedMemory(const VulkanContext& ctx, VkDeviceSize offset, VkDeviceSize size) const;
 
  public:
-  lvk::VulkanContext* ctx_ = nullptr;
-  VkDevice device_ = VK_NULL_HANDLE;
   VkBuffer vkBuffer_ = VK_NULL_HANDLE;
   VkDeviceMemory vkMemory_ = VK_NULL_HANDLE;
-  VmaAllocationCreateInfo vmaAllocInfo_ = {};
   VmaAllocation vmaAllocation_ = VK_NULL_HANDLE;
   VkDeviceAddress vkDeviceAddress_ = 0;
   VkDeviceSize bufferSize_ = 0;
