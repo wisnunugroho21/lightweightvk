@@ -4836,41 +4836,20 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   // default texture
   {
-    const VkFormat dummyTextureFormat = VK_FORMAT_R8G8B8A8_UNORM;
-    const VkMemoryPropertyFlags memFlags = useStaging_ ? VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT : VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+    const uint32_t pixel = 0xFF000000;
     Result result;
-    lvk::VulkanImage image = createImage(VK_IMAGE_TYPE_2D,
-                                         VkExtent3D{1, 1, 1},
-                                         dummyTextureFormat,
-                                         1,
-                                         1,
-                                         VK_IMAGE_TILING_OPTIMAL,
-                                         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
-                                         memFlags,
-                                         0,
-                                         VK_SAMPLE_COUNT_1_BIT,
-                                         &result,
-                                         "Image: dummy 1x1");
+    (void)this->createTexture(
+        {
+            .format = lvk::Format_RGBA_UN8,
+            .dimensions = {1, 1, 1},
+            .usage = TextureUsageBits_Sampled | TextureUsageBits_Storage,
+            .data = &pixel,
+        },
+        "Dummy 1x1 (black)",
+        &result).release();
     if (!LVK_VERIFY(result.isOk())) {
       return result;
     }
-    VkImageView imageView = image.createImageView(VK_IMAGE_VIEW_TYPE_2D,
-                                                  dummyTextureFormat,
-                                                  VK_IMAGE_ASPECT_COLOR_BIT,
-                                                  0,
-                                                  VK_REMAINING_MIP_LEVELS,
-                                                  0,
-                                                  1,
-                                                  {},
-                                                  "Image View: dummy 1x1");
-    if (!LVK_VERIFY(imageView != VK_NULL_HANDLE)) {
-      return Result(Result::Code::RuntimeError, "Cannot create VkImageView");
-    }
-    VulkanTexture dummyTexture(std::move(image), imageView);
-    const uint32_t pixel = 0xFF000000;
-    const VkRect2D imageRegion = {.offset = {.x = 0, .y = 0}, .extent = {.width = 1, .height = 1}};
-    stagingDevice_->imageData2D(dummyTexture.image_, imageRegion, 0, 1, 0, 1, dummyTextureFormat, &pixel);
-    texturesPool_.create(std::move(dummyTexture));
     LVK_ASSERT(texturesPool_.numObjects() == 1);
   }
 
@@ -5050,11 +5029,11 @@ lvk::BufferHandle lvk::VulkanContext::createBuffer(VkDeviceSize bufferSize,
   };
 
   if (LVK_VULKAN_USE_VMA) {
-    VmaAllocationCreateInfo vmaAllocInfo_ = {};
+    VmaAllocationCreateInfo vmaAllocInfo = {};
 
     // Initialize VmaAllocation Info
     if (memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-      vmaAllocInfo_ = {
+      vmaAllocInfo = {
           .flags = VMA_ALLOCATION_CREATE_MAPPED_BIT | VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT,
           .requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
           .preferredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
@@ -5070,14 +5049,14 @@ lvk::BufferHandle lvk::VulkanContext::createBuffer(VkDeviceSize bufferSize,
       buf.vkBuffer_ = VK_NULL_HANDLE;
 
       if (requirements.memoryTypeBits & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) {
-        vmaAllocInfo_.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+        vmaAllocInfo.requiredFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         buf.isCoherentMemory_ = true;
       }
     }
 
-    vmaAllocInfo_.usage = VMA_MEMORY_USAGE_AUTO;
+    vmaAllocInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
-    vmaCreateBuffer((VmaAllocator)getVmaAllocator(), &ci, &vmaAllocInfo_, &buf.vkBuffer_, &buf.vmaAllocation_, nullptr);
+    vmaCreateBuffer((VmaAllocator)getVmaAllocator(), &ci, &vmaAllocInfo, &buf.vkBuffer_, &buf.vmaAllocation_, nullptr);
 
     // handle memory-mapped buffers
     if (memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
