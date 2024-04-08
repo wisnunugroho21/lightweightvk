@@ -140,20 +140,6 @@ class VulkanImage final {
 };
 
 struct VulkanTexture final {
-  VulkanTexture() = default;
-  VulkanTexture(lvk::VulkanImage&& image, VkImageView imageView);
-  ~VulkanTexture();
-
-  VulkanTexture(const VulkanTexture&) = delete;
-  VulkanTexture& operator=(const VulkanTexture&) = delete;
-
-  VulkanTexture(VulkanTexture&& other);
-  VulkanTexture& operator=(VulkanTexture&& other);
-
-  VkExtent3D getExtent() const {
-    return image_.vkExtent_;
-  }
-
   // framebuffers can render only into one level/layer
   VkImageView getOrCreateVkImageViewForFramebuffer(uint8_t level, uint16_t layer);
 
@@ -641,6 +627,8 @@ class VulkanContext final : public IContext {
   mutable bool awaitingCreation_ = false;
 
   lvk::ContextConfig config_;
+
+  TextureHandle dummyTexture_;
 
   lvk::Pool<lvk::ShaderModule, lvk::ShaderModuleState> shaderModulesPool_;
   lvk::Pool<lvk::RenderPipeline, lvk::RenderPipelineState> renderPipelinesPool_;

@@ -1184,52 +1184,6 @@ bool lvk::VulkanImage::isStencilFormat(VkFormat format) {
          (format == VK_FORMAT_D32_SFLOAT_S8_UINT);
 }
 
-lvk::VulkanTexture::VulkanTexture(VulkanImage&& image, VkImageView imageView) : image_(std::move(image)), imageView_(imageView) {
-  LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
-
-  LVK_ASSERT(imageView_ != VK_NULL_HANDLE);
-}
-
-lvk::VulkanTexture::~VulkanTexture() {
-  LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_DESTROY);
-
-  if (!image_.ctx_) {
-    return;
-  }
-
-  image_.ctx_->deferredTask(std::packaged_task<void()>(
-      [device = image_.ctx_->getVkDevice(), imageView = imageView_]() { vkDestroyImageView(device, imageView, nullptr); }));
-  for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
-    for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]); j++) {
-      VkImageView v = imageViewForFramebuffer_[i][j];
-      if (v != VK_NULL_HANDLE) {
-        image_.ctx_->deferredTask(std::packaged_task<void()>(
-            [device = image_.ctx_->getVkDevice(), imageView = v]() { vkDestroyImageView(device, imageView, nullptr); }));
-      }
-    }
-  }
-}
-
-lvk::VulkanTexture::VulkanTexture(VulkanTexture&& other) : image_(std::move(other.image_)) {
-  std::swap(imageView_, other.imageView_);
-  for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
-    for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]); j++) {
-      std::swap(imageViewForFramebuffer_[i][j], other.imageViewForFramebuffer_[i][j]);
-    }
-  }
-}
-
-lvk::VulkanTexture& lvk::VulkanTexture::operator=(VulkanTexture&& other) {
-  image_ = std::move(other.image_);
-  std::swap(imageView_, other.imageView_);
-  for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
-    for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]); j++) {
-      std::swap(imageViewForFramebuffer_[i][j], other.imageViewForFramebuffer_[i][j]);
-    }
-  }
-  return *this;
-}
-
 VkImageView lvk::VulkanTexture::getOrCreateVkImageViewForFramebuffer(uint8_t level, uint16_t layer) {
   LVK_ASSERT(level < LVK_MAX_MIP_LEVELS);
   LVK_ASSERT(layer < LVK_ARRAY_NUM_ELEMENTS(imageViewForFramebuffer_[0]));
@@ -1353,13 +1307,14 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
                                     debugNameImage);
     VkImageView imageView = image.createImageView(
         VK_IMAGE_VIEW_TYPE_2D, surfaceFormat_.format, VK_IMAGE_ASPECT_COLOR_BIT, 0, VK_REMAINING_MIP_LEVELS, 0, 1, {}, debugNameImageView);
-    swapchainTextures_[i] = ctx_.texturesPool_.create(VulkanTexture(std::move(image), std::move(imageView)));
+
+    swapchainTextures_[i] = ctx_.texturesPool_.create({.image_ = std::move(image), .imageView_ = imageView});
   }
 }
 
 lvk::VulkanSwapchain::~VulkanSwapchain() {
   for (TextureHandle handle : swapchainTextures_) {
-    ctx_.texturesPool_.destroy(handle);
+    ctx_.destroy(handle);
   }
   if (acquireFence_ != VK_NULL_HANDLE) {
     vkWaitForFences(device_, 1, &acquireFence_, VK_TRUE, UINT64_MAX);
@@ -2206,7 +2161,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
     if (mipLevel && descColor.level) {
       LVK_ASSERT_MSG(descColor.level == mipLevel, "All color attachments should have the same mip-level");
     }
-    const VkExtent3D dim = colorTexture.getExtent();
+    const VkExtent3D dim = colorTexture.image_.vkExtent_;
     if (fbWidth) {
       LVK_ASSERT_MSG(dim.width == fbWidth, "All attachments should have the save width");
     }
@@ -2258,7 +2213,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
         .storeOp = storeOpToVkAttachmentStoreOp(descDepth.storeOp),
         .clearValue = {.depthStencil = {.depth = descDepth.clearDepth, .stencil = descDepth.clearStencil}},
     };
-    const VkExtent3D dim = depthTexture.getExtent();
+    const VkExtent3D dim = depthTexture.image_.vkExtent_;
     if (fbWidth) {
       LVK_ASSERT_MSG(dim.width == fbWidth, "All attachments should have the save width");
     }
@@ -3039,6 +2994,8 @@ lvk::VulkanContext::~VulkanContext() {
   stagingDevice_.reset(nullptr);
   swapchain_.reset(nullptr); // swapchain has to be destroyed prior to Surface
 
+  destroy(dummyTexture_);
+
   if (shaderModulesPool_.numObjects()) {
     LLOGW("Leaked %u shader modules\n", shaderModulesPool_.numObjects());
   }
@@ -3052,9 +3009,8 @@ lvk::VulkanContext::~VulkanContext() {
     // the dummy value is owned by the context
     LLOGW("Leaked %u samplers\n", samplersPool_.numObjects() - 1);
   }
-  if (texturesPool_.numObjects() > 1) {
-    // the dummy value is owned by the context
-    LLOGW("Leaked %u textures\n", texturesPool_.numObjects() - 1);
+  if (texturesPool_.numObjects()) {
+    LLOGW("Leaked %u textures\n", texturesPool_.numObjects());
   }
   if (buffersPool_.numObjects()) {
     LLOGW("Leaked %u buffers\n", buffersPool_.numObjects());
@@ -3253,6 +3209,8 @@ lvk::Holder<lvk::SamplerHandle> lvk::VulkanContext::createSampler(const SamplerS
 lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureDesc& requestedDesc,
                                                                   const char* debugName,
                                                                   Result* outResult) {
+  LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
+
   TextureDesc desc(requestedDesc);
 
   if (debugName && *debugName) {
@@ -3402,7 +3360,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
     return {};
   }
 
-  TextureHandle handle = texturesPool_.create(lvk::VulkanTexture(std::move(image), view));
+  TextureHandle handle = texturesPool_.create({.image_ = std::move(image), .imageView_ = view});
 
   awaitingCreation_ = true;
 
@@ -3788,33 +3746,58 @@ void lvk::VulkanContext::destroy(SamplerHandle handle) {
 void lvk::VulkanContext::destroy(BufferHandle handle) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_DESTROY);
 
+  SCOPE_EXIT {
+    buffersPool_.destroy(handle);
+  };
+
   lvk::VulkanBuffer* buf = buffersPool_.get(handle);
 
-  if (buf) {
-    if (LVK_VULKAN_USE_VMA) {
-      if (buf->mappedPtr_) {
-        vmaUnmapMemory((VmaAllocator)getVmaAllocator(), buf->vmaAllocation_);
-      }
-      deferredTask(std::packaged_task<void()>([vma = getVmaAllocator(), buffer = buf->vkBuffer_, allocation = buf->vmaAllocation_]() {
-        vmaDestroyBuffer((VmaAllocator)vma, buffer, allocation);
-      }));
-    } else {
-      if (buf->mappedPtr_) {
-        vkUnmapMemory(vkDevice_, buf->vkMemory_);
-      }
-      deferredTask(std::packaged_task<void()>([device = vkDevice_, buffer = buf->vkBuffer_, memory = buf->vkMemory_]() {
-        vkDestroyBuffer(device, buffer, nullptr);
-        vkFreeMemory(device, memory, nullptr);
-      }));
-    }
+  if (!buf) {
+    return;
   }
 
-  buffersPool_.destroy(handle);
+  if (LVK_VULKAN_USE_VMA) {
+    if (buf->mappedPtr_) {
+      vmaUnmapMemory((VmaAllocator)getVmaAllocator(), buf->vmaAllocation_);
+    }
+    deferredTask(std::packaged_task<void()>([vma = getVmaAllocator(), buffer = buf->vkBuffer_, allocation = buf->vmaAllocation_]() {
+      vmaDestroyBuffer((VmaAllocator)vma, buffer, allocation);
+    }));
+  } else {
+    if (buf->mappedPtr_) {
+      vkUnmapMemory(vkDevice_, buf->vkMemory_);
+    }
+    deferredTask(std::packaged_task<void()>([device = vkDevice_, buffer = buf->vkBuffer_, memory = buf->vkMemory_]() {
+      vkDestroyBuffer(device, buffer, nullptr);
+      vkFreeMemory(device, memory, nullptr);
+    }));
+  }
 }
 
 void lvk::VulkanContext::destroy(lvk::TextureHandle handle) {
-  // deferred deletion handled in VulkanTexture
-  texturesPool_.destroy(handle);
+  LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_DESTROY);
+
+  SCOPE_EXIT {
+    texturesPool_.destroy(handle);
+  };
+
+  lvk::VulkanTexture* tex = texturesPool_.get(handle);
+
+  if (!tex) {
+    return;
+  }
+
+  deferredTask(std::packaged_task<void()>(
+      [device = tex->image_.ctx_->getVkDevice(), imageView = tex->imageView_]() { vkDestroyImageView(device, imageView, nullptr); }));
+  for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
+    for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(tex->imageViewForFramebuffer_[0]); j++) {
+      VkImageView v = tex->imageViewForFramebuffer_[i][j];
+      if (v != VK_NULL_HANDLE) {
+        tex->image_.ctx_->deferredTask(std::packaged_task<void()>(
+            [device = tex->image_.ctx_->getVkDevice(), imageView = v]() { vkDestroyImageView(device, imageView, nullptr); }));
+      }
+    }
+  }
 }
 
 void lvk::VulkanContext::destroy(lvk::QueryPoolHandle handle) {
@@ -3905,7 +3888,7 @@ lvk::Result lvk::VulkanContext::download(lvk::TextureHandle handle, const Textur
 
   LVK_ASSERT(texture);
 
-  const Result result = validateRange(texture->getExtent(), texture->image_.numLevels_, range);
+  const Result result = validateRange(texture->image_.vkExtent_, texture->image_.numLevels_, range);
 
   if (!LVK_VERIFY(result.isOk())) {
     return result;
@@ -3934,7 +3917,7 @@ lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureR
 
   lvk::VulkanTexture* texture = texturesPool_.get(handle);
 
-  const Result result = validateRange(texture->getExtent(), texture->image_.numLevels_, range);
+  const Result result = validateRange(texture->image_.vkExtent_, texture->image_.numLevels_, range);
 
   if (!LVK_VERIFY(result.isOk())) {
     return result;
@@ -4838,15 +4821,16 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   {
     const uint32_t pixel = 0xFF000000;
     Result result;
-    (void)this->createTexture(
-        {
-            .format = lvk::Format_RGBA_UN8,
-            .dimensions = {1, 1, 1},
-            .usage = TextureUsageBits_Sampled | TextureUsageBits_Storage,
-            .data = &pixel,
-        },
-        "Dummy 1x1 (black)",
-        &result).release();
+    dummyTexture_ = this->createTexture(
+                            {
+                                .format = lvk::Format_RGBA_UN8,
+                                .dimensions = {1, 1, 1},
+                                .usage = TextureUsageBits_Sampled | TextureUsageBits_Storage,
+                                .data = &pixel,
+                            },
+                            "Dummy 1x1 (black)",
+                            &result)
+                        .release();
     if (!LVK_VERIFY(result.isOk())) {
       return result;
     }
