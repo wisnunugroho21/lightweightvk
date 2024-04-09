@@ -2800,7 +2800,8 @@ void lvk::VulkanStagingDevice::waitAndReset() {
   regions_.push_front({0, stagingBufferSize_, SubmitHandle()});
 }
 
-lvk::VulkanContext::VulkanContext(const lvk::ContextConfig& config, void* window, void* display) : config_(config) {
+lvk::VulkanContext::VulkanContext(const lvk::ContextConfig& config, void* window, void* display, VkSurfaceKHR surface) :
+  config_(config), vkSurface_(surface) {
   LVK_PROFILER_THREAD("MainThread");
 
   pimpl_ = std::make_unique<VulkanContextImpl>();
@@ -2814,7 +2815,7 @@ lvk::VulkanContext::VulkanContext(const lvk::ContextConfig& config, void* window
 
   createInstance();
 
-  if (window) {
+  if (window && !surface) {
     createSurface(window, display);
   }
 }
