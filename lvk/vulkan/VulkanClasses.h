@@ -29,14 +29,13 @@ struct DeviceQueues final {
 };
 
 struct VulkanBuffer final {
+  // clang-format off
+  [[nodiscard]] inline uint8_t* getMappedPtr() const { return static_cast<uint8_t*>(mappedPtr_); }
+  [[nodiscard]] inline bool isMapped() const { return mappedPtr_ != nullptr;  }
+  // clang-format on
+
   void bufferSubData(const VulkanContext& ctx, size_t offset, size_t size, const void* data);
   void getBufferSubData(const VulkanContext& ctx, size_t offset, size_t size, void* data);
-  [[nodiscard]] inline uint8_t* getMappedPtr() const {
-    return static_cast<uint8_t*>(mappedPtr_);
-  }
-  [[nodiscard]] inline bool isMapped() const {
-    return mappedPtr_ != nullptr;
-  }
   void flushMappedMemory(const VulkanContext& ctx, VkDeviceSize offset, VkDeviceSize size) const;
   void invalidateMappedMemory(const VulkanContext& ctx, VkDeviceSize offset, VkDeviceSize size) const;
 
@@ -52,37 +51,7 @@ struct VulkanBuffer final {
   bool isCoherentMemory_ = false;
 };
 
-class VulkanImage final {
- public:
-  VulkanImage() = default;
-  VulkanImage(lvk::VulkanContext& ctx,
-              VkDevice device,
-              VkExtent3D extent,
-              VkImageType type,
-              VkFormat format,
-              uint32_t numLevels,
-              uint32_t numLayers,
-              VkImageTiling tiling,
-              VkImageUsageFlags usageFlags,
-              VkMemoryPropertyFlags memFlags,
-              VkImageCreateFlags createFlags,
-              VkSampleCountFlagBits samples,
-              const char* debugName);
-  VulkanImage(lvk::VulkanContext& ctx,
-              VkDevice device,
-              VkImage image,
-              VkImageUsageFlags usageFlags,
-              VkFormat imageFormat,
-              VkExtent3D extent,
-              const char* debugName);
-  ~VulkanImage();
-
-  VulkanImage(const VulkanImage&) = delete;
-  VulkanImage& operator=(const VulkanImage&) = delete;
-
-  VulkanImage(VulkanImage&& img);
-  VulkanImage& operator=(VulkanImage&&);
-
+struct VulkanImage final {
   // clang-format off
   [[nodiscard]] inline bool isSampledImage() const { return (vkUsageFlags_ & VK_IMAGE_USAGE_SAMPLED_BIT) > 0; }
   [[nodiscard]] inline bool isStorageImage() const { return (vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) > 0; }
@@ -92,7 +61,8 @@ class VulkanImage final {
    * Setting `numLevels` to a non-zero value will override `mipLevels_` value from the original Vulkan image, and can be used to create
    * image views with different number of levels.
    */
-  [[nodiscard]] VkImageView createImageView(VkImageViewType type,
+  [[nodiscard]] VkImageView createImageView(VkDevice device,
+                                            VkImageViewType type,
                                             VkFormat format,
                                             VkImageAspectFlags aspectMask,
                                             uint32_t baseLevel,
@@ -106,20 +76,21 @@ class VulkanImage final {
                                             const char* debugName = nullptr) const;
 
   void generateMipmap(VkCommandBuffer commandBuffer) const;
-
   void transitionLayout(VkCommandBuffer commandBuffer,
                         VkImageLayout newImageLayout,
                         VkPipelineStageFlags srcStageMask,
                         VkPipelineStageFlags dstStageMask,
                         const VkImageSubresourceRange& subresourceRange) const;
 
-  VkImageAspectFlags getImageAspectFlags() const;
+  [[nodiscard]] VkImageAspectFlags getImageAspectFlags() const;
 
-  static bool isDepthFormat(VkFormat format);
-  static bool isStencilFormat(VkFormat format);
+  // framebuffers can render only into one level/layer
+  [[nodiscard]] VkImageView getOrCreateVkImageViewForFramebuffer(VulkanContext& ctx, uint8_t level, uint16_t layer);
+
+  [[nodiscard]] static bool isDepthFormat(VkFormat format);
+  [[nodiscard]] static bool isStencilFormat(VkFormat format);
 
  public:
-  lvk::VulkanContext* ctx_ = nullptr;
   VkImage vkImage_ = VK_NULL_HANDLE;
   VkImageUsageFlags vkUsageFlags_ = 0;
   VkDeviceMemory vkMemory_ = VK_NULL_HANDLE;
@@ -137,14 +108,8 @@ class VulkanImage final {
   bool isStencilFormat_ = false;
   // current image layout
   mutable VkImageLayout vkImageLayout_ = VK_IMAGE_LAYOUT_UNDEFINED;
-};
-
-struct VulkanTexture final {
-  // framebuffers can render only into one level/layer
-  VkImageView getOrCreateVkImageViewForFramebuffer(uint8_t level, uint16_t layer);
-
-  lvk::VulkanImage image_;
-  VkImageView imageView_ = VK_NULL_HANDLE; // all mip-levels
+  // precached image views - owned by this VulkanImage
+  VkImageView imageView_ = VK_NULL_HANDLE; // default view with all mip-levels
   VkImageView imageViewForFramebuffer_[LVK_MAX_MIP_LEVELS][6] = {}; // max 6 faces for cubemap rendering
 };
 
@@ -510,18 +475,6 @@ class VulkanContext final : public IContext {
   lvk::Result initContext(const HWDeviceDesc& desc);
   lvk::Result initSwapchain(uint32_t width, uint32_t height);
 
-  VulkanImage createImage(VkImageType imageType,
-                          VkExtent3D extent,
-                          VkFormat format,
-                          uint32_t numLevels,
-                          uint32_t numLayers,
-                          VkImageTiling tiling,
-                          VkImageUsageFlags usageFlags,
-                          VkMemoryPropertyFlags memFlags,
-                          VkImageCreateFlags flags,
-                          VkSampleCountFlagBits samples,
-                          lvk::Result* outResult,
-                          const char* debugName = nullptr);
   BufferHandle createBuffer(VkDeviceSize bufferSize,
                             VkBufferUsageFlags usageFlags,
                             VkMemoryPropertyFlags memFlags,
@@ -635,7 +588,7 @@ class VulkanContext final : public IContext {
   lvk::Pool<lvk::ComputePipeline, lvk::ComputePipelineState> computePipelinesPool_;
   lvk::Pool<lvk::Sampler, VkSampler> samplersPool_;
   lvk::Pool<lvk::Buffer, lvk::VulkanBuffer> buffersPool_;
-  lvk::Pool<lvk::Texture, lvk::VulkanTexture> texturesPool_;
+  lvk::Pool<lvk::Texture, lvk::VulkanImage> texturesPool_;
   lvk::Pool<lvk::QueryPool, VkQueryPool> queriesPool_;
 };
 
