@@ -24,7 +24,7 @@ option(LVK_WITH_ANDROID_VALIDATION "Enable validation layers on Android"     ON)
 
 cmake_dependent_option(LVK_WITH_VULKAN_PORTABILITY "Enable portability extension" ON "APPLE" OFF)
 
-set(LVK_ANDROID_ABI "\'arm64-v8a\'" CACHE STRING "Enabled ABI on Android")
+set(LVK_ANDROID_ABI "arm64-v8a" CACHE STRING "Enabled ABI on Android")
 set(LVK_CUSTOM_MOLTENVK_PATH "" CACHE STRING "Path to custom MoltenVK")
 # cmake-format: on
 
