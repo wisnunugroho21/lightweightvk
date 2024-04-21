@@ -33,6 +33,8 @@
 
 #include <shared/UtilsFPS.h>
 
+#include <lvk/vulkan/VulkanClasses.h>
+
 const char* codeTriangleVS = R"(
 #version 460
 const vec2 pos[3] = vec2[3](
@@ -122,6 +124,13 @@ static uint16_t indexData[36] = {0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 7, 6, 5, 5,
                                  4, 0, 3, 3, 7, 4, 4, 5, 1, 1, 0, 4, 3, 2, 6, 6, 7, 3};
 
 void init() {
+  const VkPhysicalDeviceProperties& props = static_cast<lvk::VulkanContext*>(ctx_.get())->getVkPhysicalDeviceProperties();
+
+  if (props.limits.maxColorAttachments < 6) {
+    LVK_ASSERT_MSG(false, "This demo needs at least 6 color attachments to be supported");
+    std::terminate();
+  }
+
   ib0_ = ctx_->createBuffer({
       .usage = lvk::BufferUsageBits_Index,
       .storage = lvk::StorageType_Device,
