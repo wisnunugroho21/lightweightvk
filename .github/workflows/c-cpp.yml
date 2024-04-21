@@ -16,9 +16,9 @@ jobs:
           submodules: recursive
 
       - name: Set up NDK
-        uses: nttld/setup-ndk@v1
+        uses: nttld/setup-ndk@v1.4.2
         with:
-          ndk-version: r26b
+          ndk-version: r27
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -57,6 +57,12 @@ jobs:
       - name: Assemble Tiny_MeshLarge APK
         run: |
           cd build/android/Tiny_MeshLarge
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      - name: Assemble 003_RenderToCubeMapSinglePass APK
+        run: |
+          cd build/android/003_RenderToCubeMapSinglePass
           chmod +x ./gradlew
           ./gradlew assembleDebug
 
