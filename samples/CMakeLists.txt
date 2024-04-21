@@ -115,6 +115,7 @@ endmacro()
 
 ADD_DEMO("001_HelloTriangle")
 ADD_DEMO("002_RenderToCubeMap")
+ADD_DEMO("003_RenderToCubeMapSinglePass")
 
 ADD_DEMO("Tiny")
 
