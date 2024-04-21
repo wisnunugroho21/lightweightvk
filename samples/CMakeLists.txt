@@ -113,7 +113,7 @@ macro(ADD_DEMO_LINK_LIBRARIES app libs)
   endif()
 endmacro()
 
-ADD_DEMO("HelloTriangle")
+ADD_DEMO("001_HelloTriangle")
 
 ADD_DEMO("Tiny")
 
