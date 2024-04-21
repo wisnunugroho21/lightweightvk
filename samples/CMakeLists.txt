@@ -114,6 +114,7 @@ macro(ADD_DEMO_LINK_LIBRARIES app libs)
 endmacro()
 
 ADD_DEMO("001_HelloTriangle")
+ADD_DEMO("002_RenderToCubeMap")
 
 ADD_DEMO("Tiny")
 
