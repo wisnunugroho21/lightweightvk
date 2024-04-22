@@ -359,7 +359,7 @@ void android_main(android_app* app) {
     if (ctx_) {
       render((float)newTimeSec);
     }
-    if (ALooper_pollAll(0, nullptr, &events, (void**)&source) >= 0) {
+    if (ALooper_pollOnce(0, nullptr, &events, (void**)&source) >= 0) {
       if (source) {
         source->process(app, source);
       }

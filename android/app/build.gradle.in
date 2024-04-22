@@ -7,7 +7,7 @@ android {
   compileSdk 34
 
   defaultConfig {
-    applicationId "org.lvk.samples.@APP_NAME@"
+    applicationId "org.lvk.samples.lvk_@APP_NAME@"
     minSdk 24
     targetSdk 34
     versionCode 1

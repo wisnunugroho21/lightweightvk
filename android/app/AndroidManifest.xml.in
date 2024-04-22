@@ -13,7 +13,7 @@
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:label="@APP_NAME@">
+        android:label="lvk_@APP_NAME@">
         <activity
             android:exported="true"
             android:name="org.lvk.samples.MainActivity"
