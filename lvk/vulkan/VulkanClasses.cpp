@@ -3131,7 +3131,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   uint32_t numLayers = desc.numLayers;
   switch (desc.type) {
   case TextureType_2D:
-    vkImageViewType = VK_IMAGE_VIEW_TYPE_2D;
+    vkImageViewType = numLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
     vkImageType = VK_IMAGE_TYPE_2D;
     vkSamples = lvk::getVulkanSampleCountFlags(desc.numSamples);
     break;
@@ -3140,7 +3140,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
     vkImageType = VK_IMAGE_TYPE_3D;
     break;
   case TextureType_Cube:
-    vkImageViewType = VK_IMAGE_VIEW_TYPE_CUBE;
+    vkImageViewType = numLayers > 1 ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_CUBE;
     vkImageType = VK_IMAGE_TYPE_2D;
     vkCreateFlags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     numLayers *= 6;
