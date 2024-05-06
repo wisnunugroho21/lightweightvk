@@ -4011,6 +4011,8 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
       )";
     }
     if (vkStage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+      // Note how nonuniformEXT() should be used:
+      // https://github.com/KhronosGroup/Vulkan-Samples/blob/main/shaders/descriptor_indexing/nonuniform-quads.frag#L33-L39
       sourcePatched += R"(
       #version 460
       #extension GL_EXT_buffer_reference_uvec2 : require
@@ -4025,29 +4027,27 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
       layout (set = 3, binding = 0) uniform texture2D kTextures2DShadow[];
       layout (set = 0, binding = 1) uniform sampler kSamplers[];
       layout (set = 3, binding = 1) uniform samplerShadow kSamplersShadow[];
-      )";
 
-      sourcePatched += R"(
       vec4 textureBindless2D(uint textureid, uint samplerid, vec2 uv) {
-        return texture(sampler2D(kTextures2D[textureid], kSamplers[samplerid]), uv);
+        return texture(nonuniformEXT(sampler2D(kTextures2D[textureid], kSamplers[samplerid])), uv);
       }
       vec4 textureBindless2DLod(uint textureid, uint samplerid, vec2 uv, float lod) {
-        return textureLod(sampler2D(kTextures2D[textureid], kSamplers[samplerid]), uv, lod);
+        return textureLod(nonuniformEXT(sampler2D(kTextures2D[textureid], kSamplers[samplerid])), uv, lod);
       }
       float textureBindless2DShadow(uint textureid, uint samplerid, vec3 uvw) {
-        return texture(sampler2DShadow(kTextures2DShadow[textureid], kSamplersShadow[samplerid]), uvw);
+        return texture(nonuniformEXT(sampler2DShadow(kTextures2DShadow[textureid], kSamplersShadow[samplerid])), uvw);
       }
       ivec2 textureBindlessSize2D(uint textureid) {
-        return textureSize(kTextures2D[textureid], 0);
+        return textureSize(nonuniformEXT(kTextures2D[textureid]), 0);
       }
       vec4 textureBindlessCube(uint textureid, uint samplerid, vec3 uvw) {
-        return texture(samplerCube(kTexturesCube[textureid], kSamplers[samplerid]), uvw);
+        return texture(nonuniformEXT(samplerCube(kTexturesCube[textureid], kSamplers[samplerid])), uvw);
       }
       vec4 textureBindlessCubeLod(uint textureid, uint samplerid, vec3 uvw, float lod) {
-        return textureLod(samplerCube(kTexturesCube[textureid], kSamplers[samplerid]), uvw, lod);
+        return textureLod(nonuniformEXT(samplerCube(kTexturesCube[textureid], kSamplers[samplerid])), uvw, lod);
       }
       int textureBindlessQueryLevels2D(uint textureid) {
-        return textureQueryLevels(kTextures2D[textureid]);
+        return textureQueryLevels(nonuniformEXT(kTextures2D[textureid]));
       }
       )";
     }
