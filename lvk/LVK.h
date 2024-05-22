@@ -814,6 +814,14 @@ class ICommandBuffer {
 
   virtual void cmdResetQueryPool(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) = 0;
   virtual void cmdWriteTimestamp(QueryPoolHandle pool, uint32_t query) = 0;
+
+  virtual void cmdCopyImage(TextureHandle src,
+                            TextureHandle dst,
+                            const Dimensions& extent,
+                            const Offset3D& srcOffset = {},
+                            const Offset3D& dstOffset = {},
+                            const TextureLayers& srcLayers = {},
+                            const TextureLayers& dstLayers = {}) = 0;
 };
 
 struct SubmitHandle {

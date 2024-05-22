@@ -2331,6 +2331,81 @@ void lvk::CommandBuffer::cmdWriteTimestamp(QueryPoolHandle pool, uint32_t query)
   vkCmdWriteTimestamp(wrapper_->cmdBuf_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vkPool, query);
 }
 
+void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
+                                      TextureHandle dst,
+                                      const Dimensions& extent,
+                                      const Offset3D& srcOffset,
+                                      const Offset3D& dstOffset,
+                                      const TextureLayers& srcLayers,
+                                      const TextureLayers& dstLayers) {
+  lvk::VulkanImage* imgSrc = ctx_->texturesPool_.get(src);
+  lvk::VulkanImage* imgDst = ctx_->texturesPool_.get(dst);
+
+  LVK_ASSERT(imgSrc && imgDst);
+  LVK_ASSERT(srcLayers.numLayers == dstLayers.numLayers);
+
+  if (!imgSrc || !imgDst) {
+    return;
+  }
+
+  const VkImageSubresourceRange rangeSrc = {
+      .aspectMask = imgSrc->getImageAspectFlags(),
+      .baseMipLevel = srcLayers.mipLevel,
+      .levelCount = 1,
+      .baseArrayLayer = srcLayers.layer,
+      .layerCount = srcLayers.numLayers,
+  };
+  const VkImageSubresourceRange rangeDst = {
+      .aspectMask = imgDst->getImageAspectFlags(),
+      .baseMipLevel = dstLayers.mipLevel,
+      .levelCount = 1,
+      .baseArrayLayer = dstLayers.layer,
+      .layerCount = dstLayers.numLayers,
+  };
+
+  const VkImageLayout oldLayout = imgSrc->vkImageLayout_;
+
+  imgSrc->transitionLayout(wrapper_->cmdBuf_,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                           VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           rangeSrc);
+  imgDst->transitionLayout(
+      wrapper_->cmdBuf_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, rangeDst);
+
+  const VkImageCopy region = {
+      .srcSubresource =
+          {
+              .aspectMask = imgSrc->getImageAspectFlags(),
+              .mipLevel = srcLayers.mipLevel,
+              .baseArrayLayer = srcLayers.layer,
+              .layerCount = srcLayers.numLayers,
+          },
+      .srcOffset = {.x = srcOffset.x, .y = srcOffset.y, .z = srcOffset.z},
+      .dstSubresource =
+          {
+              .aspectMask = imgDst->getImageAspectFlags(),
+              .mipLevel = dstLayers.mipLevel,
+              .baseArrayLayer = dstLayers.layer,
+              .layerCount = dstLayers.numLayers,
+          },
+      .dstOffset = {.x = dstOffset.x, .y = dstOffset.y, .z = dstOffset.z},
+      .extent = {.width = extent.width, .height = extent.height, .depth = extent.depth},
+  };
+
+  vkCmdCopyImage(wrapper_->cmdBuf_,
+                 imgSrc->vkImage_,
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 imgDst->vkImage_,
+                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 1,
+                 &region);
+
+  imgSrc->transitionLayout(wrapper_->cmdBuf_, oldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, rangeSrc);
+  imgDst->transitionLayout(
+      wrapper_->cmdBuf_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, rangeDst);
+}
+
 lvk::VulkanStagingDevice::VulkanStagingDevice(VulkanContext& ctx) : ctx_(ctx) {
   LVK_PROFILER_FUNCTION();
 

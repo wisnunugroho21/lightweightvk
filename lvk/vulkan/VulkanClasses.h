@@ -338,6 +338,14 @@ class CommandBuffer final : public ICommandBuffer {
   void cmdResetQueryPool(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
   void cmdWriteTimestamp(QueryPoolHandle pool, uint32_t query) override;
 
+  void cmdCopyImage(TextureHandle src,
+                    TextureHandle dst,
+                    const Dimensions& extent,
+                    const Offset3D& srcOffset,
+                    const Offset3D& dstOffset,
+                    const TextureLayers& srcLayers,
+                    const TextureLayers& dstLayers) override;
+
   VkCommandBuffer getVkCommandBuffer() const {
     return wrapper_ ? wrapper_->cmdBuf_ : VK_NULL_HANDLE;
   }
