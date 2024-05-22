@@ -294,6 +294,9 @@ struct Dimensions {
   uint32_t width = 1;
   uint32_t height = 1;
   uint32_t depth = 1;
+  bool operator==(const Dimensions& other) const {
+    return width == other.width && height == other.height && depth == other.depth;
+  }
 };
 
 struct Viewport {
