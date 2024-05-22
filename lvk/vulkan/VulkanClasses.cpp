@@ -2601,6 +2601,8 @@ void lvk::VulkanStagingDevice::getImageData(VulkanImage& image,
 
   const uint32_t storageSize = extent.width * extent.height * extent.depth * getBytesPerPixel(format);
 
+  ensureStagingBufferSize(storageSize);
+
   LVK_ASSERT(storageSize <= stagingBufferSize_);
 
   // get next staging buffer free offset
