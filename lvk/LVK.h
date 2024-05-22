@@ -695,10 +695,20 @@ struct BufferDesc final {
   const char* debugName = "";
 };
 
+struct Offset3D {
+  int32_t x = 0;
+  int32_t y = 0;
+  int32_t z = 0;
+};
+
+struct TextureLayers {
+  uint32_t mipLevel = 0;
+  uint32_t layer = 0;
+  uint32_t numLayers = 1;
+};
+
 struct TextureRangeDesc {
-  uint32_t x = 0;
-  uint32_t y = 0;
-  uint32_t z = 0;
+  Offset3D offset = {};
   Dimensions dimensions = {1, 1, 1};
   uint32_t layer = 0;
   uint32_t numLayers = 1;

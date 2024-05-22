@@ -521,8 +521,8 @@ lvk::Result validateRange(const VkExtent3D& ext, uint32_t numLevels, const lvk::
   if (range.dimensions.width > texWidth || range.dimensions.height > texHeight || range.dimensions.depth > texDepth) {
     return lvk::Result{lvk::Result::Code::ArgumentOutOfRange, "range dimensions exceed texture dimensions"};
   }
-  if (range.x > texWidth - range.dimensions.width || range.y > texHeight - range.dimensions.height ||
-      range.z > texDepth - range.dimensions.depth) {
+  if (range.offset.x > texWidth - range.dimensions.width || range.offset.y > texHeight - range.dimensions.height ||
+      range.offset.z > texDepth - range.dimensions.depth) {
     return lvk::Result{lvk::Result::Code::ArgumentOutOfRange, "range dimensions exceed texture dimensions"};
   }
 
@@ -3827,7 +3827,7 @@ lvk::Result lvk::VulkanContext::download(lvk::TextureHandle handle, const Textur
   }
 
   stagingDevice_->getImageData(*texture,
-                               VkOffset3D{(int32_t)range.x, (int32_t)range.y, (int32_t)range.z},
+                               VkOffset3D{range.offset.x, range.offset.y, range.offset.z},
                                VkExtent3D{range.dimensions.width, range.dimensions.height, range.dimensions.depth},
                                VkImageSubresourceRange{
                                    .aspectMask = texture->getImageAspectFlags(),
@@ -3865,13 +3865,13 @@ lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureR
 
   if (texture->vkType_ == VK_IMAGE_TYPE_3D) {
     stagingDevice_->imageData3D(*texture,
-                                VkOffset3D{(int32_t)range.x, (int32_t)range.y, (int32_t)range.z},
+                                VkOffset3D{range.offset.x, range.offset.y, range.offset.z},
                                 VkExtent3D{range.dimensions.width, range.dimensions.height, range.dimensions.depth},
                                 vkFormat,
                                 data);
   } else {
     const VkRect2D imageRegion = {
-        .offset = {.x = (int)range.x, .y = (int)range.y},
+        .offset = {.x = range.offset.x, .y = range.offset.y},
         .extent = {.width = range.dimensions.width, .height = range.dimensions.height},
     };
     stagingDevice_->imageData2D(*texture, imageRegion, range.mipLevel, range.numMipLevels, range.layer, range.numLayers, vkFormat, data);
