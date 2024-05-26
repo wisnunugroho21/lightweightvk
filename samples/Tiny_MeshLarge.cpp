@@ -193,7 +193,6 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint texShadow;
   uint sampler0;
   uint samplerShadow0;
-  int bDrawNormals;
 };
 
 layout(std430, buffer_reference) readonly buffer PerObject {
@@ -296,7 +295,6 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint texShadow;
   uint sampler0;
   uint samplerShadow0;
-  int bDrawNormals;
 };
 
 struct Material {
@@ -318,11 +316,12 @@ layout(push_constant) uniform constants {
   PerFrame perFrame;
 } pc;
 
-
 layout (location=0) in PerVertex vtx;
 layout (location=5) flat in Material mtl;
 
 layout (location=0) out vec4 out_FragColor;
+
+layout (constant_id = 0) const bool bDrawNormals = false;
 
 float PCF3(vec3 uvw) {
   float size = 1.0 / textureBindlessSize2D(pc.perFrame.texShadow).x;
@@ -349,7 +348,6 @@ void main() {
     discard;
   vec4 Ka = mtl.ambient * textureBindless2D(mtl.texAmbient, pc.perFrame.sampler0, vtx.uv);
   vec4 Kd = mtl.diffuse * textureBindless2D(mtl.texDiffuse, pc.perFrame.sampler0, vtx.uv);
-  bool drawNormals = pc.perFrame.bDrawNormals > 0;
   if (Kd.a < 0.5)
     discard;
   vec3 n = normalize(vtx.normal);
@@ -359,7 +357,7 @@ void main() {
   // IBL diffuse
   const vec4 f0 = vec4(0.04);
   vec4 diffuse = textureBindlessCube(pc.perFrame.texSkyboxIrradiance, pc.perFrame.sampler0, n) * Kd * (vec4(1.0) - f0);
-  out_FragColor = drawNormals ?
+  out_FragColor = bDrawNormals ?
     vec4(0.5 * (n+vec3(1.0)), 1.0) :
     Ka + diffuse * shadow(vtx.shadowCoords);
 };
@@ -377,7 +375,6 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint texShadow;
   uint sampler0;
   uint samplerShadow0;
-  int bDrawNormals;
 };
 
 layout(std430, buffer_reference) readonly buffer PerObject {
@@ -423,7 +420,6 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint texShadow;
   uint sampler0;
   uint samplerShadow0;
-  int bDrawNormals;
 };
 
 layout(push_constant) uniform constants
@@ -458,12 +454,10 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint texShadow;
   uint sampler0;
   uint samplerShadow0;
-  int bDrawNormals;
 };
 
-layout(push_constant) uniform constants
-{
-	PerFrame perFrame;
+layout(push_constant) uniform constants {
+  PerFrame perFrame;
 } pc;
 
 void main() {
@@ -502,6 +496,7 @@ lvk::Holder<lvk::ShaderModuleHandle> smSkyboxFrag_;
 lvk::Holder<lvk::ShaderModuleHandle> smGrayscaleComp_;
 lvk::Holder<lvk::ComputePipelineHandle> computePipelineState_Grayscale_;
 lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Mesh_;
+lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_MeshNormals_;
 lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_MeshWireframe_;
 lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Shadow_;
 lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Skybox_;
@@ -528,6 +523,7 @@ bool mousePressed_ = false;
 bool enableComputePass_ = false;
 bool enableWireframe_ = false;
 bool showPerfStats_ = false;
+bool drawNormals_ = false;
 
 bool isShadowMapDirty_ = true;
 
@@ -568,7 +564,6 @@ struct UniformsPerFrame {
   uint32_t texShadow = 0;
   uint32_t sampler = 0;
   uint32_t samplerShadow = 0;
-  int bDrawNormals = 0;
 } perFrame_;
 
 struct UniformsPerObject {
@@ -796,6 +791,7 @@ void destroy() {
   smSkyboxFrag_ = nullptr;
   smGrayscaleComp_ = nullptr;
   renderPipelineState_Mesh_ = nullptr;
+  renderPipelineState_MeshNormals_ = nullptr;
   renderPipelineState_MeshWireframe_ = nullptr;
   renderPipelineState_Shadow_ = nullptr;
   renderPipelineState_Skybox_ = nullptr;
@@ -1075,6 +1071,12 @@ void createPipelines() {
 
     renderPipelineState_Mesh_ = ctx_->createRenderPipeline(desc, nullptr);
 
+    const uint32_t drawNormals = 1;
+
+    desc.specInfo = {.entries = {{.constantId = 0, .size = sizeof(uint32_t)}}, .data = &drawNormals, .dataSize = sizeof(drawNormals)},
+
+    renderPipelineState_MeshNormals_ = ctx_->createRenderPipeline(desc, nullptr);
+
     desc.polygonMode = lvk::PolygonMode_Line;
     desc.vertexInput = vdescs; // positions-only
     desc.smVert = smMeshWireframeVert_;
@@ -1297,7 +1299,6 @@ void render(double delta, uint32_t frameIndex) {
       .texShadow = fbShadowMap_.depthStencil.texture.index(),
       .sampler = sampler_.index(),
       .samplerShadow = samplerShadow_.index(),
-      .bDrawNormals = perFrame_.bDrawNormals,
   };
   ctx_->upload(ubPerFrame_[frameIndex], &perFrame_, sizeof(perFrame_));
 
@@ -1361,7 +1362,7 @@ void render(double delta, uint32_t frameIndex) {
     buffer.cmdBeginRendering(renderPassOffscreen_, fbOffscreen_);
     {
       // Scene
-      buffer.cmdBindRenderPipeline(renderPipelineState_Mesh_);
+      buffer.cmdBindRenderPipeline(drawNormals_ ? renderPipelineState_MeshNormals_: renderPipelineState_Mesh_);
       buffer.cmdPushDebugGroupLabel("Render Mesh", 0xff0000ff);
       buffer.cmdBindDepthState(depthState_);
       buffer.cmdBindVertexBuffer(0, vb0_, 0);
@@ -2164,7 +2165,7 @@ int main(int argc, char* argv[]) {
       glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
     if (key == GLFW_KEY_N && pressed) {
-      perFrame_.bDrawNormals = (perFrame_.bDrawNormals + 1) % 2;
+      drawNormals_ = !drawNormals_;
     }
     if (key == GLFW_KEY_C && pressed) {
       enableComputePass_ = !enableComputePass_;
