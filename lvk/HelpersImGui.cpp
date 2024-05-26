@@ -74,15 +74,14 @@ void main() {
 namespace lvk {
 
 lvk::Holder<lvk::RenderPipelineHandle> ImGuiRenderer::createNewPipelineState(const lvk::Framebuffer& desc) {
-  nonLinearColorSpace_ = ctx_.getSwapChainColorSpace() == ColorSpace_SRGB_NONLINEAR ? 1u : 0u;
+  const uint32_t nonLinearColorSpace = ctx_.getSwapChainColorSpace() == ColorSpace_SRGB_NONLINEAR ? 1u : 0u;
   return ctx_.createRenderPipeline(
       {
           .smVert = vert_,
           .smFrag = frag_,
-          .specInfo = {
-            .entries = {{.constantId = 0, .size = sizeof(nonLinearColorSpace_)}},
-            .data = &nonLinearColorSpace_,
-            .dataSize = sizeof(nonLinearColorSpace_)},
+          .specInfo = {.entries = {{.constantId = 0, .size = sizeof(nonLinearColorSpace)}},
+                       .data = &nonLinearColorSpace,
+                       .dataSize = sizeof(nonLinearColorSpace)},
           .color = {{
               .format = ctx_.getFormat(desc.color[0].texture),
               .blendEnabled = true,

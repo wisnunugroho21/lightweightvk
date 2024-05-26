@@ -36,7 +36,6 @@ class ImGuiRenderer {
   lvk::Holder<lvk::RenderPipelineHandle> pipeline_;
   lvk::Holder<lvk::TextureHandle> fontTexture_;
   float displayScale_ = 1.0f;
-  uint32_t nonLinearColorSpace_ = 0;
 
   uint32_t frameIndex_ = 0;
 
