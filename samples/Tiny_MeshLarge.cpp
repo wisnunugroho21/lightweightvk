@@ -194,7 +194,6 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint sampler0;
   uint samplerShadow0;
   int bDrawNormals;
-  int bDebugLines;
 };
 
 layout(std430, buffer_reference) readonly buffer PerObject {
@@ -298,7 +297,6 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint sampler0;
   uint samplerShadow0;
   int bDrawNormals;
-  int bDebugLines;
 };
 
 struct Material {
@@ -316,9 +314,8 @@ struct PerVertex {
   vec4 shadowCoords;
 };
 
-layout(push_constant) uniform constants
-{
-	PerFrame perFrame;
+layout(push_constant) uniform constants {
+  PerFrame perFrame;
 } pc;
 
 
@@ -381,17 +378,15 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint sampler0;
   uint samplerShadow0;
   int bDrawNormals;
-  int bDebugLines;
 };
 
 layout(std430, buffer_reference) readonly buffer PerObject {
   mat4 model;
 };
 
-layout(push_constant) uniform constants
-{
-	PerFrame perFrame;
-	PerObject perObject;
+layout(push_constant) uniform constants {
+  PerFrame perFrame;
+  PerObject perObject;
 } pc;
 
 void main() {
@@ -429,7 +424,6 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint sampler0;
   uint samplerShadow0;
   int bDrawNormals;
-  int bDebugLines;
 };
 
 layout(push_constant) uniform constants
@@ -465,7 +459,6 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   uint sampler0;
   uint samplerShadow0;
   int bDrawNormals;
-  int bDebugLines;
 };
 
 layout(push_constant) uniform constants
@@ -576,8 +569,6 @@ struct UniformsPerFrame {
   uint32_t sampler = 0;
   uint32_t samplerShadow = 0;
   int bDrawNormals = 0;
-  int bDebugLines = 0;
-  int padding = 0;
 } perFrame_;
 
 struct UniformsPerObject {
@@ -1307,7 +1298,6 @@ void render(double delta, uint32_t frameIndex) {
       .sampler = sampler_.index(),
       .samplerShadow = samplerShadow_.index(),
       .bDrawNormals = perFrame_.bDrawNormals,
-      .bDebugLines = perFrame_.bDebugLines,
   };
   ctx_->upload(ubPerFrame_[frameIndex], &perFrame_, sizeof(perFrame_));
 
@@ -2213,9 +2203,6 @@ int main(int argc, char* argv[]) {
     }
     if (key == GLFW_KEY_SPACE) {
       positioner_.setUpVector(vec3(0.0f, 1.0f, 0.0f));
-    }
-    if (key == GLFW_KEY_L && pressed) {
-      perFrame_.bDebugLines = (perFrame_.bDebugLines + 1) % 2;
     }
     if (key == GLFW_KEY_F9 && action == GLFW_PRESS) {
       ktxTextureCreateInfo createInfo = {
