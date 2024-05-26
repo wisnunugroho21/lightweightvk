@@ -59,7 +59,7 @@
 #include <GLFW/glfw3.h>
 #endif
 
-constexpr uint32_t kMeshCacheVersion = 0xC0DE0009;
+constexpr uint32_t kMeshCacheVersion = 0xC0DE000A;
 #if !defined(__APPLE__)
 constexpr int kNumSamplesMSAA = 8;
 #else
@@ -171,8 +171,8 @@ void main() {
 
 const char* kCodeVS = R"(
 layout (location=0) in vec3 pos;
-layout (location=1) in vec3 normal;
-layout (location=2) in vec2 uv;
+layout (location=1) in vec2 uv;
+layout (location=2) in uint normal; // Octahedral 16-bit https://www.shadertoy.com/view/llfcRl
 layout (location=3) in uint mtlIndex;
 
 struct Material {
@@ -221,6 +221,21 @@ layout (location=0) out PerVertex vtx;
 layout (location=5) flat out Material mtl;
 //
 
+// https://www.shadertoy.com/view/llfcRl
+vec2 unpackSnorm2x8(uint d) {
+  return vec2(uvec2(d, d >> 8) & 255u) / 127.5 - 1.0;
+}
+vec3 unpackOctahedral16(uint data) {
+  vec2 v = unpackSnorm2x8(data);
+  // https://x.com/Stubbesaurus/status/937994790553227264
+  vec3 n = vec3(v, 1.0 - abs(v.x) - abs(v.y));
+  float t = max(-n.z, 0.0);
+  n.x += (n.x > 0.0) ? -t : t;
+  n.y += (n.y > 0.0) ? -t : t;
+  return normalize(n);
+}
+//
+
 void main() {
   mat4 proj = pc.perFrame.proj;
   mat4 view = pc.perFrame.view;
@@ -231,7 +246,7 @@ void main() {
 
   // Compute the normal in world-space
   mat3 norm_matrix = transpose(inverse(mat3(model)));
-  vtx.normal = normalize(norm_matrix * normal);
+  vtx.normal = normalize(norm_matrix * unpackOctahedral16(normal));
   vtx.uv = uv;
   vtx.shadowCoords = light * model * vec4(pos, 1.0);
 }
@@ -525,10 +540,28 @@ bool isShadowMapDirty_ = true;
 
 struct VertexData {
   vec3 position;
-  uint32_t normal; // Int_2_10_10_10_REV
   uint32_t uv; // hvec2
+  uint16_t normal; // Octahedral 16-bit https://www.shadertoy.com/view/llfcRl
   uint16_t mtlIndex;
 };
+
+static_assert(sizeof(VertexData) == 5 * sizeof(uint32_t));
+
+vec2 msign(vec2 v) {
+  return vec2(v.x >= 0.0 ? 1.0f : -1.0f, v.y >= 0.0 ? 1.0f : -1.0f);
+}
+
+// https://www.shadertoy.com/view/llfcRl
+uint16_t packSnorm2x8(vec2 v) {
+  glm::uvec2 d = glm::uvec2(round(127.5f + v * 127.5f));
+  return d.x | (d.y << 8u);
+}
+
+// https://www.shadertoy.com/view/llfcRl
+uint16_t packOctahedral16(vec3 n) {
+  n /= (abs(n.x) + abs(n.y) + abs(n.z));
+  return ::packSnorm2x8((n.z >= 0.0) ? vec2(n.x, n.y) : (vec2(1.0) - abs(vec2(n.y, n.x))) * msign(vec2(n)));
+}
 
 std::vector<VertexData> vertexData_;
 std::vector<uint32_t> indexData_;
@@ -859,7 +892,12 @@ bool loadAndCache(const char* cacheFileName) {
 
         LVK_ASSERT(mtlIndex >= 0 && mtlIndex < materials.size());
 
-        vertexData_.push_back({pos, glm::packSnorm3x10_1x2(vec4(normal, 0)), glm::packHalf2x16(uv), (uint16_t)mtlIndex});
+        vertexData_.push_back({
+            .position = pos,
+            .uv = glm::packHalf2x16(uv),
+            .normal = packOctahedral16(normal),
+            .mtlIndex = (uint16_t)mtlIndex,
+        });
       }
       index_offset += 3;
     }
@@ -1007,8 +1045,8 @@ void createPipelines() {
       .attributes =
           {
               {.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(VertexData, position)},
-              {.location = 1, .format = lvk::VertexFormat::Int_2_10_10_10_REV, .offset = offsetof(VertexData, normal)},
-              {.location = 2, .format = lvk::VertexFormat::HalfFloat2, .offset = offsetof(VertexData, uv)},
+              {.location = 1, .format = lvk::VertexFormat::HalfFloat2, .offset = offsetof(VertexData, uv)},
+              {.location = 2, .format = lvk::VertexFormat::UShort1, .offset = offsetof(VertexData, normal)},
               {.location = 3, .format = lvk::VertexFormat::UShort1, .offset = offsetof(VertexData, mtlIndex)},
           },
       .inputBindings = {{.stride = sizeof(VertexData)}},
