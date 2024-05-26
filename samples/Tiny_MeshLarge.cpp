@@ -205,11 +205,10 @@ layout(std430, buffer_reference) readonly buffer Materials {
   Material mtl[];
 };
 
-layout(push_constant) uniform constants
-{
-	PerFrame perFrame;
-   PerObject perObject;
-   Materials materials;
+layout(push_constant) uniform constants {
+  PerFrame perFrame;
+  PerObject perObject;
+  Materials materials;
 } pc;
 
 // output
@@ -528,12 +527,11 @@ struct VertexData {
   vec3 position;
   uint32_t normal; // Int_2_10_10_10_REV
   uint32_t uv; // hvec2
-  uint32_t mtlIndex;
+  uint16_t mtlIndex;
 };
 
 std::vector<VertexData> vertexData_;
 std::vector<uint32_t> indexData_;
-std::vector<uint32_t> shapeVertexCnt_;
 
 struct UniformsPerFrame {
   mat4 proj;
@@ -832,10 +830,6 @@ bool loadAndCache(const char* cacheFileName) {
   }
 
   // loop over shapes as described in https://github.com/tinyobjloader/tinyobjloader
-  std::vector<std::vector<VertexData>> resplitShapes;
-  std::vector<VertexData> shapeData;
-  resplitShapes.resize(materials.size());
-  int prevIndex = shapes[0].mesh.material_ids[0];
   for (size_t s = 0; s < shapes.size(); s++) {
     size_t index_offset = 0;
     for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
@@ -865,22 +859,10 @@ bool loadAndCache(const char* cacheFileName) {
 
         LVK_ASSERT(mtlIndex >= 0 && mtlIndex < materials.size());
 
-        if (prevIndex != mtlIndex) {
-          resplitShapes[prevIndex].insert(resplitShapes[prevIndex].end(), shapeData.begin(), shapeData.end());
-          shapeData.clear();
-          prevIndex = mtlIndex;
-        }
-        vertexData_.push_back({pos, glm::packSnorm3x10_1x2(vec4(normal, 0)), glm::packHalf2x16(uv), (uint32_t)mtlIndex});
-        shapeData.push_back({pos, glm::packSnorm3x10_1x2(vec4(normal, 0)), glm::packHalf2x16(uv), (uint32_t)mtlIndex});
+        vertexData_.push_back({pos, glm::packSnorm3x10_1x2(vec4(normal, 0)), glm::packHalf2x16(uv), (uint16_t)mtlIndex});
       }
       index_offset += 3;
     }
-  }
-  resplitShapes[prevIndex].insert(resplitShapes[prevIndex].end(), shapeData.begin(), shapeData.end());
-  shapeData.clear();
-  for (auto shape : resplitShapes) {
-    shapeData.insert(shapeData.end(), shape.begin(), shape.end());
-    shapeVertexCnt_.emplace_back((uint32_t)shape.size());
   }
 
   // repack the mesh as described in https://github.com/zeux/meshoptimizer
@@ -939,12 +921,6 @@ bool loadAndCache(const char* cacheFileName) {
   fwrite(cachedMaterials_.data(), sizeof(CachedMaterial), numMaterials, cacheFile);
   fwrite(vertexData_.data(), sizeof(VertexData), numVertices, cacheFile);
   fwrite(indexData_.data(), sizeof(uint32_t), numIndices, cacheFile);
-  const uint32_t numShapes = (uint32_t)shapeData.size();
-  fwrite(&numShapes, sizeof(numShapes), 1, cacheFile);
-  fwrite(shapeData.data(), sizeof(VertexData), numShapes, cacheFile);
-  const uint32_t numShapeVertices = (uint32_t)shapeVertexCnt_.size();
-  fwrite(&numShapeVertices, sizeof(numShapeVertices), 1, cacheFile);
-  fwrite(shapeVertexCnt_.data(), sizeof(uint32_t), numShapeVertices, cacheFile);
   return fclose(cacheFile) == 0;
 }
 
@@ -1033,7 +1009,7 @@ void createPipelines() {
               {.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(VertexData, position)},
               {.location = 1, .format = lvk::VertexFormat::Int_2_10_10_10_REV, .offset = offsetof(VertexData, normal)},
               {.location = 2, .format = lvk::VertexFormat::HalfFloat2, .offset = offsetof(VertexData, uv)},
-              {.location = 3, .format = lvk::VertexFormat::UInt1, .offset = offsetof(VertexData, mtlIndex)},
+              {.location = 3, .format = lvk::VertexFormat::UShort1, .offset = offsetof(VertexData, mtlIndex)},
           },
       .inputBindings = {{.stride = sizeof(VertexData)}},
   };
