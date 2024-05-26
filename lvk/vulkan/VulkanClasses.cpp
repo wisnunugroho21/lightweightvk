@@ -3619,7 +3619,16 @@ lvk::Holder<lvk::ComputePipelineHandle> lvk::VulkanContext::createComputePipelin
     return {};
   }
 
-  return {this, computePipelinesPool_.create(lvk::ComputePipelineState{desc})};
+  lvk::ComputePipelineState cps{desc};
+
+  if (desc.specInfo.data && desc.specInfo.dataSize) {
+    // copy into a local storage
+    cps.specConstantDataStorage_ = malloc(desc.specInfo.dataSize);
+    memcpy(cps.specConstantDataStorage_, desc.specInfo.data, desc.specInfo.dataSize);
+    cps.desc_.specInfo.data = cps.specConstantDataStorage_;
+  }
+
+  return {this, computePipelinesPool_.create(std::move(cps))};
 }
 
 lvk::Holder<lvk::RenderPipelineHandle> lvk::VulkanContext::createRenderPipeline(const RenderPipelineDesc& desc, Result* outResult) {
@@ -3663,6 +3672,13 @@ lvk::Holder<lvk::RenderPipelineHandle> lvk::VulkanContext::createRenderPipeline(
     }
   }
 
+  if (desc.specInfo.data && desc.specInfo.dataSize) {
+    // copy into a local storage
+    rps.specConstantDataStorage_ = malloc(desc.specInfo.dataSize);
+    memcpy(rps.specConstantDataStorage_, desc.specInfo.data, desc.specInfo.dataSize);
+    rps.desc_.specInfo.data = rps.specConstantDataStorage_;
+  }
+
   return {this, renderPipelinesPool_.create(std::move(rps))};
 }
 
@@ -3672,6 +3688,8 @@ void lvk::VulkanContext::destroy(lvk::ComputePipelineHandle handle) {
   if (!cps) {
     return;
   }
+
+  free(cps->specConstantDataStorage_);
 
   deferredTask(
       std::packaged_task<void()>([device = getVkDevice(), pipeline = cps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
@@ -3687,6 +3705,8 @@ void lvk::VulkanContext::destroy(lvk::RenderPipelineHandle handle) {
   if (!rps) {
     return;
   }
+
+  free(rps->specConstantDataStorage_);
 
   deferredTask(
       std::packaged_task<void()>([device = getVkDevice(), pipeline = rps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));

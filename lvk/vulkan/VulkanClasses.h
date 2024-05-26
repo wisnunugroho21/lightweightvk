@@ -205,6 +205,8 @@ struct RenderPipelineState final {
   VkShaderStageFlags shaderStageFlags_ = 0;
   VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
+
+  void* specConstantDataStorage_ = nullptr;
 };
 
 class VulkanPipelineBuilder final {
@@ -276,6 +278,8 @@ struct ComputePipelineState final {
 
   VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline pipeline_ = VK_NULL_HANDLE;
+
+  void* specConstantDataStorage_ = nullptr;
 };
 
 struct ShaderModuleState final {
