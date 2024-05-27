@@ -752,6 +752,7 @@ struct TextureDesc {
   ComponentMapping swizzle = {};
   const void* data = nullptr;
   uint32_t dataNumMipLevels = 1; // how many mip-levels we want to upload
+  bool generateMipmaps = false; // generate mip-levels immediately, valid only with non-null data
   const char* debugName = "";
 };
 
@@ -888,7 +889,6 @@ class IContext {
   // `data` contains mip-levels and layers as in https://registry.khronos.org/KTX/specs/1.0/ktxspec.v1.html
   virtual Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data) = 0;
   virtual Result download(TextureHandle handle, const TextureRangeDesc& range, void* outData) = 0;
-  virtual void generateMipmap(TextureHandle handle) const = 0;
   [[nodiscard]] virtual Dimensions getDimensions(TextureHandle handle) const = 0;
   [[nodiscard]] virtual Format getFormat(TextureHandle handle) const = 0;
 #pragma endregion

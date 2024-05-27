@@ -464,7 +464,6 @@ class VulkanContext final : public IContext {
   Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data) override;
   Result download(TextureHandle handle, const TextureRangeDesc& range, void* outData) override;
   Dimensions getDimensions(TextureHandle handle) const override;
-  void generateMipmap(TextureHandle handle) const override;
   Format getFormat(TextureHandle handle) const override;
 
   TextureHandle getCurrentSwapchainTexture() override;
@@ -535,6 +534,7 @@ class VulkanContext final : public IContext {
   void querySurfaceCapabilities();
   void processDeferredTasks() const;
   void waitDeferredTasks();
+  void generateMipmap(TextureHandle handle) const;
   lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers);
   ShaderModuleState createShaderModuleFromSPIRV(const void* spirv, size_t numBytes, const char* debugName, Result* outResult) const;
   ShaderModuleState createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;

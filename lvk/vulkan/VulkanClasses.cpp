@@ -3368,6 +3368,9 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
       Result::setResult(outResult, res);
       return {};
     }
+    if (desc.generateMipmaps) {
+      this->generateMipmap(handle);
+    }
   }
 
   Result::setResult(outResult, Result());

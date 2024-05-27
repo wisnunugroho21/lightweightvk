@@ -1342,8 +1342,8 @@ void render(double delta, uint32_t frameIndex) {
     }
     buffer.cmdEndRendering();
     buffer.transitionToShaderReadOnly(fbShadowMap_.depthStencil.texture);
+    buffer.cmdGenerateMipmap(fbShadowMap_.depthStencil.texture);
     ctx_->submit(buffer);
-    ctx_->generateMipmap(fbShadowMap_.depthStencil.texture);
 
     isShadowMapDirty_ = false;
   }
@@ -1673,23 +1673,18 @@ void loadCubemapTexture(const std::string& fileNameKTX, lvk::Holder<lvk::Texture
   const uint32_t height = texture->baseHeight;
 
   if (tex.empty()) {
-    tex = ctx_->createTexture(
-        {
-            .type = lvk::TextureType_Cube,
-            .format = ktx2iglTextureFormat(texture->glInternalformat),
-            .dimensions = {width, height},
-            .usage = lvk::TextureUsageBits_Sampled,
-            .numMipLevels = lvk::calcNumMipLevels(width, height),
-            .data = texture->pData,
-            // if compression is enabled, upload all mip-levels
-            .dataNumMipLevels = kEnableCompression ? lvk::calcNumMipLevels(width, height) : 1u,
-            .debugName = fileNameKTX.c_str(),
-        },
-        nullptr);
-  }
-
-  if (!kEnableCompression) {
-     ctx_->generateMipmap(tex);
+    tex = ctx_->createTexture({
+        .type = lvk::TextureType_Cube,
+        .format = ktx2iglTextureFormat(texture->glInternalformat),
+        .dimensions = {width, height},
+        .usage = lvk::TextureUsageBits_Sampled,
+        .numMipLevels = lvk::calcNumMipLevels(width, height),
+        .data = texture->pData,
+        // if compression is enabled, upload all mip-levels
+        .dataNumMipLevels = kEnableCompression ? lvk::calcNumMipLevels(width, height) : 1u,
+        .generateMipmaps = !kEnableCompression,
+        .debugName = fileNameKTX.c_str(),
+    });
   }
 }
 
@@ -1885,29 +1880,26 @@ lvk::TextureHandle createTexture(const LoadedImage& img) {
       ktxTexture_Destroy(ktxTexture(texture));
   };
 
-  lvk::Holder<lvk::TextureHandle> tex = ctx_->createTexture(
-      {
-          .type = lvk::TextureType_2D,
-          .format = formatFromChannels(img.channels),
-          .dimensions = {img.w, img.h},
-          .usage = lvk::TextureUsageBits_Sampled,
-          .numMipLevels = lvk::calcNumMipLevels(img.w, img.h),
-          .swizzle = (img.channels == 1) ? lvk::ComponentMapping{lvk::Swizzle_R, lvk::Swizzle_R, lvk::Swizzle_R, lvk::Swizzle_R}
-                                         : lvk::ComponentMapping{},
-          .data = initialData,
-          .dataNumMipLevels = initialDataNumMipLevels,
-          .debugName = img.debugName.c_str(),
-      },
-      nullptr);
-
   // No mip-maps come from files on Apple and Android platforms, we need to generate them.
 #if defined(__APPLE__) || defined(ANDROID)
-  ctx_->generateMipmap(tex);
+  const bool generateMipmaps = true;
 #else
-  if (!hasCompressedTexture) {
-    ctx_->generateMipmap(tex);
-  }
+  const bool generateMipmaps = !hasCompressedTexture;
 #endif
+
+  lvk::Holder<lvk::TextureHandle> tex = ctx_->createTexture({
+      .type = lvk::TextureType_2D,
+      .format = formatFromChannels(img.channels),
+      .dimensions = {img.w, img.h},
+      .usage = lvk::TextureUsageBits_Sampled,
+      .numMipLevels = lvk::calcNumMipLevels(img.w, img.h),
+      .swizzle = (img.channels == 1) ? lvk::ComponentMapping{lvk::Swizzle_R, lvk::Swizzle_R, lvk::Swizzle_R, lvk::Swizzle_R}
+                                     : lvk::ComponentMapping{},
+      .data = initialData,
+      .dataNumMipLevels = initialDataNumMipLevels,
+      .generateMipmaps = generateMipmaps,
+      .debugName = img.debugName.c_str(),
+  });
 
   lvk::TextureHandle handle = tex;
 
