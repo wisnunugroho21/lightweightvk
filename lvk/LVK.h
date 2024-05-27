@@ -822,6 +822,7 @@ class ICommandBuffer {
                             const Offset3D& dstOffset = {},
                             const TextureLayers& srcLayers = {},
                             const TextureLayers& dstLayers = {}) = 0;
+  virtual void cmdGenerateMipmap(TextureHandle handle) = 0;
 };
 
 struct SubmitHandle {

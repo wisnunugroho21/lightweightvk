@@ -2406,6 +2406,22 @@ void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
       wrapper_->cmdBuf_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, rangeDst);
 }
 
+void lvk::CommandBuffer::cmdGenerateMipmap(TextureHandle handle) {
+  if (handle.empty()) {
+    return;
+  }
+
+  const lvk::VulkanImage* tex = ctx_->texturesPool_.get(handle);
+
+  if (tex->numLevels_ <= 1) {
+    return;
+  }
+
+  LVK_ASSERT(tex->vkImageLayout_ != VK_IMAGE_LAYOUT_UNDEFINED);
+
+  tex->generateMipmap(wrapper_->cmdBuf_);
+}
+
 lvk::VulkanStagingDevice::VulkanStagingDevice(VulkanContext& ctx) : ctx_(ctx) {
   LVK_PROFILER_FUNCTION();
 

@@ -349,6 +349,7 @@ class CommandBuffer final : public ICommandBuffer {
                     const Offset3D& dstOffset,
                     const TextureLayers& srcLayers,
                     const TextureLayers& dstLayers) override;
+  void cmdGenerateMipmap(TextureHandle handle) override;
 
   VkCommandBuffer getVkCommandBuffer() const {
     return wrapper_ ? wrapper_->cmdBuf_ : VK_NULL_HANDLE;
