@@ -2363,15 +2363,26 @@ void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
       .layerCount = dstLayers.numLayers,
   };
 
-  const VkImageLayout oldLayout = imgSrc->vkImageLayout_;
+  LVK_ASSERT(imgSrc->vkImageLayout_ != VK_IMAGE_LAYOUT_UNDEFINED);
 
-  imgSrc->transitionLayout(wrapper_->cmdBuf_,
-                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                           VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                           VK_PIPELINE_STAGE_TRANSFER_BIT,
-                           rangeSrc);
-  imgDst->transitionLayout(
-      wrapper_->cmdBuf_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, rangeDst);
+  lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
+                          imgSrc->vkImage_,
+                          VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                          VK_ACCESS_TRANSFER_READ_BIT,
+                          imgSrc->vkImageLayout_,
+                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                          rangeSrc);
+  lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
+                          imgDst->vkImage_,
+                          0,
+                          VK_ACCESS_TRANSFER_WRITE_BIT,
+                          VK_IMAGE_LAYOUT_UNDEFINED,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                          rangeDst);
 
   const VkImageCopy region = {
       .srcSubresource =
@@ -2401,9 +2412,29 @@ void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
                  1,
                  &region);
 
-  imgSrc->transitionLayout(wrapper_->cmdBuf_, oldLayout, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, rangeSrc);
-  imgDst->transitionLayout(
-      wrapper_->cmdBuf_, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, rangeDst);
+  lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
+                          imgSrc->vkImage_,
+                          VK_ACCESS_TRANSFER_READ_BIT,
+                          0,
+                          VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                          imgSrc->vkImageLayout_,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                          rangeSrc);
+
+  const VkImageLayout newLayout = imgDst->vkImageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL
+                                                                                      : imgDst->vkImageLayout_;
+
+  lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
+                          imgDst->vkImage_,
+                          VK_ACCESS_TRANSFER_WRITE_BIT,
+                          0,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          newLayout,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                          rangeSrc);
+  imgDst->vkImageLayout_ = newLayout;
 }
 
 void lvk::CommandBuffer::cmdGenerateMipmap(TextureHandle handle) {
