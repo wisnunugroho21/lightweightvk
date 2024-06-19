@@ -4196,6 +4196,9 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
       int textureBindlessQueryLevels2D(uint textureid) {
         return textureQueryLevels(nonuniformEXT(kTextures2D[textureid]));
       }
+      int textureBindlessQueryLevelsCube(uint textureid) {
+        return textureQueryLevels(nonuniformEXT(kTexturesCube[textureid]));
+      }
       )";
     }
     sourcePatched += source;
