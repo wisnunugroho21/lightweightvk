@@ -42,13 +42,14 @@ namespace {
 struct TextureFormatProperties {
   const lvk::Format format = lvk::Format_Invalid;
   const uint8_t bytesPerBlock : 5 = 1;
-  const uint8_t blockWidth : 4 = 1;
-  const uint8_t blockHeight : 4 = 1;
+  const uint8_t blockWidth : 3 = 1;
+  const uint8_t blockHeight : 3 = 1;
   const uint8_t minBlocksX : 2 = 1;
   const uint8_t minBlocksY : 2 = 1;
   const bool depth : 1 = false;
   const bool stencil : 1 = false;
   const bool compressed : 1 = false;
+  const uint8_t numPlanes : 2 = 1;
 };
 
 #define PROPS(fmt, bpb, ...) \
@@ -81,6 +82,8 @@ static constexpr TextureFormatProperties properties[] = {
     PROPS(Z_F32, 4, .depth = true),
     PROPS(Z_UN24_S_UI8, 4, .depth = true, .stencil = true),
     PROPS(Z_F32_S_UI8, 5, .depth = true, .stencil = true),
+    PROPS(YUV_NV12, 24, .blockWidth = 4, .blockHeight = 4, .compressed = true, .numPlanes = 2), // Subsampled 420
+    PROPS(YUV_420p, 24, .blockWidth = 4, .blockHeight = 4, .compressed = true, .numPlanes = 3), // Subsampled 420
 };
 
 bool initVulkanContextWithSwapchain(std::unique_ptr<lvk::VulkanContext>& ctx,
@@ -128,7 +131,7 @@ void* createCocoaWindowView(GLFWwindow* window);
 #endif
 
 static_assert(sizeof(TextureFormatProperties) <= sizeof(uint32_t));
-static_assert(LVK_ARRAY_NUM_ELEMENTS(properties) == lvk::Format_Z_F32_S_UI8 + 1);
+static_assert(LVK_ARRAY_NUM_ELEMENTS(properties) == lvk::Format_YUV_420p + 1);
 
 bool lvk::isDepthOrStencilFormat(lvk::Format format) {
   return properties[format].depth || properties[format].stencil;
@@ -173,7 +176,7 @@ uint32_t lvk::getTextureBytesPerLayer(uint32_t width, uint32_t height, lvk::Form
   const uint32_t levelWidth = std::max(width >> level, 1u);
   const uint32_t levelHeight = std::max(height >> level, 1u);
 
-  const auto props = properties[format];
+  const TextureFormatProperties props = properties[format];
 
   if (!props.compressed) {
     return props.bytesPerBlock * levelWidth * levelHeight;
