@@ -137,6 +137,10 @@ bool lvk::isDepthOrStencilFormat(lvk::Format format) {
   return properties[format].depth || properties[format].stencil;
 }
 
+uint32_t lvk::getNumImagePlanes(lvk::Format format) {
+  return properties[format].numPlanes;
+}
+
 uint32_t lvk::getVertexFormatSize(lvk::VertexFormat format) {
   // clang-format off
 #define SIZE4(LVKBaseType, BaseType)           \
@@ -187,6 +191,22 @@ uint32_t lvk::getTextureBytesPerLayer(uint32_t width, uint32_t height, lvk::Form
   const uint32_t widthInBlocks = (levelWidth + props.blockWidth - 1) / props.blockWidth;
   const uint32_t heightInBlocks = (levelHeight + props.blockHeight - 1) / props.blockHeight;
   return widthInBlocks * heightInBlocks * props.bytesPerBlock;
+}
+
+uint32_t lvk::getTextureBytesPerPlane(uint32_t width, uint32_t height, lvk::Format format, uint32_t plane) {
+  const TextureFormatProperties props = properties[format];
+
+  LVK_ASSERT(plane < props.numPlanes);
+
+  switch (format) {
+  case Format_YUV_NV12:
+    return width * height / (plane + 1);
+  case Format_YUV_420p:
+    return width * height / (plane ? 4 : 1);
+  default:;
+  }
+
+  return getTextureBytesPerLayer(width, height, format, 0);
 }
 
 uint32_t lvk::calcNumMipLevels(uint32_t width, uint32_t height) {

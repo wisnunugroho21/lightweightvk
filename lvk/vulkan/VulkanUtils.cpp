@@ -837,6 +837,36 @@ uint32_t lvk::getBytesPerPixel(VkFormat format) {
   return 1;
 }
 
+uint32_t lvk::getNumImagePlanes(VkFormat format) {
+  switch (format) {
+  case VK_FORMAT_UNDEFINED:
+    return 0;
+  case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+  case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+  case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
+  case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+  case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+  case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16:
+  case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+  case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+  case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
+    return 3;
+  case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+  case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+  case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+  case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+  case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+  case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
+  case VK_FORMAT_G8_B8R8_2PLANE_444_UNORM:
+  case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_444_UNORM_3PACK16:
+  case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_444_UNORM_3PACK16:
+  case VK_FORMAT_G16_B16R16_2PLANE_444_UNORM:
+    return 2;
+  default:
+    return 1;
+  }
+}
+
 VkCompareOp lvk::compareOpToVkCompareOp(lvk::CompareOp func) {
   switch (func) {
   case lvk::CompareOp_Never:
@@ -858,4 +888,21 @@ VkCompareOp lvk::compareOpToVkCompareOp(lvk::CompareOp func) {
   }
   LVK_ASSERT_MSG(false, "CompareFunction value not handled: %d", (int)func);
   return VK_COMPARE_OP_ALWAYS;
+}
+
+VkExtent2D lvk::getImagePlaneExtent(VkExtent2D plane0, lvk::Format format, uint32_t plane) {
+  switch (format) {
+  case Format_YUV_NV12:
+    return VkExtent2D{
+        .width = plane0.width >> plane,
+        .height = plane0.height >> plane,
+    };
+  case Format_YUV_420p:
+    return VkExtent2D{
+        .width = plane0.width >> (plane ? 1 : 0),
+        .height = plane0.height >> (plane ? 1 : 0),
+    };
+  default:;
+  }
+  return plane0;
 }
