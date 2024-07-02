@@ -677,6 +677,12 @@ struct VulkanContextImpl final {
   lvk::CommandBuffer currentCommandBuffer_;
 
   mutable std::deque<DeferredTask> deferredTasks_;
+
+  struct YcbcrConversionData {
+    VkSamplerYcbcrConversionInfo info;
+    lvk::Holder<SamplerHandle> sampler;
+  };
+  YcbcrConversionData ycbcrConversionData_[256]; // indexed by lvk::Format
 };
 
 } // namespace lvk
@@ -2984,6 +2990,13 @@ lvk::VulkanContext::~VulkanContext() {
 
   destroy(dummyTexture_);
 
+  for (auto& data : pimpl_->ycbcrConversionData_) {
+    if (data.info.conversion != VK_NULL_HANDLE) {
+      vkDestroySamplerYcbcrConversion(vkDevice_, data.info.conversion, nullptr);
+      data.sampler.reset();
+    }
+  }
+
   if (shaderModulesPool_.numObjects()) {
     LLOGW("Leaked %u shader modules\n", shaderModulesPool_.numObjects());
   }
@@ -3481,6 +3494,95 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   Result::setResult(outResult, Result());
 
   return {this, handle};
+}
+
+VkSampler lvk::VulkanContext::getOrCreateYcbcrSampler(lvk::Format format) {
+  LVK_ASSERT(format < LVK_ARRAY_NUM_ELEMENTS(pimpl_->ycbcrConversionData_));
+
+  const VkSamplerYcbcrConversionInfo* info = getOrCreateYcbcrConversionInfo(format);
+
+  if (!info) {
+    return VK_NULL_HANDLE;
+  }
+
+  return *samplersPool_.get(pimpl_->ycbcrConversionData_[format].sampler);
+}
+
+const VkSamplerYcbcrConversionInfo* lvk::VulkanContext::getOrCreateYcbcrConversionInfo(lvk::Format format) {
+  LVK_ASSERT(format < LVK_ARRAY_NUM_ELEMENTS(pimpl_->ycbcrConversionData_));
+
+  if (pimpl_->ycbcrConversionData_[format].info.sType) {
+    return &pimpl_->ycbcrConversionData_[format].info;
+  }
+
+  if (!LVK_VERIFY(vkFeatures11_.samplerYcbcrConversion)) {
+    LVK_ASSERT_MSG(false, "Ycbcr samplers are not supported");
+    return nullptr;
+  }
+
+  const VkFormat vkFormat = lvk::formatToVkFormat(format);
+
+  VkFormatProperties props;
+  vkGetPhysicalDeviceFormatProperties(getVkPhysicalDevice(), vkFormat, &props);
+
+  const bool cosited = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT) != 0;
+  const bool midpoint = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT) != 0;
+
+  if (!LVK_VERIFY(cosited || midpoint)) {
+    LVK_ASSERT_MSG(cosited || midpoint, "Unsupported Ycbcr feature");
+    return nullptr;
+  }
+
+  const VkSamplerYcbcrConversionCreateInfo ci = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO,
+      .format = vkFormat,
+      .ycbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
+      .ycbcrRange = VK_SAMPLER_YCBCR_RANGE_ITU_FULL,
+      .components =
+          {
+              VK_COMPONENT_SWIZZLE_IDENTITY,
+              VK_COMPONENT_SWIZZLE_IDENTITY,
+              VK_COMPONENT_SWIZZLE_IDENTITY,
+              VK_COMPONENT_SWIZZLE_IDENTITY,
+          },
+      .xChromaOffset = midpoint ? VK_CHROMA_LOCATION_MIDPOINT : VK_CHROMA_LOCATION_COSITED_EVEN,
+      .yChromaOffset = midpoint ? VK_CHROMA_LOCATION_MIDPOINT : VK_CHROMA_LOCATION_COSITED_EVEN,
+      .chromaFilter = VK_FILTER_LINEAR,
+      .forceExplicitReconstruction = VK_FALSE,
+  };
+
+  VkSamplerYcbcrConversionInfo info = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO,
+      .pNext = nullptr,
+  };
+  vkCreateSamplerYcbcrConversion(vkDevice_, &ci, nullptr, &info.conversion);
+
+  // check properties
+  VkSamplerYcbcrConversionImageFormatProperties samplerYcbcrConversionImageFormatProps = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES,
+  };
+  VkImageFormatProperties2 imageFormatProps = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+      .pNext = &samplerYcbcrConversionImageFormatProps,
+  };
+  const VkPhysicalDeviceImageFormatInfo2 imageFormatInfo = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+      .format = vkFormat,
+      .type = VK_IMAGE_TYPE_2D,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+      .flags = VK_IMAGE_CREATE_DISJOINT_BIT,
+  };
+  vkGetPhysicalDeviceImageFormatProperties2(getVkPhysicalDevice(), &imageFormatInfo, &imageFormatProps);
+
+  LVK_ASSERT(samplerYcbcrConversionImageFormatProps.combinedImageSamplerDescriptorCount <= 3);
+
+  const VkSamplerCreateInfo cinfo = samplerStateDescToVkSamplerCreateInfo({}, getVkPhysicalDeviceProperties().limits);
+
+  pimpl_->ycbcrConversionData_[format].info = info;
+  //pimpl_->ycbcrConversionData_[format].sampler = {this, this->createSampler(cinfo, nullptr, format, "YUV sampler")};
+
+  return &pimpl_->ycbcrConversionData_[format].info;
 }
 
 VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
@@ -4699,6 +4801,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   VkPhysicalDeviceVulkan11Features deviceFeatures11 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
       .storageBuffer16BitAccess = VK_TRUE,
+      .samplerYcbcrConversion = VK_TRUE,
       .shaderDrawParameters = VK_TRUE,
   };
   VkPhysicalDeviceVulkan12Features deviceFeatures12 = {
