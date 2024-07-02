@@ -70,6 +70,11 @@ VkResult allocateMemory(VkPhysicalDevice physDev,
                         const VkMemoryRequirements* memRequirements,
                         VkMemoryPropertyFlags props,
                         VkDeviceMemory* outMemory);
+VkResult allocateMemory2(VkPhysicalDevice physDev,
+                         VkDevice device,
+                         const VkMemoryRequirements2* memRequirements,
+                         VkMemoryPropertyFlags props,
+                         VkDeviceMemory* outMemory);
 
 glslang_resource_t getGlslangResource(const VkPhysicalDeviceLimits& limits);
 Result compileShader(VkShaderStageFlagBits stage,
@@ -78,12 +83,17 @@ Result compileShader(VkShaderStageFlagBits stage,
                      const glslang_resource_t* glslLangResource = nullptr);
 
 VkSamplerCreateInfo samplerStateDescToVkSamplerCreateInfo(const lvk::SamplerStateDesc& desc, const VkPhysicalDeviceLimits& limits);
-VkDescriptorSetLayoutBinding getDSLBinding(uint32_t binding, VkDescriptorType descriptorType, uint32_t descriptorCount);
+VkDescriptorSetLayoutBinding getDSLBinding(uint32_t binding,
+                                           VkDescriptorType descriptorType,
+                                           uint32_t descriptorCount,
+                                           const VkSampler* immutableSamplers = nullptr);
 VkSpecializationInfo getPipelineShaderStageSpecializationInfo(lvk::SpecializationConstantDesc desc, VkSpecializationMapEntry* outEntries);
 VkPipelineShaderStageCreateInfo getPipelineShaderStageCreateInfo(VkShaderStageFlagBits stage,
                                                                  VkShaderModule shaderModule,
                                                                  const char* entryPoint,
                                                                  const VkSpecializationInfo* specializationInfo);
+VkBindImageMemoryInfo getBindImageMemoryInfo(const VkBindImagePlaneMemoryInfo* next, VkImage image, VkDeviceMemory memory);
+
 void imageMemoryBarrier(VkCommandBuffer buffer,
                         VkImage image,
                         VkAccessFlags srcAccessMask,

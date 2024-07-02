@@ -703,6 +703,16 @@ VkSpecializationInfo lvk::getPipelineShaderStageSpecializationInfo(lvk::Speciali
   };
 }
 
+VkBindImageMemoryInfo lvk::getBindImageMemoryInfo(const VkBindImagePlaneMemoryInfo* next, VkImage image, VkDeviceMemory memory) {
+  return VkBindImageMemoryInfo{
+      .sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO,
+      .pNext = next,
+      .image = image,
+      .memory = memory,
+      .memoryOffset = 0,
+  };
+}
+
 VkPipelineShaderStageCreateInfo lvk::getPipelineShaderStageCreateInfo(VkShaderStageFlagBits stage,
                                                                       VkShaderModule shaderModule,
                                                                       const char* entryPoint,
@@ -753,14 +763,38 @@ VkResult lvk::allocateMemory(VkPhysicalDevice physDev,
   return vkAllocateMemory(device, &ai, nullptr, outMemory);
 }
 
-VkDescriptorSetLayoutBinding lvk::getDSLBinding(uint32_t binding, VkDescriptorType descriptorType, uint32_t descriptorCount) {
+VkResult lvk::allocateMemory2(VkPhysicalDevice physDev,
+                              VkDevice device,
+                              const VkMemoryRequirements2* memRequirements,
+                              VkMemoryPropertyFlags props,
+                              VkDeviceMemory* outMemory) {
+  assert(memRequirements);
+
+  const VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+      .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR,
+  };
+  const VkMemoryAllocateInfo ai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &memoryAllocateFlagsInfo,
+      .allocationSize = memRequirements->memoryRequirements.size,
+      .memoryTypeIndex = findMemoryType(physDev, memRequirements->memoryRequirements.memoryTypeBits, props),
+  };
+
+  return vkAllocateMemory(device, &ai, NULL, outMemory);
+}
+
+VkDescriptorSetLayoutBinding lvk::getDSLBinding(uint32_t binding,
+                                                VkDescriptorType descriptorType,
+                                                uint32_t descriptorCount,
+                                                const VkSampler* immutableSamplers) {
   return VkDescriptorSetLayoutBinding{
       .binding = binding,
       .descriptorType = descriptorType,
       .descriptorCount = descriptorCount,
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
                     VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
-      .pImmutableSamplers = nullptr,
+      .pImmutableSamplers = immutableSamplers,
   };
 }
 
