@@ -2580,6 +2580,25 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
 
   uint32_t offset = 0;
 
+  const uint32_t numPlanes = lvk::getNumImagePlanes(image.vkImageFormat_);
+
+  if (numPlanes > 1) {
+    LVK_ASSERT(layer == 0 && baseMipLevel == 0);
+    LVK_ASSERT(numLayers == 1 && numMipLevels == 1);
+    LVK_ASSERT(imageRegion.offset.x == 0 && imageRegion.offset.y == 0);
+    LVK_ASSERT(image.vkType_ == VK_IMAGE_TYPE_2D);
+    LVK_ASSERT(image.vkExtent_.width == imageRegion.extent.width && image.vkExtent_.height == imageRegion.extent.height);
+  }
+
+  VkImageAspectFlags imageAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+  if (numPlanes == 2) {
+    imageAspect = VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT;
+  }
+  if (numPlanes == 3) {
+    imageAspect = VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT;
+  }
+
   // https://registry.khronos.org/KTX/specs/1.0/ktxspec.v1.html
   for (uint32_t mipLevel = 0; mipLevel < numMipLevels; ++mipLevel) {
     for (uint32_t layer = 0; layer != numLayers; layer++) {
@@ -2597,27 +2616,38 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                               VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                               VK_PIPELINE_STAGE_TRANSFER_BIT,
-                              VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, currentMipLevel, 1, layer, 1});
+                              VkImageSubresourceRange{imageAspect, currentMipLevel, 1, layer, 1});
 
 #if LVK_VULKAN_PRINT_COMMANDS
       LLOGL("%p vkCmdCopyBufferToImage()\n", wrapper.cmdBuf_);
 #endif // LVK_VULKAN_PRINT_COMMANDS
       // 2. Copy the pixel data from the staging buffer into the image
-      const VkRect2D region = {
-          .offset = {.x = imageRegion.offset.x >> mipLevel, .y = imageRegion.offset.y >> mipLevel},
-          .extent = {.width = std::max(1u, imageRegion.extent.width >> mipLevel),
-                     .height = std::max(1u, imageRegion.extent.height >> mipLevel)},
-      };
-      const VkBufferImageCopy copy = {
-          // the offset for this level is at the start of all mip-levels plus the size of all previous mip-levels being uploaded
-          .bufferOffset = desc.offset_ + offset,
-          .bufferRowLength = 0,
-          .bufferImageHeight = 0,
-          .imageSubresource = VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, currentMipLevel, layer, 1},
-          .imageOffset = {.x = region.offset.x, .y = region.offset.y, .z = 0},
-          .imageExtent = {.width = region.extent.width, .height = region.extent.height, .depth = 1u},
-      };
-      vkCmdCopyBufferToImage(wrapper.cmdBuf_, stagingBuffer->vkBuffer_, image.vkImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+      uint32_t planeOffset = 0;
+      for (uint32_t plane = 0; plane != numPlanes; plane++) {
+        const VkExtent2D extent = lvk::getImagePlaneExtent(
+            {
+                .width = std::max(1u, imageRegion.extent.width >> mipLevel),
+                .height = std::max(1u, imageRegion.extent.height >> mipLevel),
+            },
+            vkFormatToFormat(format),
+            plane);
+        const VkRect2D region = {
+            .offset = {.x = imageRegion.offset.x >> mipLevel, .y = imageRegion.offset.y >> mipLevel},
+            .extent = extent,
+        };
+        const VkBufferImageCopy copy = {
+            // the offset for this level is at the start of all mip-levels plus the size of all previous mip-levels being uploaded
+            .bufferOffset = desc.offset_ + offset + planeOffset,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource =
+                VkImageSubresourceLayers{numPlanes > 1 ? VK_IMAGE_ASPECT_PLANE_0_BIT << plane : imageAspect, currentMipLevel, layer, 1},
+            .imageOffset = {.x = region.offset.x, .y = region.offset.y, .z = 0},
+            .imageExtent = {.width = region.extent.width, .height = region.extent.height, .depth = 1u},
+        };
+        vkCmdCopyBufferToImage(wrapper.cmdBuf_, stagingBuffer->vkBuffer_, image.vkImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        planeOffset += lvk::getTextureBytesPerPlane(imageRegion.extent.width, imageRegion.extent.height, vkFormatToFormat(format), plane);
+      }
 
       // 3. Transition TRANSFER_DST_OPTIMAL into SHADER_READ_ONLY_OPTIMAL
       lvk::imageMemoryBarrier(wrapper.cmdBuf_,
@@ -2628,7 +2658,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                               VK_PIPELINE_STAGE_TRANSFER_BIT,
                               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                              VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, currentMipLevel, 1, layer, 1});
+                              VkImageSubresourceRange{imageAspect, currentMipLevel, 1, layer, 1});
 
       offset += lvk::getTextureBytesPerLayer(imageRegion.extent.width, imageRegion.extent.height, texFormat, currentMipLevel);
     }
@@ -3301,6 +3331,19 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
       .isStencilFormat_ = VulkanImage::isStencilFormat(vkFormat),
   };
 
+  const uint32_t numPlanes = lvk::getNumImagePlanes(desc.format);
+  const bool isDisjoint = numPlanes > 1;
+
+  if (isDisjoint) {
+    // some constraints for multiplanar image formats
+    LVK_ASSERT(vkImageType == VK_IMAGE_TYPE_2D);
+    LVK_ASSERT(vkSamples == VK_SAMPLE_COUNT_1_BIT);
+    LVK_ASSERT(numLayers == 1);
+    LVK_ASSERT(numLevels == 1);
+    vkCreateFlags |= VK_IMAGE_CREATE_DISJOINT_BIT | VK_IMAGE_CREATE_ALIAS_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    awaitingNewImmutableSamplers_ = true;
+  }
+
   const VkImageCreateInfo ci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .pNext = nullptr,
@@ -3319,7 +3362,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
 
-  if (LVK_VULKAN_USE_VMA) {
+  if (LVK_VULKAN_USE_VMA && numPlanes == 1) {
     VmaAllocationCreateInfo vmaAllocInfo = {
         .usage = memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_AUTO,
     };
@@ -3341,17 +3384,48 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
     VK_ASSERT(vkCreateImage(vkDevice_, &ci, nullptr, &image.vkImage_));
 
     // back the image with some memory
-    {
-      VkMemoryRequirements memRequirements = {};
-      vkGetImageMemoryRequirements(vkDevice_, image.vkImage_, &memRequirements);
+    constexpr uint32_t kNumMaxImagePlanes = LVK_ARRAY_NUM_ELEMENTS(image.vkMemory_);
 
-      VK_ASSERT(lvk::allocateMemory(vkPhysicalDevice_, vkDevice_, &memRequirements, memFlags, &image.vkMemory_));
-      VK_ASSERT(vkBindImageMemory(vkDevice_, image.vkImage_, image.vkMemory_, 0));
+    VkMemoryRequirements2 memRequirements[kNumMaxImagePlanes] = {
+        {.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2},
+        {.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2},
+        {.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2},
+    };
+
+    const VkImagePlaneMemoryRequirementsInfo planes[kNumMaxImagePlanes] = {
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO, .planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT},
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO, .planeAspect = VK_IMAGE_ASPECT_PLANE_1_BIT},
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO, .planeAspect = VK_IMAGE_ASPECT_PLANE_2_BIT},
+    };
+
+    const VkImage img = image.vkImage_;
+
+    const VkImageMemoryRequirementsInfo2 imgRequirements[kNumMaxImagePlanes] = {
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, .pNext = numPlanes > 0 ? &planes[0] : nullptr, .image = img},
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, .pNext = numPlanes > 1 ? &planes[1] : nullptr, .image = img},
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, .pNext = numPlanes > 2 ? &planes[2] : nullptr, .image = img},
+    };
+
+    for (uint32_t p = 0; p != numPlanes; p++) {
+      vkGetImageMemoryRequirements2(vkDevice_, &imgRequirements[p], &memRequirements[p]);
+      VK_ASSERT(lvk::allocateMemory2(vkPhysicalDevice_, vkDevice_, &memRequirements[p], memFlags, &image.vkMemory_[p]));
     }
 
+    const VkBindImagePlaneMemoryInfo bindImagePlaneMemoryInfo[kNumMaxImagePlanes] = {
+        {VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO, nullptr, VK_IMAGE_ASPECT_PLANE_0_BIT},
+        {VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO, nullptr, VK_IMAGE_ASPECT_PLANE_1_BIT},
+        {VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO, nullptr, VK_IMAGE_ASPECT_PLANE_2_BIT},
+    };
+    const VkBindImageMemoryInfo bindInfo[kNumMaxImagePlanes] = {
+        lvk::getBindImageMemoryInfo(isDisjoint ? &bindImagePlaneMemoryInfo[0] : nullptr, img, image.vkMemory_[0]),
+        lvk::getBindImageMemoryInfo(&bindImagePlaneMemoryInfo[1], img, image.vkMemory_[1]),
+        lvk::getBindImageMemoryInfo(&bindImagePlaneMemoryInfo[2], img, image.vkMemory_[2]),
+    };
+    VK_ASSERT(vkBindImageMemory2(vkDevice_, numPlanes, bindInfo));
+
     // handle memory-mapped images
-    if (memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-      VK_ASSERT(vkMapMemory(vkDevice_, image.vkMemory_, 0, VK_WHOLE_SIZE, 0, &image.mappedPtr_));
+    if (memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT && numPlanes == 1) {
+      VK_ASSERT(vkMapMemory(vkDevice_, image.vkMemory_[0], 0, VK_WHOLE_SIZE, 0, &image.mappedPtr_));
     }
   }
 
@@ -3853,7 +3927,7 @@ void lvk::VulkanContext::destroy(lvk::TextureHandle handle) {
     return;
   }
 
-  if (LVK_VULKAN_USE_VMA) {
+  if (LVK_VULKAN_USE_VMA && tex->vkMemory_[1] == VK_NULL_HANDLE) {
     if (tex->mappedPtr_) {
       vmaUnmapMemory((VmaAllocator)getVmaAllocator(), tex->vmaAllocation_);
     }
@@ -3862,12 +3936,22 @@ void lvk::VulkanContext::destroy(lvk::TextureHandle handle) {
     }));
   } else {
     if (tex->mappedPtr_) {
-      vkUnmapMemory(vkDevice_, tex->vkMemory_);
+      vkUnmapMemory(vkDevice_, tex->vkMemory_[0]);
     }
-    deferredTask(std::packaged_task<void()>([device = vkDevice_, image = tex->vkImage_, memory = tex->vkMemory_]() {
+    deferredTask(std::packaged_task<void()>([device = vkDevice_,
+                                             image = tex->vkImage_,
+                                             memory0 = tex->vkMemory_[0],
+                                             memory1 = tex->vkMemory_[1],
+                                             memory2 = tex->vkMemory_[2]]() {
       vkDestroyImage(device, image, nullptr);
-      if (memory != VK_NULL_HANDLE) {
-        vkFreeMemory(device, memory, nullptr);
+      if (memory0 != VK_NULL_HANDLE) {
+        vkFreeMemory(device, memory0, nullptr);
+      }
+      if (memory1 != VK_NULL_HANDLE) {
+        vkFreeMemory(device, memory1, nullptr);
+      }
+      if (memory2 != VK_NULL_HANDLE) {
+        vkFreeMemory(device, memory2, nullptr);
       }
     }));
   }
@@ -5049,6 +5133,8 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
     };
     VK_ASSERT_RETURN(vkAllocateDescriptorSets(vkDevice_, &ai, &vkDSet_));
   }
+
+  awaitingNewImmutableSamplers_ = false;
 
   return Result();
 }

@@ -95,7 +95,7 @@ struct VulkanImage final {
  public:
   VkImage vkImage_ = VK_NULL_HANDLE;
   VkImageUsageFlags vkUsageFlags_ = 0;
-  VkDeviceMemory vkMemory_ = VK_NULL_HANDLE;
+  VkDeviceMemory vkMemory_[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
   VmaAllocation vmaAllocation_ = VK_NULL_HANDLE;
   VkFormatProperties vkFormatProperties_ = {};
   VkExtent3D vkExtent_ = {0, 0, 0};
@@ -593,6 +593,7 @@ class VulkanContext final : public IContext {
 
   // a texture/sampler was created since the last descriptor set update
   mutable bool awaitingCreation_ = false;
+  mutable bool awaitingNewImmutableSamplers_ = false;
 
   lvk::ContextConfig config_;
 
