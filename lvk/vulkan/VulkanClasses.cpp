@@ -683,6 +683,7 @@ struct VulkanContextImpl final {
     lvk::Holder<SamplerHandle> sampler;
   };
   YcbcrConversionData ycbcrConversionData_[256]; // indexed by lvk::Format
+  uint32_t numYcbcrSamplers_ = 0;
 };
 
 } // namespace lvk
@@ -771,11 +772,13 @@ VkImageView lvk::VulkanImage::createImageView(VkDevice device,
                                               uint32_t baseLayer,
                                               uint32_t numLayers,
                                               const VkComponentMapping mapping,
+                                              const VkSamplerYcbcrConversionInfo* ycbcr,
                                               const char* debugName) const {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
 
   const VkImageViewCreateInfo ci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .pNext = ycbcr,
       .image = vkImage_,
       .viewType = type,
       .format = format,
@@ -1148,6 +1151,7 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
                                              0,
                                              1,
                                              {},
+                                             nullptr,
                                              debugNameImageView);
 
     swapchainTextures_[i] = ctx_.texturesPool_.create(std::move(image));
@@ -3193,8 +3197,9 @@ lvk::Holder<lvk::SamplerHandle> lvk::VulkanContext::createSampler(const SamplerS
 
   Result result;
 
-  SamplerHandle handle =
-      createSampler(samplerStateDescToVkSamplerCreateInfo(desc, getVkPhysicalDeviceProperties().limits), &result, desc.debugName);
+  const VkSamplerCreateInfo info = samplerStateDescToVkSamplerCreateInfo(desc, getVkPhysicalDeviceProperties().limits);
+
+  SamplerHandle handle = createSampler(info, &result, Format_Invalid, desc.debugName);
 
   if (!LVK_VERIFY(result.isOk())) {
     Result::setResult(outResult, Result(Result::Code::RuntimeError, "Cannot create Sampler"));
@@ -3465,8 +3470,10 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
       .a = VkComponentSwizzle(desc.swizzle.a),
   };
 
+  const VkSamplerYcbcrConversionInfo* ycbcrInfo = isDisjoint ? getOrCreateYcbcrConversionInfo(desc.format) : nullptr;
+
   image.imageView_ = image.createImageView(
-      vkDevice_, vkImageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, numLayers, mapping, debugNameImageView);
+      vkDevice_, vkImageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, numLayers, mapping, ycbcrInfo, debugNameImageView);
 
   if (!LVK_VERIFY(image.imageView_ != VK_NULL_HANDLE)) {
     Result::setResult(outResult, Result::Code::RuntimeError, "Cannot create VkImageView");
@@ -3580,7 +3587,9 @@ const VkSamplerYcbcrConversionInfo* lvk::VulkanContext::getOrCreateYcbcrConversi
   const VkSamplerCreateInfo cinfo = samplerStateDescToVkSamplerCreateInfo({}, getVkPhysicalDeviceProperties().limits);
 
   pimpl_->ycbcrConversionData_[format].info = info;
-  //pimpl_->ycbcrConversionData_[format].sampler = {this, this->createSampler(cinfo, nullptr, format, "YUV sampler")};
+  pimpl_->ycbcrConversionData_[format].sampler = {this, this->createSampler(cinfo, nullptr, format, "YUV sampler")};
+  pimpl_->numYcbcrSamplers_++;
+  awaitingNewImmutableSamplers_ = true;
 
   return &pimpl_->ycbcrConversionData_[format].info;
 }
@@ -5130,6 +5139,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
           .unnormalizedCoordinates = VK_FALSE,
       },
       nullptr,
+      Format_Invalid,
       "Sampler: default");
 
   growDescriptorPool(currentMaxTextures_, currentMaxSamplers_);
@@ -5480,12 +5490,27 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   awaitingCreation_ = false;
 }
 
-lvk::SamplerHandle lvk::VulkanContext::createSampler(const VkSamplerCreateInfo& ci, lvk::Result* outResult, const char* debugName) {
+lvk::SamplerHandle lvk::VulkanContext::createSampler(const VkSamplerCreateInfo& ci,
+                                                     lvk::Result* outResult,
+                                                     lvk::Format yuvFormat,
+                                                     const char* debugName) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
 
-  VkSampler sampler = VK_NULL_HANDLE;
+  VkSamplerCreateInfo cinfo = ci;
 
-  VK_ASSERT(vkCreateSampler(vkDevice_, &ci, nullptr, &sampler));
+  if (yuvFormat != Format_Invalid) {
+    cinfo.pNext = getOrCreateYcbcrConversionInfo(yuvFormat);
+    // must be CLAMP_TO_EDGE
+    // https://vulkan.lunarg.com/doc/view/1.3.268.0/windows/1.3-extensions/vkspec.html#VUID-VkSamplerCreateInfo-addressModeU-01646
+    cinfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    cinfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    cinfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    cinfo.anisotropyEnable = VK_FALSE;
+    cinfo.unnormalizedCoordinates = VK_FALSE;
+  }
+
+  VkSampler sampler = VK_NULL_HANDLE;
+  VK_ASSERT(vkCreateSampler(vkDevice_, &cinfo, nullptr, &sampler));
   VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_SAMPLER, (uint64_t)sampler, debugName));
 
   SamplerHandle handle = samplersPool_.create(VkSampler(sampler));

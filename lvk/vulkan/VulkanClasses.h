@@ -75,6 +75,7 @@ struct VulkanImage final {
                                                                                 .g = VK_COMPONENT_SWIZZLE_IDENTITY,
                                                                                 .b = VK_COMPONENT_SWIZZLE_IDENTITY,
                                                                                 .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+                                            const VkSamplerYcbcrConversionInfo* ycbcr = nullptr,
                                             const char* debugName = nullptr) const;
 
   void generateMipmap(VkCommandBuffer commandBuffer) const;
@@ -494,7 +495,10 @@ class VulkanContext final : public IContext {
                             VkMemoryPropertyFlags memFlags,
                             lvk::Result* outResult,
                             const char* debugName = nullptr);
-  SamplerHandle createSampler(const VkSamplerCreateInfo& ci, lvk::Result* outResult, const char* debugName = nullptr);
+  SamplerHandle createSampler(const VkSamplerCreateInfo& ci,
+                              lvk::Result* outResult,
+                              lvk::Format yuvFormat = Format_Invalid,
+                              const char* debugName = nullptr);
 
   bool hasSwapchain() const noexcept {
     return swapchain_ != nullptr;
