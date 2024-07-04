@@ -5219,9 +5219,17 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
     const bool isTextureAvailable = (img.vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
     const bool isSampledImage = isTextureAvailable && img.isSampledImage();
     const bool isStorageImage = isTextureAvailable && img.isStorageImage();
-    infoSampledImages.push_back({VK_NULL_HANDLE, isSampledImage ? view : dummyImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+    infoSampledImages.push_back(VkDescriptorImageInfo{
+        .sampler = VK_NULL_HANDLE,
+        .imageView = isSampledImage ? view : dummyImageView,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    });
     LVK_ASSERT(infoSampledImages.back().imageView != VK_NULL_HANDLE);
-    infoStorageImages.push_back({VK_NULL_HANDLE, isStorageImage ? view : dummyImageView, VK_IMAGE_LAYOUT_GENERAL});
+    infoStorageImages.push_back(VkDescriptorImageInfo{
+        .sampler = VK_NULL_HANDLE,
+        .imageView = isStorageImage ? view : dummyImageView,
+        .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
+    });
   }
 
   // 2. Samplers
