@@ -48,7 +48,8 @@ enum Bindings {
   kBinding_Textures = 0,
   kBinding_Samplers = 1,
   kBinding_StorageImages = 2,
-  kBinding_NumBindings = 3,
+  kBinding_YUVImages = 3,
+  kBinding_NumBindings = 4,
 };
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msgSeverity,
@@ -5195,11 +5196,41 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
     deferredTask(std::packaged_task<void()>([device = vkDevice_, dp = vkDPool_]() { vkDestroyDescriptorPool(device, dp, nullptr); }));
   }
 
+  bool hasYUVImages = false;
+
+  // check if we have any YUV images
+  for (const auto& obj : texturesPool_.objects_) {
+    const VulkanImage* img = &obj.obj_;
+    // multisampled images cannot be directly accessed from shaders
+    const bool isTextureAvailable = (img->vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
+    hasYUVImages = isTextureAvailable && img->isSampledImage() && lvk::getNumImagePlanes(img->vkImageFormat_) > 1;
+    if (hasYUVImages) {
+      break;
+    }
+  }
+
+  std::vector<VkSampler> immutableSamplers;
+  const VkSampler* immutableSamplersData = nullptr;
+
+  if (hasYUVImages) {
+    VkSampler dummySampler = samplersPool_.objects_[0].obj_;
+    immutableSamplers.reserve(texturesPool_.objects_.size());
+    for (const auto& obj : texturesPool_.objects_) {
+      const VulkanImage* img = &obj.obj_;
+      // multisampled images cannot be directly accessed from shaders
+      const bool isTextureAvailable = (img->vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
+      const bool isYUVImage = isTextureAvailable && img->isSampledImage() && lvk::getNumImagePlanes(img->vkImageFormat_) > 1;
+      immutableSamplers.push_back(isYUVImage ? getOrCreateYcbcrSampler(vkFormatToFormat(img->vkImageFormat_)) : dummySampler);
+    }
+    immutableSamplersData = immutableSamplers.data();
+  }
+
   // create default descriptor set layout which is going to be shared by graphics pipelines
   const VkDescriptorSetLayoutBinding bindings[kBinding_NumBindings] = {
       lvk::getDSLBinding(kBinding_Textures, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures),
       lvk::getDSLBinding(kBinding_Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers),
       lvk::getDSLBinding(kBinding_StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures),
+      lvk::getDSLBinding(kBinding_YUVImages, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, immutableSamplers.size(), immutableSamplersData),
   };
   const uint32_t flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
                          VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
@@ -5229,6 +5260,7 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextures},
     };
     const VkDescriptorPoolCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -5397,7 +5429,7 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   while (samplersPool_.objects_.size() > newMaxSamplers) {
     newMaxSamplers *= 2;
   }
-  if (newMaxTextures != currentMaxTextures_ || newMaxSamplers != currentMaxSamplers_) {
+  if (newMaxTextures != currentMaxTextures_ || newMaxSamplers != currentMaxSamplers_ || awaitingNewImmutableSamplers_) {
     growDescriptorPool(newMaxTextures, newMaxSamplers);
   }
 
