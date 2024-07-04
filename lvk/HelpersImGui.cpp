@@ -132,6 +132,8 @@ void ImGuiRenderer::updateFont(const char* defaultFontTTF, float fontSizePixels)
   ImFont* font = nullptr;
   if (defaultFontTTF) {
     font = io.Fonts->AddFontFromFileTTF(defaultFontTTF, cfg.SizePixels, &cfg);
+  } else {
+    font = io.Fonts->AddFontDefault(&cfg);
   }
 
   io.Fonts->Flags |= ImFontAtlasFlags_NoPowerOfTwoHeight;
