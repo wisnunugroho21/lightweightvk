@@ -5436,9 +5436,16 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   // 1. Sampled and storage images
   std::vector<VkDescriptorImageInfo> infoSampledImages;
   std::vector<VkDescriptorImageInfo> infoStorageImages;
+  std::vector<VkDescriptorImageInfo> infoYUVImages;
 
   infoSampledImages.reserve(texturesPool_.numObjects());
   infoStorageImages.reserve(texturesPool_.numObjects());
+
+  const bool hasYcbcrSamplers = pimpl_->numYcbcrSamplers_ > 0;
+
+  if (hasYcbcrSamplers) {
+    infoYUVImages.reserve(texturesPool_.numObjects());
+  }
 
   // use the dummy texture to avoid sparse array
   VkImageView dummyImageView = texturesPool_.objects_[0].obj_.imageView_;
@@ -5448,7 +5455,8 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
     const VkImageView view = obj.obj_.imageView_;
     // multisampled images cannot be directly accessed from shaders
     const bool isTextureAvailable = (img.vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
-    const bool isSampledImage = isTextureAvailable && img.isSampledImage();
+    const bool isYUVImage = isTextureAvailable && img.isSampledImage() && lvk::getNumImagePlanes(img.vkImageFormat_) > 1;
+    const bool isSampledImage = isTextureAvailable && img.isSampledImage() && !isYUVImage;
     const bool isStorageImage = isTextureAvailable && img.isStorageImage();
     infoSampledImages.push_back(VkDescriptorImageInfo{
         .sampler = VK_NULL_HANDLE,
@@ -5461,6 +5469,13 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
         .imageView = isStorageImage ? view : dummyImageView,
         .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
     });
+    if (hasYcbcrSamplers) {
+      // we don't need to update this if there're no YUV samplers
+      infoYUVImages.push_back(VkDescriptorImageInfo{
+          .imageView = isYUVImage ? view : dummyImageView,
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      });
+    }
   }
 
   // 2. Samplers
@@ -5507,6 +5522,18 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
         .descriptorCount = (uint32_t)infoStorageImages.size(),
         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
         .pImageInfo = infoStorageImages.data(),
+    };
+  }
+
+  if (!infoYUVImages.empty()) {
+    write[numWrites++] = VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = vkDSet_,
+        .dstBinding = kBinding_YUVImages,
+        .dstArrayElement = 0,
+        .descriptorCount = (uint32_t)infoYUVImages.size(),
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = infoYUVImages.data(),
     };
   }
 
