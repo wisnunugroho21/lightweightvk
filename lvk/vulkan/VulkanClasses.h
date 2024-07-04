@@ -75,6 +75,7 @@ struct VulkanImage final {
                                                                                 .g = VK_COMPONENT_SWIZZLE_IDENTITY,
                                                                                 .b = VK_COMPONENT_SWIZZLE_IDENTITY,
                                                                                 .a = VK_COMPONENT_SWIZZLE_IDENTITY},
+                                            const VkSamplerYcbcrConversionInfo* ycbcr = nullptr,
                                             const char* debugName = nullptr) const;
 
   void generateMipmap(VkCommandBuffer commandBuffer) const;
@@ -95,7 +96,7 @@ struct VulkanImage final {
  public:
   VkImage vkImage_ = VK_NULL_HANDLE;
   VkImageUsageFlags vkUsageFlags_ = 0;
-  VkDeviceMemory vkMemory_ = VK_NULL_HANDLE;
+  VkDeviceMemory vkMemory_[3] = {VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
   VmaAllocation vmaAllocation_ = VK_NULL_HANDLE;
   VkFormatProperties vkFormatProperties_ = {};
   VkExtent3D vkExtent_ = {0, 0, 0};
@@ -494,7 +495,10 @@ class VulkanContext final : public IContext {
                             VkMemoryPropertyFlags memFlags,
                             lvk::Result* outResult,
                             const char* debugName = nullptr);
-  SamplerHandle createSampler(const VkSamplerCreateInfo& ci, lvk::Result* outResult, const char* debugName = nullptr);
+  SamplerHandle createSampler(const VkSamplerCreateInfo& ci,
+                              lvk::Result* outResult,
+                              lvk::Format yuvFormat = Format_Invalid,
+                              const char* debugName = nullptr);
 
   bool hasSwapchain() const noexcept {
     return swapchain_ != nullptr;
@@ -540,6 +544,8 @@ class VulkanContext final : public IContext {
   lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers);
   ShaderModuleState createShaderModuleFromSPIRV(const void* spirv, size_t numBytes, const char* debugName, Result* outResult) const;
   ShaderModuleState createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
+  const VkSamplerYcbcrConversionInfo* getOrCreateYcbcrConversionInfo(lvk::Format format);
+  VkSampler getOrCreateYcbcrSampler(lvk::Format format);
 
  private:
   friend class lvk::VulkanSwapchain;
@@ -593,6 +599,7 @@ class VulkanContext final : public IContext {
 
   // a texture/sampler was created since the last descriptor set update
   mutable bool awaitingCreation_ = false;
+  mutable bool awaitingNewImmutableSamplers_ = false;
 
   lvk::ContextConfig config_;
 

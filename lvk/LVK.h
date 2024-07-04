@@ -485,6 +485,9 @@ enum Format : uint8_t {
   Format_Z_F32,
   Format_Z_UN24_S_UI8,
   Format_Z_F32_S_UI8,
+
+  Format_YUV_NV12,
+  Format_YUV_420p,
 };
 
 enum LoadOp : uint8_t {
@@ -934,8 +937,10 @@ struct ContextConfig {
 };
 
 [[nodiscard]] bool isDepthOrStencilFormat(lvk::Format format);
+[[nodiscard]] uint32_t getNumImagePlanes(lvk::Format format);
 [[nodiscard]] uint32_t calcNumMipLevels(uint32_t width, uint32_t height);
 [[nodiscard]] uint32_t getTextureBytesPerLayer(uint32_t width, uint32_t height, lvk::Format format, uint32_t level);
+[[nodiscard]] uint32_t getTextureBytesPerPlane(uint32_t width, uint32_t height, lvk::Format format, uint32_t plane);
 [[nodiscard]] uint32_t getVertexFormatSize(lvk::VertexFormat format);
 void logShaderSource(const char* text);
 

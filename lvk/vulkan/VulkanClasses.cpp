@@ -48,7 +48,8 @@ enum Bindings {
   kBinding_Textures = 0,
   kBinding_Samplers = 1,
   kBinding_StorageImages = 2,
-  kBinding_NumBindings = 3,
+  kBinding_YUVImages = 3,
+  kBinding_NumBindings = 4,
 };
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msgSeverity,
@@ -677,6 +678,13 @@ struct VulkanContextImpl final {
   lvk::CommandBuffer currentCommandBuffer_;
 
   mutable std::deque<DeferredTask> deferredTasks_;
+
+  struct YcbcrConversionData {
+    VkSamplerYcbcrConversionInfo info;
+    lvk::Holder<SamplerHandle> sampler;
+  };
+  YcbcrConversionData ycbcrConversionData_[256]; // indexed by lvk::Format
+  uint32_t numYcbcrSamplers_ = 0;
 };
 
 } // namespace lvk
@@ -765,11 +773,13 @@ VkImageView lvk::VulkanImage::createImageView(VkDevice device,
                                               uint32_t baseLayer,
                                               uint32_t numLayers,
                                               const VkComponentMapping mapping,
+                                              const VkSamplerYcbcrConversionInfo* ycbcr,
                                               const char* debugName) const {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
 
   const VkImageViewCreateInfo ci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .pNext = ycbcr,
       .image = vkImage_,
       .viewType = type,
       .format = format,
@@ -1142,6 +1152,7 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
                                              0,
                                              1,
                                              {},
+                                             nullptr,
                                              debugNameImageView);
 
     swapchainTextures_[i] = ctx_.texturesPool_.create(std::move(image));
@@ -2580,6 +2591,25 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
 
   uint32_t offset = 0;
 
+  const uint32_t numPlanes = lvk::getNumImagePlanes(image.vkImageFormat_);
+
+  if (numPlanes > 1) {
+    LVK_ASSERT(layer == 0 && baseMipLevel == 0);
+    LVK_ASSERT(numLayers == 1 && numMipLevels == 1);
+    LVK_ASSERT(imageRegion.offset.x == 0 && imageRegion.offset.y == 0);
+    LVK_ASSERT(image.vkType_ == VK_IMAGE_TYPE_2D);
+    LVK_ASSERT(image.vkExtent_.width == imageRegion.extent.width && image.vkExtent_.height == imageRegion.extent.height);
+  }
+
+  VkImageAspectFlags imageAspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+  if (numPlanes == 2) {
+    imageAspect = VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT;
+  }
+  if (numPlanes == 3) {
+    imageAspect = VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT;
+  }
+
   // https://registry.khronos.org/KTX/specs/1.0/ktxspec.v1.html
   for (uint32_t mipLevel = 0; mipLevel < numMipLevels; ++mipLevel) {
     for (uint32_t layer = 0; layer != numLayers; layer++) {
@@ -2597,27 +2627,38 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                               VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                               VK_PIPELINE_STAGE_TRANSFER_BIT,
-                              VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, currentMipLevel, 1, layer, 1});
+                              VkImageSubresourceRange{imageAspect, currentMipLevel, 1, layer, 1});
 
 #if LVK_VULKAN_PRINT_COMMANDS
       LLOGL("%p vkCmdCopyBufferToImage()\n", wrapper.cmdBuf_);
 #endif // LVK_VULKAN_PRINT_COMMANDS
       // 2. Copy the pixel data from the staging buffer into the image
-      const VkRect2D region = {
-          .offset = {.x = imageRegion.offset.x >> mipLevel, .y = imageRegion.offset.y >> mipLevel},
-          .extent = {.width = std::max(1u, imageRegion.extent.width >> mipLevel),
-                     .height = std::max(1u, imageRegion.extent.height >> mipLevel)},
-      };
-      const VkBufferImageCopy copy = {
-          // the offset for this level is at the start of all mip-levels plus the size of all previous mip-levels being uploaded
-          .bufferOffset = desc.offset_ + offset,
-          .bufferRowLength = 0,
-          .bufferImageHeight = 0,
-          .imageSubresource = VkImageSubresourceLayers{VK_IMAGE_ASPECT_COLOR_BIT, currentMipLevel, layer, 1},
-          .imageOffset = {.x = region.offset.x, .y = region.offset.y, .z = 0},
-          .imageExtent = {.width = region.extent.width, .height = region.extent.height, .depth = 1u},
-      };
-      vkCmdCopyBufferToImage(wrapper.cmdBuf_, stagingBuffer->vkBuffer_, image.vkImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+      uint32_t planeOffset = 0;
+      for (uint32_t plane = 0; plane != numPlanes; plane++) {
+        const VkExtent2D extent = lvk::getImagePlaneExtent(
+            {
+                .width = std::max(1u, imageRegion.extent.width >> mipLevel),
+                .height = std::max(1u, imageRegion.extent.height >> mipLevel),
+            },
+            vkFormatToFormat(format),
+            plane);
+        const VkRect2D region = {
+            .offset = {.x = imageRegion.offset.x >> mipLevel, .y = imageRegion.offset.y >> mipLevel},
+            .extent = extent,
+        };
+        const VkBufferImageCopy copy = {
+            // the offset for this level is at the start of all mip-levels plus the size of all previous mip-levels being uploaded
+            .bufferOffset = desc.offset_ + offset + planeOffset,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource =
+                VkImageSubresourceLayers{numPlanes > 1 ? VK_IMAGE_ASPECT_PLANE_0_BIT << plane : imageAspect, currentMipLevel, layer, 1},
+            .imageOffset = {.x = region.offset.x, .y = region.offset.y, .z = 0},
+            .imageExtent = {.width = region.extent.width, .height = region.extent.height, .depth = 1u},
+        };
+        vkCmdCopyBufferToImage(wrapper.cmdBuf_, stagingBuffer->vkBuffer_, image.vkImage_, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+        planeOffset += lvk::getTextureBytesPerPlane(imageRegion.extent.width, imageRegion.extent.height, vkFormatToFormat(format), plane);
+      }
 
       // 3. Transition TRANSFER_DST_OPTIMAL into SHADER_READ_ONLY_OPTIMAL
       lvk::imageMemoryBarrier(wrapper.cmdBuf_,
@@ -2628,7 +2669,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                               VK_PIPELINE_STAGE_TRANSFER_BIT,
                               VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                              VkImageSubresourceRange{VK_IMAGE_ASPECT_COLOR_BIT, currentMipLevel, 1, layer, 1});
+                              VkImageSubresourceRange{imageAspect, currentMipLevel, 1, layer, 1});
 
       offset += lvk::getTextureBytesPerLayer(imageRegion.extent.width, imageRegion.extent.height, texFormat, currentMipLevel);
     }
@@ -2954,6 +2995,13 @@ lvk::VulkanContext::~VulkanContext() {
 
   destroy(dummyTexture_);
 
+  for (auto& data : pimpl_->ycbcrConversionData_) {
+    if (data.info.conversion != VK_NULL_HANDLE) {
+      vkDestroySamplerYcbcrConversion(vkDevice_, data.info.conversion, nullptr);
+      data.sampler.reset();
+    }
+  }
+
   if (shaderModulesPool_.numObjects()) {
     LLOGW("Leaked %u shader modules\n", shaderModulesPool_.numObjects());
   }
@@ -3150,8 +3198,9 @@ lvk::Holder<lvk::SamplerHandle> lvk::VulkanContext::createSampler(const SamplerS
 
   Result result;
 
-  SamplerHandle handle =
-      createSampler(samplerStateDescToVkSamplerCreateInfo(desc, getVkPhysicalDeviceProperties().limits), &result, desc.debugName);
+  const VkSamplerCreateInfo info = samplerStateDescToVkSamplerCreateInfo(desc, getVkPhysicalDeviceProperties().limits);
+
+  SamplerHandle handle = createSampler(info, &result, Format_Invalid, desc.debugName);
 
   if (!LVK_VERIFY(result.isOk())) {
     Result::setResult(outResult, Result(Result::Code::RuntimeError, "Cannot create Sampler"));
@@ -3301,6 +3350,19 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
       .isStencilFormat_ = VulkanImage::isStencilFormat(vkFormat),
   };
 
+  const uint32_t numPlanes = lvk::getNumImagePlanes(desc.format);
+  const bool isDisjoint = numPlanes > 1;
+
+  if (isDisjoint) {
+    // some constraints for multiplanar image formats
+    LVK_ASSERT(vkImageType == VK_IMAGE_TYPE_2D);
+    LVK_ASSERT(vkSamples == VK_SAMPLE_COUNT_1_BIT);
+    LVK_ASSERT(numLayers == 1);
+    LVK_ASSERT(numLevels == 1);
+    vkCreateFlags |= VK_IMAGE_CREATE_DISJOINT_BIT | VK_IMAGE_CREATE_ALIAS_BIT | VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+    awaitingNewImmutableSamplers_ = true;
+  }
+
   const VkImageCreateInfo ci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .pNext = nullptr,
@@ -3319,7 +3381,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
 
-  if (LVK_VULKAN_USE_VMA) {
+  if (LVK_VULKAN_USE_VMA && numPlanes == 1) {
     VmaAllocationCreateInfo vmaAllocInfo = {
         .usage = memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT ? VMA_MEMORY_USAGE_CPU_TO_GPU : VMA_MEMORY_USAGE_AUTO,
     };
@@ -3341,17 +3403,48 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
     VK_ASSERT(vkCreateImage(vkDevice_, &ci, nullptr, &image.vkImage_));
 
     // back the image with some memory
-    {
-      VkMemoryRequirements memRequirements = {};
-      vkGetImageMemoryRequirements(vkDevice_, image.vkImage_, &memRequirements);
+    constexpr uint32_t kNumMaxImagePlanes = LVK_ARRAY_NUM_ELEMENTS(image.vkMemory_);
 
-      VK_ASSERT(lvk::allocateMemory(vkPhysicalDevice_, vkDevice_, &memRequirements, memFlags, &image.vkMemory_));
-      VK_ASSERT(vkBindImageMemory(vkDevice_, image.vkImage_, image.vkMemory_, 0));
+    VkMemoryRequirements2 memRequirements[kNumMaxImagePlanes] = {
+        {.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2},
+        {.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2},
+        {.sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2},
+    };
+
+    const VkImagePlaneMemoryRequirementsInfo planes[kNumMaxImagePlanes] = {
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO, .planeAspect = VK_IMAGE_ASPECT_PLANE_0_BIT},
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO, .planeAspect = VK_IMAGE_ASPECT_PLANE_1_BIT},
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_PLANE_MEMORY_REQUIREMENTS_INFO, .planeAspect = VK_IMAGE_ASPECT_PLANE_2_BIT},
+    };
+
+    const VkImage img = image.vkImage_;
+
+    const VkImageMemoryRequirementsInfo2 imgRequirements[kNumMaxImagePlanes] = {
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, .pNext = numPlanes > 0 ? &planes[0] : nullptr, .image = img},
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, .pNext = numPlanes > 1 ? &planes[1] : nullptr, .image = img},
+        {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, .pNext = numPlanes > 2 ? &planes[2] : nullptr, .image = img},
+    };
+
+    for (uint32_t p = 0; p != numPlanes; p++) {
+      vkGetImageMemoryRequirements2(vkDevice_, &imgRequirements[p], &memRequirements[p]);
+      VK_ASSERT(lvk::allocateMemory2(vkPhysicalDevice_, vkDevice_, &memRequirements[p], memFlags, &image.vkMemory_[p]));
     }
 
+    const VkBindImagePlaneMemoryInfo bindImagePlaneMemoryInfo[kNumMaxImagePlanes] = {
+        {VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO, nullptr, VK_IMAGE_ASPECT_PLANE_0_BIT},
+        {VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO, nullptr, VK_IMAGE_ASPECT_PLANE_1_BIT},
+        {VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO, nullptr, VK_IMAGE_ASPECT_PLANE_2_BIT},
+    };
+    const VkBindImageMemoryInfo bindInfo[kNumMaxImagePlanes] = {
+        lvk::getBindImageMemoryInfo(isDisjoint ? &bindImagePlaneMemoryInfo[0] : nullptr, img, image.vkMemory_[0]),
+        lvk::getBindImageMemoryInfo(&bindImagePlaneMemoryInfo[1], img, image.vkMemory_[1]),
+        lvk::getBindImageMemoryInfo(&bindImagePlaneMemoryInfo[2], img, image.vkMemory_[2]),
+    };
+    VK_ASSERT(vkBindImageMemory2(vkDevice_, numPlanes, bindInfo));
+
     // handle memory-mapped images
-    if (memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-      VK_ASSERT(vkMapMemory(vkDevice_, image.vkMemory_, 0, VK_WHOLE_SIZE, 0, &image.mappedPtr_));
+    if (memFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT && numPlanes == 1) {
+      VK_ASSERT(vkMapMemory(vkDevice_, image.vkMemory_[0], 0, VK_WHOLE_SIZE, 0, &image.mappedPtr_));
     }
   }
 
@@ -3378,8 +3471,10 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
       .a = VkComponentSwizzle(desc.swizzle.a),
   };
 
+  const VkSamplerYcbcrConversionInfo* ycbcrInfo = isDisjoint ? getOrCreateYcbcrConversionInfo(desc.format) : nullptr;
+
   image.imageView_ = image.createImageView(
-      vkDevice_, vkImageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, numLayers, mapping, debugNameImageView);
+      vkDevice_, vkImageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, numLayers, mapping, ycbcrInfo, debugNameImageView);
 
   if (!LVK_VERIFY(image.imageView_ != VK_NULL_HANDLE)) {
     Result::setResult(outResult, Result::Code::RuntimeError, "Cannot create VkImageView");
@@ -3407,6 +3502,97 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   Result::setResult(outResult, Result());
 
   return {this, handle};
+}
+
+VkSampler lvk::VulkanContext::getOrCreateYcbcrSampler(lvk::Format format) {
+  LVK_ASSERT(format < LVK_ARRAY_NUM_ELEMENTS(pimpl_->ycbcrConversionData_));
+
+  const VkSamplerYcbcrConversionInfo* info = getOrCreateYcbcrConversionInfo(format);
+
+  if (!info) {
+    return VK_NULL_HANDLE;
+  }
+
+  return *samplersPool_.get(pimpl_->ycbcrConversionData_[format].sampler);
+}
+
+const VkSamplerYcbcrConversionInfo* lvk::VulkanContext::getOrCreateYcbcrConversionInfo(lvk::Format format) {
+  LVK_ASSERT(format < LVK_ARRAY_NUM_ELEMENTS(pimpl_->ycbcrConversionData_));
+
+  if (pimpl_->ycbcrConversionData_[format].info.sType) {
+    return &pimpl_->ycbcrConversionData_[format].info;
+  }
+
+  if (!LVK_VERIFY(vkFeatures11_.samplerYcbcrConversion)) {
+    LVK_ASSERT_MSG(false, "Ycbcr samplers are not supported");
+    return nullptr;
+  }
+
+  const VkFormat vkFormat = lvk::formatToVkFormat(format);
+
+  VkFormatProperties props;
+  vkGetPhysicalDeviceFormatProperties(getVkPhysicalDevice(), vkFormat, &props);
+
+  const bool cosited = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT) != 0;
+  const bool midpoint = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT) != 0;
+
+  if (!LVK_VERIFY(cosited || midpoint)) {
+    LVK_ASSERT_MSG(cosited || midpoint, "Unsupported Ycbcr feature");
+    return nullptr;
+  }
+
+  const VkSamplerYcbcrConversionCreateInfo ci = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_CREATE_INFO,
+      .format = vkFormat,
+      .ycbcrModel = VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_709,
+      .ycbcrRange = VK_SAMPLER_YCBCR_RANGE_ITU_FULL,
+      .components =
+          {
+              VK_COMPONENT_SWIZZLE_IDENTITY,
+              VK_COMPONENT_SWIZZLE_IDENTITY,
+              VK_COMPONENT_SWIZZLE_IDENTITY,
+              VK_COMPONENT_SWIZZLE_IDENTITY,
+          },
+      .xChromaOffset = midpoint ? VK_CHROMA_LOCATION_MIDPOINT : VK_CHROMA_LOCATION_COSITED_EVEN,
+      .yChromaOffset = midpoint ? VK_CHROMA_LOCATION_MIDPOINT : VK_CHROMA_LOCATION_COSITED_EVEN,
+      .chromaFilter = VK_FILTER_LINEAR,
+      .forceExplicitReconstruction = VK_FALSE,
+  };
+
+  VkSamplerYcbcrConversionInfo info = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO,
+      .pNext = nullptr,
+  };
+  vkCreateSamplerYcbcrConversion(vkDevice_, &ci, nullptr, &info.conversion);
+
+  // check properties
+  VkSamplerYcbcrConversionImageFormatProperties samplerYcbcrConversionImageFormatProps = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES,
+  };
+  VkImageFormatProperties2 imageFormatProps = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_PROPERTIES_2,
+      .pNext = &samplerYcbcrConversionImageFormatProps,
+  };
+  const VkPhysicalDeviceImageFormatInfo2 imageFormatInfo = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+      .format = vkFormat,
+      .type = VK_IMAGE_TYPE_2D,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+      .flags = VK_IMAGE_CREATE_DISJOINT_BIT,
+  };
+  vkGetPhysicalDeviceImageFormatProperties2(getVkPhysicalDevice(), &imageFormatInfo, &imageFormatProps);
+
+  LVK_ASSERT(samplerYcbcrConversionImageFormatProps.combinedImageSamplerDescriptorCount <= 3);
+
+  const VkSamplerCreateInfo cinfo = samplerStateDescToVkSamplerCreateInfo({}, getVkPhysicalDeviceProperties().limits);
+
+  pimpl_->ycbcrConversionData_[format].info = info;
+  pimpl_->ycbcrConversionData_[format].sampler = {this, this->createSampler(cinfo, nullptr, format, "YUV sampler")};
+  pimpl_->numYcbcrSamplers_++;
+  awaitingNewImmutableSamplers_ = true;
+
+  return &pimpl_->ycbcrConversionData_[format].info;
 }
 
 VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
@@ -3853,7 +4039,7 @@ void lvk::VulkanContext::destroy(lvk::TextureHandle handle) {
     return;
   }
 
-  if (LVK_VULKAN_USE_VMA) {
+  if (LVK_VULKAN_USE_VMA && tex->vkMemory_[1] == VK_NULL_HANDLE) {
     if (tex->mappedPtr_) {
       vmaUnmapMemory((VmaAllocator)getVmaAllocator(), tex->vmaAllocation_);
     }
@@ -3862,12 +4048,22 @@ void lvk::VulkanContext::destroy(lvk::TextureHandle handle) {
     }));
   } else {
     if (tex->mappedPtr_) {
-      vkUnmapMemory(vkDevice_, tex->vkMemory_);
+      vkUnmapMemory(vkDevice_, tex->vkMemory_[0]);
     }
-    deferredTask(std::packaged_task<void()>([device = vkDevice_, image = tex->vkImage_, memory = tex->vkMemory_]() {
+    deferredTask(std::packaged_task<void()>([device = vkDevice_,
+                                             image = tex->vkImage_,
+                                             memory0 = tex->vkMemory_[0],
+                                             memory1 = tex->vkMemory_[1],
+                                             memory2 = tex->vkMemory_[2]]() {
       vkDestroyImage(device, image, nullptr);
-      if (memory != VK_NULL_HANDLE) {
-        vkFreeMemory(device, memory, nullptr);
+      if (memory0 != VK_NULL_HANDLE) {
+        vkFreeMemory(device, memory0, nullptr);
+      }
+      if (memory1 != VK_NULL_HANDLE) {
+        vkFreeMemory(device, memory1, nullptr);
+      }
+      if (memory2 != VK_NULL_HANDLE) {
+        vkFreeMemory(device, memory2, nullptr);
       }
     }));
   }
@@ -4174,6 +4370,8 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
       layout (set = 3, binding = 0) uniform texture2D kTextures2DShadow[];
       layout (set = 0, binding = 1) uniform sampler kSamplers[];
       layout (set = 3, binding = 1) uniform samplerShadow kSamplersShadow[];
+
+      layout (set = 0, binding = 3) uniform sampler2D kSamplerYUV[];
 
       vec4 textureBindless2D(uint textureid, uint samplerid, vec2 uv) {
         return texture(nonuniformEXT(sampler2D(kTextures2D[textureid], kSamplers[samplerid])), uv);
@@ -4615,6 +4813,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   VkPhysicalDeviceVulkan11Features deviceFeatures11 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
       .storageBuffer16BitAccess = VK_TRUE,
+      .samplerYcbcrConversion = VK_TRUE,
       .shaderDrawParameters = VK_TRUE,
   };
   VkPhysicalDeviceVulkan12Features deviceFeatures12 = {
@@ -4943,6 +5142,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
           .unnormalizedCoordinates = VK_FALSE,
       },
       nullptr,
+      Format_Invalid,
       "Sampler: default");
 
   growDescriptorPool(currentMaxTextures_, currentMaxSamplers_);
@@ -4998,11 +5198,41 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
     deferredTask(std::packaged_task<void()>([device = vkDevice_, dp = vkDPool_]() { vkDestroyDescriptorPool(device, dp, nullptr); }));
   }
 
+  bool hasYUVImages = false;
+
+  // check if we have any YUV images
+  for (const auto& obj : texturesPool_.objects_) {
+    const VulkanImage* img = &obj.obj_;
+    // multisampled images cannot be directly accessed from shaders
+    const bool isTextureAvailable = (img->vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
+    hasYUVImages = isTextureAvailable && img->isSampledImage() && lvk::getNumImagePlanes(img->vkImageFormat_) > 1;
+    if (hasYUVImages) {
+      break;
+    }
+  }
+
+  std::vector<VkSampler> immutableSamplers;
+  const VkSampler* immutableSamplersData = nullptr;
+
+  if (hasYUVImages) {
+    VkSampler dummySampler = samplersPool_.objects_[0].obj_;
+    immutableSamplers.reserve(texturesPool_.objects_.size());
+    for (const auto& obj : texturesPool_.objects_) {
+      const VulkanImage* img = &obj.obj_;
+      // multisampled images cannot be directly accessed from shaders
+      const bool isTextureAvailable = (img->vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
+      const bool isYUVImage = isTextureAvailable && img->isSampledImage() && lvk::getNumImagePlanes(img->vkImageFormat_) > 1;
+      immutableSamplers.push_back(isYUVImage ? getOrCreateYcbcrSampler(vkFormatToFormat(img->vkImageFormat_)) : dummySampler);
+    }
+    immutableSamplersData = immutableSamplers.data();
+  }
+
   // create default descriptor set layout which is going to be shared by graphics pipelines
   const VkDescriptorSetLayoutBinding bindings[kBinding_NumBindings] = {
       lvk::getDSLBinding(kBinding_Textures, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures),
       lvk::getDSLBinding(kBinding_Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers),
       lvk::getDSLBinding(kBinding_StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures),
+      lvk::getDSLBinding(kBinding_YUVImages, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, immutableSamplers.size(), immutableSamplersData),
   };
   const uint32_t flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
                          VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
@@ -5032,6 +5262,7 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextures},
     };
     const VkDescriptorPoolCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -5049,6 +5280,8 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
     };
     VK_ASSERT_RETURN(vkAllocateDescriptorSets(vkDevice_, &ai, &vkDSet_));
   }
+
+  awaitingNewImmutableSamplers_ = false;
 
   return Result();
 }
@@ -5198,16 +5431,23 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   while (samplersPool_.objects_.size() > newMaxSamplers) {
     newMaxSamplers *= 2;
   }
-  if (newMaxTextures != currentMaxTextures_ || newMaxSamplers != currentMaxSamplers_) {
+  if (newMaxTextures != currentMaxTextures_ || newMaxSamplers != currentMaxSamplers_ || awaitingNewImmutableSamplers_) {
     growDescriptorPool(newMaxTextures, newMaxSamplers);
   }
 
   // 1. Sampled and storage images
   std::vector<VkDescriptorImageInfo> infoSampledImages;
   std::vector<VkDescriptorImageInfo> infoStorageImages;
+  std::vector<VkDescriptorImageInfo> infoYUVImages;
 
   infoSampledImages.reserve(texturesPool_.numObjects());
   infoStorageImages.reserve(texturesPool_.numObjects());
+
+  const bool hasYcbcrSamplers = pimpl_->numYcbcrSamplers_ > 0;
+
+  if (hasYcbcrSamplers) {
+    infoYUVImages.reserve(texturesPool_.numObjects());
+  }
 
   // use the dummy texture to avoid sparse array
   VkImageView dummyImageView = texturesPool_.objects_[0].obj_.imageView_;
@@ -5217,7 +5457,8 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
     const VkImageView view = obj.obj_.imageView_;
     // multisampled images cannot be directly accessed from shaders
     const bool isTextureAvailable = (img.vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
-    const bool isSampledImage = isTextureAvailable && img.isSampledImage();
+    const bool isYUVImage = isTextureAvailable && img.isSampledImage() && lvk::getNumImagePlanes(img.vkImageFormat_) > 1;
+    const bool isSampledImage = isTextureAvailable && img.isSampledImage() && !isYUVImage;
     const bool isStorageImage = isTextureAvailable && img.isStorageImage();
     infoSampledImages.push_back(VkDescriptorImageInfo{
         .sampler = VK_NULL_HANDLE,
@@ -5230,6 +5471,13 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
         .imageView = isStorageImage ? view : dummyImageView,
         .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
     });
+    if (hasYcbcrSamplers) {
+      // we don't need to update this if there're no YUV samplers
+      infoYUVImages.push_back(VkDescriptorImageInfo{
+          .imageView = isYUVImage ? view : dummyImageView,
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      });
+    }
   }
 
   // 2. Samplers
@@ -5279,6 +5527,18 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
     };
   }
 
+  if (!infoYUVImages.empty()) {
+    write[numWrites++] = VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = vkDSet_,
+        .dstBinding = kBinding_YUVImages,
+        .dstArrayElement = 0,
+        .descriptorCount = (uint32_t)infoYUVImages.size(),
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = infoYUVImages.data(),
+    };
+  }
+
   // do not switch to the next descriptor set if there is nothing to update
   if (numWrites) {
 #if LVK_VULKAN_PRINT_COMMANDS
@@ -5291,12 +5551,27 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   awaitingCreation_ = false;
 }
 
-lvk::SamplerHandle lvk::VulkanContext::createSampler(const VkSamplerCreateInfo& ci, lvk::Result* outResult, const char* debugName) {
+lvk::SamplerHandle lvk::VulkanContext::createSampler(const VkSamplerCreateInfo& ci,
+                                                     lvk::Result* outResult,
+                                                     lvk::Format yuvFormat,
+                                                     const char* debugName) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
 
-  VkSampler sampler = VK_NULL_HANDLE;
+  VkSamplerCreateInfo cinfo = ci;
 
-  VK_ASSERT(vkCreateSampler(vkDevice_, &ci, nullptr, &sampler));
+  if (yuvFormat != Format_Invalid) {
+    cinfo.pNext = getOrCreateYcbcrConversionInfo(yuvFormat);
+    // must be CLAMP_TO_EDGE
+    // https://vulkan.lunarg.com/doc/view/1.3.268.0/windows/1.3-extensions/vkspec.html#VUID-VkSamplerCreateInfo-addressModeU-01646
+    cinfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    cinfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    cinfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    cinfo.anisotropyEnable = VK_FALSE;
+    cinfo.unnormalizedCoordinates = VK_FALSE;
+  }
+
+  VkSampler sampler = VK_NULL_HANDLE;
+  VK_ASSERT(vkCreateSampler(vkDevice_, &cinfo, nullptr, &sampler));
   VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_SAMPLER, (uint64_t)sampler, debugName));
 
   SamplerHandle handle = samplersPool_.create(VkSampler(sampler));

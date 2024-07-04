@@ -178,6 +178,10 @@ VkFormat lvk::formatToVkFormat(lvk::Format format) {
     return VK_FORMAT_D24_UNORM_S8_UINT;
   case lvk::Format_Z_F32_S_UI8:
     return VK_FORMAT_D32_SFLOAT_S8_UINT;
+  case lvk::Format_YUV_NV12:
+    return VK_FORMAT_G8_B8R8_2PLANE_420_UNORM;
+  case lvk::Format_YUV_420p:
+    return VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM;
   }
 #if defined(_MSC_VER)
   LVK_ASSERT_MSG(false, "TextureFormat value not handled: %d", (int)format);
@@ -239,6 +243,10 @@ lvk::Format lvk::vkFormatToFormat(VkFormat format) {
     return Format_Z_F32;
   case VK_FORMAT_D32_SFLOAT_S8_UINT:
     return Format_Z_F32_S_UI8;
+  case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+     return Format_YUV_NV12;
+  case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+    return Format_YUV_420p;
   default:;
   }
   LVK_ASSERT_MSG(false, "VkFormat value not handled: %d", (int)format);
@@ -695,6 +703,16 @@ VkSpecializationInfo lvk::getPipelineShaderStageSpecializationInfo(lvk::Speciali
   };
 }
 
+VkBindImageMemoryInfo lvk::getBindImageMemoryInfo(const VkBindImagePlaneMemoryInfo* next, VkImage image, VkDeviceMemory memory) {
+  return VkBindImageMemoryInfo{
+      .sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO,
+      .pNext = next,
+      .image = image,
+      .memory = memory,
+      .memoryOffset = 0,
+  };
+}
+
 VkPipelineShaderStageCreateInfo lvk::getPipelineShaderStageCreateInfo(VkShaderStageFlagBits stage,
                                                                       VkShaderModule shaderModule,
                                                                       const char* entryPoint,
@@ -745,14 +763,38 @@ VkResult lvk::allocateMemory(VkPhysicalDevice physDev,
   return vkAllocateMemory(device, &ai, nullptr, outMemory);
 }
 
-VkDescriptorSetLayoutBinding lvk::getDSLBinding(uint32_t binding, VkDescriptorType descriptorType, uint32_t descriptorCount) {
+VkResult lvk::allocateMemory2(VkPhysicalDevice physDev,
+                              VkDevice device,
+                              const VkMemoryRequirements2* memRequirements,
+                              VkMemoryPropertyFlags props,
+                              VkDeviceMemory* outMemory) {
+  assert(memRequirements);
+
+  const VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
+      .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR,
+  };
+  const VkMemoryAllocateInfo ai = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &memoryAllocateFlagsInfo,
+      .allocationSize = memRequirements->memoryRequirements.size,
+      .memoryTypeIndex = findMemoryType(physDev, memRequirements->memoryRequirements.memoryTypeBits, props),
+  };
+
+  return vkAllocateMemory(device, &ai, NULL, outMemory);
+}
+
+VkDescriptorSetLayoutBinding lvk::getDSLBinding(uint32_t binding,
+                                                VkDescriptorType descriptorType,
+                                                uint32_t descriptorCount,
+                                                const VkSampler* immutableSamplers) {
   return VkDescriptorSetLayoutBinding{
       .binding = binding,
       .descriptorType = descriptorType,
       .descriptorCount = descriptorCount,
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
                     VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT,
-      .pImmutableSamplers = nullptr,
+      .pImmutableSamplers = immutableSamplers,
   };
 }
 
@@ -829,6 +871,36 @@ uint32_t lvk::getBytesPerPixel(VkFormat format) {
   return 1;
 }
 
+uint32_t lvk::getNumImagePlanes(VkFormat format) {
+  switch (format) {
+  case VK_FORMAT_UNDEFINED:
+    return 0;
+  case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+  case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+  case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
+  case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+  case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+  case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16:
+  case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+  case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+  case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
+    return 3;
+  case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+  case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+  case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+  case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+  case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+  case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
+  case VK_FORMAT_G8_B8R8_2PLANE_444_UNORM:
+  case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_444_UNORM_3PACK16:
+  case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_444_UNORM_3PACK16:
+  case VK_FORMAT_G16_B16R16_2PLANE_444_UNORM:
+    return 2;
+  default:
+    return 1;
+  }
+}
+
 VkCompareOp lvk::compareOpToVkCompareOp(lvk::CompareOp func) {
   switch (func) {
   case lvk::CompareOp_Never:
@@ -850,4 +922,21 @@ VkCompareOp lvk::compareOpToVkCompareOp(lvk::CompareOp func) {
   }
   LVK_ASSERT_MSG(false, "CompareFunction value not handled: %d", (int)func);
   return VK_COMPARE_OP_ALWAYS;
+}
+
+VkExtent2D lvk::getImagePlaneExtent(VkExtent2D plane0, lvk::Format format, uint32_t plane) {
+  switch (format) {
+  case Format_YUV_NV12:
+    return VkExtent2D{
+        .width = plane0.width >> plane,
+        .height = plane0.height >> plane,
+    };
+  case Format_YUV_420p:
+    return VkExtent2D{
+        .width = plane0.width >> (plane ? 1 : 0),
+        .height = plane0.height >> (plane ? 1 : 0),
+    };
+  default:;
+  }
+  return plane0;
 }
