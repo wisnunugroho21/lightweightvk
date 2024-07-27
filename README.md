@@ -106,6 +106,8 @@ python3 deploy_content_android.py
 
 ## Screenshots
 
+Check out [https://github.com/corporateshark/lightweightvk/samples](https://github.com/corporateshark/lightweightvk/tree/master/samples).
+
 ![image](.github/screenshot01.jpg)
 
 ## License
