@@ -24,7 +24,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/KhronosGroup/SPIRV-Reflect.git",
-        "revision": "b50ffbda954270ddf29a355cb727f958825bcf98"
+        "revision": "c07ddbd7f3ef6f4be3edcf9a091d745d11bf0e2a"
     }
 },
 {
