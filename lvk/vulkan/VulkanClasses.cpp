@@ -3504,9 +3504,10 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   return {this, handle};
 }
 
-VkSampler lvk::VulkanContext::getOrCreateYcbcrSampler(lvk::Format format) {
-  LVK_ASSERT(format < LVK_ARRAY_NUM_ELEMENTS(pimpl_->ycbcrConversionData_));
+static_assert(1 << (sizeof(lvk::Format) * 8) <= LVK_ARRAY_NUM_ELEMENTS(lvk::VulkanContextImpl::ycbcrConversionData_),
+              "There aren't enough elements in `ycbcrConversionData_` to be accessed by lvk::Format");
 
+VkSampler lvk::VulkanContext::getOrCreateYcbcrSampler(lvk::Format format) {
   const VkSamplerYcbcrConversionInfo* info = getOrCreateYcbcrConversionInfo(format);
 
   if (!info) {
@@ -3517,8 +3518,6 @@ VkSampler lvk::VulkanContext::getOrCreateYcbcrSampler(lvk::Format format) {
 }
 
 const VkSamplerYcbcrConversionInfo* lvk::VulkanContext::getOrCreateYcbcrConversionInfo(lvk::Format format) {
-  LVK_ASSERT(format < LVK_ARRAY_NUM_ELEMENTS(pimpl_->ycbcrConversionData_));
-
   if (pimpl_->ycbcrConversionData_[format].info.sType) {
     return &pimpl_->ycbcrConversionData_[format].info;
   }
