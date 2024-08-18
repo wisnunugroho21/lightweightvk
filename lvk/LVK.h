@@ -512,6 +512,8 @@ enum ShaderStage : uint8_t {
   Stage_Geom,
   Stage_Frag,
   Stage_Comp,
+  Stage_Task,
+  Stage_Mesh,
 };
 
 struct VertexInput final {

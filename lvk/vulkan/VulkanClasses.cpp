@@ -217,6 +217,10 @@ VkShaderStageFlagBits shaderStageToVkShaderStage(lvk::ShaderStage stage) {
     return VK_SHADER_STAGE_FRAGMENT_BIT;
   case lvk::Stage_Comp:
     return VK_SHADER_STAGE_COMPUTE_BIT;
+  case lvk::Stage_Task:
+    return VK_SHADER_STAGE_TASK_BIT_EXT;
+  case lvk::Stage_Mesh:
+    return VK_SHADER_STAGE_MESH_BIT_EXT;
   };
   LVK_ASSERT(false);
   return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;

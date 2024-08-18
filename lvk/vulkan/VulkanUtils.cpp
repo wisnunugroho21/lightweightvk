@@ -574,6 +574,10 @@ static glslang_stage_t getGLSLangShaderStage(VkShaderStageFlagBits stage) {
     return GLSLANG_STAGE_FRAGMENT;
   case VK_SHADER_STAGE_COMPUTE_BIT:
     return GLSLANG_STAGE_COMPUTE;
+  case VK_SHADER_STAGE_TASK_BIT_EXT:
+    return GLSLANG_STAGE_TASK;
+  case VK_SHADER_STAGE_MESH_BIT_EXT:
+    return GLSLANG_STAGE_MESH;
   default:
     assert(false);
   };
