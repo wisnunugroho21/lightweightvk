@@ -416,16 +416,13 @@ glslang_resource_t lvk::getGlslangResource(const VkPhysicalDeviceLimits& limits)
       .max_geometry_total_output_components = (int)limits.maxGeometryTotalOutputComponents,
       .max_geometry_uniform_components = 1024,
       .max_geometry_varying_components = 64,
-      .max_tess_control_input_components =
-          (int)limits.maxTessellationControlPerVertexInputComponents,
-      .max_tess_control_output_components =
-          (int)limits.maxTessellationControlPerVertexOutputComponents,
+      .max_tess_control_input_components = (int)limits.maxTessellationControlPerVertexInputComponents,
+      .max_tess_control_output_components = (int)limits.maxTessellationControlPerVertexOutputComponents,
       .max_tess_control_texture_image_units = 16,
       .max_tess_control_uniform_components = 1024,
       .max_tess_control_total_output_components = 4096,
       .max_tess_evaluation_input_components = (int)limits.maxTessellationEvaluationInputComponents,
-      .max_tess_evaluation_output_components =
-          (int)limits.maxTessellationEvaluationOutputComponents,
+      .max_tess_evaluation_output_components = (int)limits.maxTessellationEvaluationOutputComponents,
       .max_tess_evaluation_texture_image_units = 16,
       .max_tess_evaluation_uniform_components = 1024,
       .max_tess_patch_components = 120,
@@ -460,18 +457,29 @@ glslang_resource_t lvk::getGlslangResource(const VkPhysicalDeviceLimits& limits)
       .max_task_work_group_size_y_nv = 1,
       .max_task_work_group_size_z_nv = 1,
       .max_mesh_view_count_nv = 4,
+      .max_mesh_output_vertices_ext = 256,
+      .max_mesh_output_primitives_ext = 512,
+      .max_mesh_work_group_size_x_ext = 32,
+      .max_mesh_work_group_size_y_ext = 1,
+      .max_mesh_work_group_size_z_ext = 1,
+      .max_task_work_group_size_x_ext = 32,
+      .max_task_work_group_size_y_ext = 1,
+      .max_task_work_group_size_z_ext = 1,
+      .max_mesh_view_count_ext = 4,
       .maxDualSourceDrawBuffersEXT = 1,
-      .limits = {
-          .non_inductive_for_loops = true,
-          .while_loops = true,
-          .do_while_loops = true,
-          .general_uniform_indexing = true,
-          .general_attribute_matrix_vector_indexing = true,
-          .general_varying_indexing = true,
-          .general_sampler_indexing = true,
-          .general_variable_indexing = true,
-          .general_constant_matrix_vector_indexing = true,
-      }};
+      .limits =
+          {
+              .non_inductive_for_loops = true,
+              .while_loops = true,
+              .do_while_loops = true,
+              .general_uniform_indexing = true,
+              .general_attribute_matrix_vector_indexing = true,
+              .general_varying_indexing = true,
+              .general_sampler_indexing = true,
+              .general_variable_indexing = true,
+              .general_constant_matrix_vector_indexing = true,
+          },
+  };
 
   return resource;
 }
