@@ -4345,6 +4345,17 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
   }
 
   if (strstr(source, "#version ") == nullptr) {
+    if (vkStage == VK_SHADER_STAGE_TASK_BIT_EXT || vkStage == VK_SHADER_STAGE_MESH_BIT_EXT) {
+      sourcePatched += R"(
+      #version 460
+      #extension GL_EXT_buffer_reference : require
+      #extension GL_EXT_buffer_reference_uvec2 : require
+      #extension GL_EXT_debug_printf : enable
+      #extension GL_EXT_nonuniform_qualifier : require
+      #extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+      #extension GL_EXT_mesh_shader : require
+      )";
+    }
     if (vkStage == VK_SHADER_STAGE_VERTEX_BIT || vkStage == VK_SHADER_STAGE_COMPUTE_BIT ||
         vkStage == VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT || vkStage == VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT) {
       sourcePatched += R"(
