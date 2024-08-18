@@ -125,11 +125,12 @@ ADD_DEMO("001_HelloTriangle")
 ADD_DEMO("002_RenderToCubeMap")
 ADD_DEMO("003_RenderToCubeMapSinglePass")
 ADD_DEMO("004_YUV")
+if(WIN32 AND NOT (ANDROID OR APPLE))
+  ADD_DEMO("005_MeshShaders")
+endif()
 
 ADD_DEMO("Tiny")
-
 ADD_DEMO("Tiny_Mesh")
-
 ADD_DEMO("Tiny_MeshLarge")
 ADD_DEMO_SOURCES("Tiny_MeshLarge"
   "${LVK_ROOT_DIR}/third-party/deps/src/3D-Graphics-Rendering-Cookbook/shared/UtilsCubemap.cpp")
