@@ -2325,6 +2325,52 @@ void lvk::CommandBuffer::cmdDrawIndexedIndirectCount(BufferHandle indirectBuffer
                                 stride ? stride : sizeof(VkDrawIndexedIndirectCommand));
 }
 
+void lvk::CommandBuffer::cmdDrawMeshTasks(const Dimensions& threadgroupCount) {
+  LVK_PROFILER_FUNCTION();
+
+  vkCmdDrawMeshTasksEXT(wrapper_->cmdBuf_, threadgroupCount.width, threadgroupCount.height, threadgroupCount.depth);
+}
+
+void lvk::CommandBuffer::cmdDrawMeshTasksIndirect(BufferHandle indirectBuffer,
+                                                  size_t indirectBufferOffset,
+                                                  uint32_t drawCount,
+                                                  uint32_t stride) {
+  LVK_PROFILER_FUNCTION();
+
+  lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
+
+  LVK_ASSERT(bufIndirect);
+
+  vkCmdDrawMeshTasksIndirectEXT(wrapper_->cmdBuf_,
+                                bufIndirect->vkBuffer_,
+                                indirectBufferOffset,
+                                drawCount,
+                                stride ? stride : sizeof(VkDrawMeshTasksIndirectCommandEXT));
+}
+
+void lvk::CommandBuffer::cmdDrawMeshTasksIndirectCount(BufferHandle indirectBuffer,
+                                                       size_t indirectBufferOffset,
+                                                       BufferHandle countBuffer,
+                                                       size_t countBufferOffset,
+                                                       uint32_t maxDrawCount,
+                                                       uint32_t stride) {
+  LVK_PROFILER_FUNCTION();
+
+  lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
+  lvk::VulkanBuffer* bufCount = ctx_->buffersPool_.get(countBuffer);
+
+  LVK_ASSERT(bufIndirect);
+  LVK_ASSERT(bufCount);
+
+  vkCmdDrawMeshTasksIndirectCountEXT(wrapper_->cmdBuf_,
+                                     bufIndirect->vkBuffer_,
+                                     indirectBufferOffset,
+                                     bufCount->vkBuffer_,
+                                     countBufferOffset,
+                                     maxDrawCount,
+                                     stride ? stride : sizeof(VkDrawMeshTasksIndirectCommandEXT));
+}
+
 void lvk::CommandBuffer::cmdSetBlendColor(const float color[4]) {
   vkCmdSetBlendConstants(wrapper_->cmdBuf_, color);
 }
