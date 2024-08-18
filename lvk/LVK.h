@@ -598,6 +598,8 @@ struct RenderPipelineDesc final {
   ShaderModuleHandle smTesc;
   ShaderModuleHandle smTese;
   ShaderModuleHandle smGeom;
+  ShaderModuleHandle smTask;
+  ShaderModuleHandle smMesh;
   ShaderModuleHandle smFrag;
 
   SpecializationConstantDesc specInfo = {};
@@ -605,8 +607,10 @@ struct RenderPipelineDesc final {
   const char* entryPointVert = "main";
   const char* entryPointTesc = "main";
   const char* entryPointTese = "main";
-  const char* entryPointFrag = "main";
   const char* entryPointGeom = "main";
+  const char* entryPointTask = "main";
+  const char* entryPointMesh = "main";
+  const char* entryPointFrag = "main";
 
   ColorAttachment color[LVK_MAX_COLOR_ATTACHMENTS] = {};
   Format depthFormat = Format_Invalid;
