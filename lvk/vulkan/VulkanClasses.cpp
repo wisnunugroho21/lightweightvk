@@ -3665,8 +3665,10 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
   const lvk::ShaderModuleState* teseModule = shaderModulesPool_.get(desc.smTese);
   const lvk::ShaderModuleState* geomModule = shaderModulesPool_.get(desc.smGeom);
   const lvk::ShaderModuleState* fragModule = shaderModulesPool_.get(desc.smFrag);
+  const lvk::ShaderModuleState* taskModule = shaderModulesPool_.get(desc.smTask);
+  const lvk::ShaderModuleState* meshModule = shaderModulesPool_.get(desc.smMesh);
 
-  LVK_ASSERT(vertModule);
+  LVK_ASSERT(vertModule || meshModule);
   LVK_ASSERT(fragModule);
 
   if (tescModule || teseModule || desc.patchControlPoints) {
@@ -3760,7 +3762,12 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
                        compareOpToVkCompareOp(desc.backFaceStencil.stencilCompareOp))
       .stencilMasks(VK_STENCIL_FACE_FRONT_BIT, 0xFF, desc.frontFaceStencil.writeMask, desc.frontFaceStencil.readMask)
       .stencilMasks(VK_STENCIL_FACE_BACK_BIT, 0xFF, desc.backFaceStencil.writeMask, desc.backFaceStencil.readMask)
-      .shaderStage(lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertModule->sm, desc.entryPointVert, &si))
+      .shaderStage(taskModule ? lvk::getPipelineShaderStageCreateInfo(
+                                    VK_SHADER_STAGE_TASK_BIT_EXT, taskModule->sm, desc.entryPointTask, &si)
+                              : VkPipelineShaderStageCreateInfo{.module = VK_NULL_HANDLE})
+      .shaderStage(meshModule
+                       ? lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_MESH_BIT_EXT, meshModule->sm, desc.entryPointMesh, &si)
+                       : lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertModule->sm, desc.entryPointVert, &si))
       .shaderStage(lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_FRAGMENT_BIT, fragModule->sm, desc.entryPointFrag, &si))
       .shaderStage(tescModule ? lvk::getPipelineShaderStageCreateInfo(
                                     VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT, tescModule->sm, desc.entryPointTesc, &si)
@@ -3879,9 +3886,24 @@ lvk::Holder<lvk::RenderPipelineHandle> lvk::VulkanContext::createRenderPipeline(
     return {};
   }
 
-  if (!LVK_VERIFY(desc.smVert.valid())) {
-    Result::setResult(outResult, Result::Code::ArgumentOutOfRange, "Missing vertex shader");
-    return {};
+  if (desc.smMesh.valid()) {
+    if (!LVK_VERIFY(!desc.smVert.valid())) {
+      Result::setResult(outResult, Result::Code::ArgumentOutOfRange, "Cannot have both vertex and mesh shaders");
+      return {};
+    }
+    if (!LVK_VERIFY(!desc.smTesc.valid() && !desc.smTese.valid())) {
+      Result::setResult(outResult, Result::Code::ArgumentOutOfRange, "Cannot have both tessellation and mesh shaders");
+      return {};
+    }
+    if (!LVK_VERIFY(!desc.smGeom.valid())) {
+      Result::setResult(outResult, Result::Code::ArgumentOutOfRange, "Cannot have both geometry and mesh shaders");
+      return {};
+    }
+  } else {
+    if (!LVK_VERIFY(desc.smVert.valid())) {
+      Result::setResult(outResult, Result::Code::ArgumentOutOfRange, "Missing vertex shader");
+      return {};
+    }
   }
 
   if (!LVK_VERIFY(desc.smFrag.valid())) {
