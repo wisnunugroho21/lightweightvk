@@ -3933,6 +3933,10 @@ lvk::Holder<lvk::RenderPipelineHandle> lvk::VulkanContext::createRenderPipeline(
   }
 
   if (desc.smMesh.valid()) {
+    if (!LVK_VERIFY(!desc.vertexInput.getNumAttributes() && !desc.vertexInput.getNumInputBindings())) {
+      Result::setResult(outResult, Result::Code::ArgumentOutOfRange, "Cannot have vertexInput with mesh shaders");
+      return {};
+    }
     if (!LVK_VERIFY(!desc.smVert.valid())) {
       Result::setResult(outResult, Result::Code::ArgumentOutOfRange, "Cannot have both vertex and mesh shaders");
       return {};
