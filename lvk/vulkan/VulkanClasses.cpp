@@ -1374,6 +1374,8 @@ const lvk::VulkanImmediateCommands::CommandBufferWrapper& lvk::VulkanImmediateCo
 }
 
 void lvk::VulkanImmediateCommands::wait(const SubmitHandle handle) {
+  LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_WAIT);
+
   if (isReady(handle)) {
     return;
   }
@@ -5645,7 +5647,9 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
     LLOGL("vkUpdateDescriptorSets()\n");
 #endif // LVK_VULKAN_PRINT_COMMANDS
     immediate_->wait(immediate_->getLastSubmitHandle());
+    LVK_PROFILER_ZONE("vkUpdateDescriptorSets()", LVK_PROFILER_COLOR_PRESENT);
     vkUpdateDescriptorSets(vkDevice_, numWrites, write, 0, nullptr);
+    LVK_PROFILER_ZONE_END();
   }
 
   awaitingCreation_ = false;
