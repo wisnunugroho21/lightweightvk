@@ -132,7 +132,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/wolfpld/tracy.git",
-        "revision": "6d1deb5640ed11da01995fb1791115cfebe54dbf"
+        "revision": "v0.11.1"
     }
 },
 {
