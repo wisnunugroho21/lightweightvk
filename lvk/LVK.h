@@ -543,6 +543,10 @@ struct VertexInput final {
     }
     return n;
   }
+
+  bool operator==(const VertexInput& other) const {
+    return memcmp(this, &other, sizeof(VertexInput)) == 0;
+  }
 };
 
 struct ColorAttachment {
