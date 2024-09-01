@@ -319,6 +319,15 @@ void lvk::logShaderSource(const char* text) {
   LLOGL("\n");
 }
 
+uint32_t lvk::VertexInput::getVertexSize() const {
+  uint32_t vertexSize = 0;
+  for (uint32_t i = 0; i < LVK_VERTEX_ATTRIBUTES_MAX && attributes[i].format != VertexFormat::Invalid; i++) {
+    LVK_ASSERT_MSG(attributes[i].offset == vertexSize, "Unsupported vertex attributes foramt");
+    vertexSize += lvk::getVertexFormatSize(attributes[i].format);
+  }
+  return vertexSize;
+}
+
 #if LVK_WITH_GLFW
 GLFWwindow* lvk::initWindow(const char* windowTitle, int& outWidth, int& outHeight, bool resizable) {
   if (!glfwInit()) {

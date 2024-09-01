@@ -543,6 +543,7 @@ struct VertexInput final {
     }
     return n;
   }
+  uint32_t getVertexSize() const;
 
   bool operator==(const VertexInput& other) const {
     return memcmp(this, &other, sizeof(VertexInput)) == 0;
