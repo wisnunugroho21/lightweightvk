@@ -322,7 +322,7 @@ void lvk::logShaderSource(const char* text) {
 uint32_t lvk::VertexInput::getVertexSize() const {
   uint32_t vertexSize = 0;
   for (uint32_t i = 0; i < LVK_VERTEX_ATTRIBUTES_MAX && attributes[i].format != VertexFormat::Invalid; i++) {
-    LVK_ASSERT_MSG(attributes[i].offset == vertexSize, "Unsupported vertex attributes foramt");
+    LVK_ASSERT_MSG(attributes[i].offset == vertexSize, "Unsupported vertex attributes format");
     vertexSize += lvk::getVertexFormatSize(attributes[i].format);
   }
   return vertexSize;
