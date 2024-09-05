@@ -514,6 +514,13 @@ enum ShaderStage : uint8_t {
   Stage_Comp,
   Stage_Task,
   Stage_Mesh,
+  // ray tracing
+  Stage_RayGen,
+  Stage_AnyHit,
+  Stage_ClosestHit,
+  Stage_Miss,
+  Stage_Intersection,
+  Stage_Collable,
 };
 
 struct VertexInput final {

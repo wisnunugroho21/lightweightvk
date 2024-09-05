@@ -221,6 +221,18 @@ VkShaderStageFlagBits shaderStageToVkShaderStage(lvk::ShaderStage stage) {
     return VK_SHADER_STAGE_TASK_BIT_EXT;
   case lvk::Stage_Mesh:
     return VK_SHADER_STAGE_MESH_BIT_EXT;
+  case lvk::Stage_RayGen:
+    return VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+  case lvk::Stage_AnyHit:
+    return VK_SHADER_STAGE_ANY_HIT_BIT_KHR;
+  case lvk::Stage_ClosestHit:
+    return VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+  case lvk::Stage_Miss:
+    return VK_SHADER_STAGE_MISS_BIT_KHR;
+  case lvk::Stage_Intersection:
+    return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+  case lvk::Stage_Collable:
+    return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
   };
   LVK_ASSERT(false);
   return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;

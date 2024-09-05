@@ -586,6 +586,20 @@ static glslang_stage_t getGLSLangShaderStage(VkShaderStageFlagBits stage) {
     return GLSLANG_STAGE_TASK;
   case VK_SHADER_STAGE_MESH_BIT_EXT:
     return GLSLANG_STAGE_MESH;
+
+  // ray tracing
+  case VK_SHADER_STAGE_RAYGEN_BIT_KHR:
+    return GLSLANG_STAGE_RAYGEN;
+  case VK_SHADER_STAGE_ANY_HIT_BIT_KHR:
+    return GLSLANG_STAGE_ANYHIT;
+  case VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR:
+    return GLSLANG_STAGE_CLOSESTHIT;
+  case VK_SHADER_STAGE_MISS_BIT_KHR:
+    return GLSLANG_STAGE_MISS;
+  case VK_SHADER_STAGE_INTERSECTION_BIT_KHR:
+    return GLSLANG_STAGE_INTERSECT;
+  case VK_SHADER_STAGE_CALLABLE_BIT_KHR:
+    return GLSLANG_STAGE_CALLABLE;
   default:
     assert(false);
   };
