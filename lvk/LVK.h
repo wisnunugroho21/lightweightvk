@@ -520,7 +520,7 @@ enum ShaderStage : uint8_t {
   Stage_ClosestHit,
   Stage_Miss,
   Stage_Intersection,
-  Stage_Collable,
+  Stage_Callable,
 };
 
 struct VertexInput final {
@@ -706,6 +706,10 @@ enum BufferUsageBits : uint8_t {
   BufferUsageBits_Uniform = 1 << 2,
   BufferUsageBits_Storage = 1 << 3,
   BufferUsageBits_Indirect = 1 << 4,
+  // ray tracing
+  BufferUsageBits_ShaderBindingTable = 1 << 5,
+  BufferUsageBits_AccelerationStructureBuildInputReadOnly = 1 << 6,
+  BufferUsageBits_AccelerationStructureStorage = 1 << 7
 };
 
 struct BufferDesc final {

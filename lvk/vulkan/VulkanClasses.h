@@ -572,6 +572,7 @@ class VulkanContext final : public IContext {
                                                     .pNext = &vkFeatures12_};
   VkPhysicalDeviceFeatures2 vkFeatures10_ = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &vkFeatures11_};
 
+public:
   // provided by Vulkan 1.2
   VkPhysicalDeviceDriverProperties vkPhysicalDeviceDriverProperties_ = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES, nullptr};
   VkPhysicalDeviceVulkan12Properties vkPhysicalDeviceVulkan12Properties_ = {

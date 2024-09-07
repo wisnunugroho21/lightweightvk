@@ -231,7 +231,7 @@ VkShaderStageFlagBits shaderStageToVkShaderStage(lvk::ShaderStage stage) {
     return VK_SHADER_STAGE_MISS_BIT_KHR;
   case lvk::Stage_Intersection:
     return VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
-  case lvk::Stage_Collable:
+  case lvk::Stage_Callable:
     return VK_SHADER_STAGE_CALLABLE_BIT_KHR;
   };
   LVK_ASSERT(false);
@@ -3209,6 +3209,20 @@ lvk::Holder<lvk::BufferHandle> lvk::VulkanContext::createBuffer(const BufferDesc
   if (desc.usage & BufferUsageBits_Indirect) {
     usageFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
   }
+
+  if (desc.usage & BufferUsageBits_ShaderBindingTable) {
+    usageFlags |= VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR;
+  }
+
+  if (desc.usage & BufferUsageBits_AccelerationStructureBuildInputReadOnly) {
+    usageFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR;
+  }
+
+  if (desc.usage & BufferUsageBits_AccelerationStructureStorage) {
+    usageFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR;
+  }
+
+  LVK_ASSERT_MSG(usageFlags, "Invalid buffer usage");
 
   const VkMemoryPropertyFlags memFlags = storageTypeToVkMemoryPropertyFlags(desc.storage);
 
