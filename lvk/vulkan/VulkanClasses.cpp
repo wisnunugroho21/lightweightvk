@@ -4933,7 +4933,8 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     .samplerAnisotropy = VK_TRUE,
 #if !defined(ANDROID)
     .textureCompressionBC = VK_TRUE,
-#endif
+    .vertexPipelineStoresAndAtomics = VK_TRUE,
+#endif // !defined(ANDROID)
     .fragmentStoresAndAtomics = VK_TRUE,
     .shaderImageGatherExtended = VK_TRUE,
   };
@@ -4950,6 +4951,10 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 #if !defined(__APPLE__)
     .drawIndirectCount = VK_TRUE,
 #endif // !defined(__APPLE__)
+#if !defined(ANDROID)
+    .storageBuffer8BitAccess = VK_TRUE,
+    .uniformAndStorageBuffer8BitAccess = VK_TRUE,
+#endif // !defined(ANDROID)
     .descriptorIndexing = VK_TRUE,
     .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
     .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
