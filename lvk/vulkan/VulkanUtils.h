@@ -86,6 +86,7 @@ VkSamplerCreateInfo samplerStateDescToVkSamplerCreateInfo(const lvk::SamplerStat
 VkDescriptorSetLayoutBinding getDSLBinding(uint32_t binding,
                                            VkDescriptorType descriptorType,
                                            uint32_t descriptorCount,
+                                           VkShaderStageFlags stageFlags,
                                            const VkSampler* immutableSamplers = nullptr);
 VkSpecializationInfo getPipelineShaderStageSpecializationInfo(lvk::SpecializationConstantDesc desc, VkSpecializationMapEntry* outEntries);
 VkPipelineShaderStageCreateInfo getPipelineShaderStageCreateInfo(VkShaderStageFlagBits stage,

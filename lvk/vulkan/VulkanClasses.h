@@ -580,9 +580,11 @@ public:
       &vkPhysicalDeviceDriverProperties_,
   };
   // provided by Vulkan 1.1
-  VkPhysicalDeviceProperties2 vkPhysicalDeviceProperties2_ = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-                                                              &vkPhysicalDeviceVulkan12Properties_,
-                                                              VkPhysicalDeviceProperties{}};
+  VkPhysicalDeviceProperties2 vkPhysicalDeviceProperties2_ = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+      &vkPhysicalDeviceVulkan12Properties_,
+      VkPhysicalDeviceProperties{},
+  };
 
   std::vector<VkFormat> deviceDepthFormats_;
   std::vector<VkSurfaceFormatKHR> deviceSurfaceFormats_;
