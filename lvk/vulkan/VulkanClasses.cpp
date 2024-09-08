@@ -3615,12 +3615,11 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
 lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& desc, Result* outResult) {
   LVK_ASSERT(desc.type == AccelStructType_BLAS);
   LVK_ASSERT(desc.geometryType == AccelStructGeomType_Triangles);
-  LVK_ASSERT(desc.numIndices);
-  LVK_ASSERT(desc.numIndices % 3 == 0);
   LVK_ASSERT(desc.numVertices);
   LVK_ASSERT(desc.indexBuffer.valid());
   LVK_ASSERT(desc.vertexBuffer.valid());
   LVK_ASSERT(desc.transformBuffer.valid());
+  LVK_ASSERT(desc.buildRange.primitiveCount);
 
   VkGeometryFlagsKHR geometryFlags = 0;
 
@@ -3659,15 +3658,13 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
       .pGeometries = &accelerationStructureGeometry,
   };
 
-  const uint32_t numTriangles = desc.numIndices / 3;
-
   VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
   };
   vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
                                           VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
                                           &accelerationStructureBuildGeometryInfo,
-                                          &numTriangles,
+                                          &desc.buildRange.primitiveCount,
                                           &accelerationStructureBuildSizesInfo);
   char debugNameBuffer[256] = {0};
   if (desc.debugName) {
@@ -3730,10 +3727,10 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
   };
 
   const VkAccelerationStructureBuildRangeInfoKHR accelerationStructureBuildRangeInfo = {
-      .primitiveCount = numTriangles,
-      .primitiveOffset = 0,
-      .firstVertex = 0,
-      .transformOffset = 0,
+      .primitiveCount = desc.buildRange.primitiveCount,
+      .primitiveOffset = desc.buildRange.primitiveOffset,
+      .firstVertex = desc.buildRange.firstVertex,
+      .transformOffset = desc.buildRange.transformOffset,
   };
   const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&accelerationStructureBuildRangeInfo};
 

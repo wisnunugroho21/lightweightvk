@@ -808,11 +808,17 @@ enum AccelStructGeometryFlagBits : uint8_t {
   AccelStructGeometryFlagBits_NoDuplicateAnyHit = 1 << 1,
 };
 
+struct AccelStructBuildRange {
+  uint32_t primitiveCount = 0;
+  uint32_t primitiveOffset = 0;
+  uint32_t firstVertex = 0;
+  uint32_t transformOffset = 0;
+};
+
 struct AccelStructDesc {
   AccelStructType type = AccelStructType_Invalid;
   AccelStructGeomType geometryType = AccelStructGeomType_Triangles;
   uint8_t geometryFlags = AccelStructGeometryFlagBits_Opaque;
-  uint8_t buildFlags = AccelStructBuildFlagBits_PreferFastTrace;
 
   VertexFormat vertexFormat = VertexFormat::Invalid;
   BufferHandle vertexBuffer;
@@ -820,8 +826,9 @@ struct AccelStructDesc {
   uint32_t numVertices = 0;
   IndexFormat indexFormat = IndexFormat_UI32;
   BufferHandle indexBuffer;
-  uint32_t numIndices = 0;
   BufferHandle transformBuffer;
+  AccelStructBuildRange buildRange = {};
+  uint8_t buildFlags = AccelStructBuildFlagBits_PreferFastTrace;
   const char* debugName = "";
 };
 
