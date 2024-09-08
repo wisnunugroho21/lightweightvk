@@ -277,6 +277,12 @@ void lvk::destroy(lvk::IContext* ctx, lvk::QueryPoolHandle handle) {
   }
 }
 
+void lvk::destroy(lvk::IContext* ctx, lvk::AccelStructHandle handle) {
+  if (ctx) {
+    ctx->destroy(handle);
+  }
+}
+
 // Logs GLSL shaders with line numbers annotation
 void lvk::logShaderSource(const char* text) {
   uint32_t line = 0;

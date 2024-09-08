@@ -110,6 +110,7 @@ using SamplerHandle = lvk::Handle<struct Sampler>;
 using BufferHandle = lvk::Handle<struct Buffer>;
 using TextureHandle = lvk::Handle<struct Texture>;
 using QueryPoolHandle = lvk::Handle<struct QueryPool>;
+using AccelStructHandle = lvk::Handle<struct AccelerationStructure>;
 
 // forward declarations to access incomplete type IContext
 void destroy(lvk::IContext* ctx, lvk::ComputePipelineHandle handle);
@@ -119,6 +120,7 @@ void destroy(lvk::IContext* ctx, lvk::SamplerHandle handle);
 void destroy(lvk::IContext* ctx, lvk::BufferHandle handle);
 void destroy(lvk::IContext* ctx, lvk::TextureHandle handle);
 void destroy(lvk::IContext* ctx, lvk::QueryPoolHandle handle);
+void destroy(lvk::IContext* ctx, lvk::AccelStructHandle handle);
 
 template<typename HandleType>
 class Holder final {
@@ -935,6 +937,8 @@ class IContext {
                                                                 const char* debugName,
                                                                 Result* outResult = nullptr) = 0;
 
+  [[nodiscard]] virtual Holder<AccelStructHandle> createAccelerationStructure(const AccelStructDesc& desc, Result* outResult = nullptr) = 0;
+
   virtual void destroy(ComputePipelineHandle handle) = 0;
   virtual void destroy(RenderPipelineHandle handle) = 0;
   virtual void destroy(ShaderModuleHandle handle) = 0;
@@ -942,6 +946,7 @@ class IContext {
   virtual void destroy(BufferHandle handle) = 0;
   virtual void destroy(TextureHandle handle) = 0;
   virtual void destroy(QueryPoolHandle handle) = 0;
+  virtual void destroy(AccelStructHandle handle) = 0;
   virtual void destroy(Framebuffer& fb) = 0;
 
 #pragma region Buffer functions

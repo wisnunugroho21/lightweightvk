@@ -3271,6 +3271,18 @@ lvk::Holder<lvk::QueryPoolHandle> lvk::VulkanContext::createQueryPool(uint32_t n
   return {this, handle};
 }
 
+lvk::Holder<lvk::AccelStructHandle> lvk::VulkanContext::createAccelerationStructure(const AccelStructDesc& desc, Result* outResult) {
+  LVK_PROFILER_FUNCTION();
+
+  Result result;
+
+  AccelStructHandle handle;
+
+  Result::setResult(outResult, result);
+
+  return {this, handle};
+}
+
 lvk::Holder<lvk::SamplerHandle> lvk::VulkanContext::createSampler(const SamplerStateDesc& desc, Result* outResult) {
   LVK_PROFILER_FUNCTION();
 
@@ -4178,6 +4190,9 @@ void lvk::VulkanContext::destroy(lvk::QueryPoolHandle handle) {
   queriesPool_.destroy(handle);
 
   deferredTask(std::packaged_task<void()>([device = vkDevice_, pool = pool]() { vkDestroyQueryPool(device, pool, nullptr); }));
+}
+
+void lvk::VulkanContext::destroy(lvk::AccelStructHandle handle) {
 }
 
 void lvk::VulkanContext::destroy(Framebuffer& fb) {
