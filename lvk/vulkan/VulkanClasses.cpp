@@ -38,6 +38,8 @@ static_assert(lvk::Swizzle_R == (uint32_t)VK_COMPONENT_SWIZZLE_R);
 static_assert(lvk::Swizzle_G == (uint32_t)VK_COMPONENT_SWIZZLE_G);
 static_assert(lvk::Swizzle_B == (uint32_t)VK_COMPONENT_SWIZZLE_B);
 static_assert(lvk::Swizzle_A == (uint32_t)VK_COMPONENT_SWIZZLE_A);
+static_assert(sizeof(lvk::AccelStructInstance) == sizeof(VkAccelerationStructureInstanceKHR));
+static_assert(sizeof(lvk::mat3x4) == sizeof(VkTransformMatrixKHR));
 
 namespace {
 
