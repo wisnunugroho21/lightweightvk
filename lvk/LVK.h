@@ -781,6 +781,36 @@ struct TextureDesc {
   const char* debugName = "";
 };
 
+enum AccelStructType : uint8_t {
+  AccelStructType_Invalid = 0,
+  AccelStructType_TLAS = 1,
+  AccelStructType_BLAS = 2,
+};
+
+enum AccelStructGeomType : uint8_t {
+  AccelStructGeomType_Triangles = 0,
+  AccelStructGeomType_AABBs = 1,
+  AccelStructGeomType_Instances = 2,
+};
+
+enum AccelStructFlagBits : uint8_t {};
+
+struct AccelStructDesc {
+  AccelStructType type = AccelStructType_Invalid;
+  AccelStructGeomType geometryType = AccelStructGeomType_Triangles;
+
+  VertexFormat vertexFormat = VertexFormat::Invalid;
+  BufferHandle vertexBuffer;
+  uint32_t vertexStride = 0; // zero means the size of `vertexFormat`
+  uint32_t maxVertex = 0;
+  IndexFormat indexFormat = IndexFormat_UI32;
+  BufferHandle indexBuffer;
+  uint32_t numIndices = 0;
+  BufferHandle transformBuffer;
+  uint8_t flags = 0;
+  const char* debugName = "";
+};
+
 struct Dependencies {
   enum { LVK_MAX_SUBMIT_DEPENDENCIES = 4 };
   TextureHandle textures[LVK_MAX_SUBMIT_DEPENDENCIES] = {};
