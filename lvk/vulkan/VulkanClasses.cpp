@@ -4378,6 +4378,14 @@ void lvk::VulkanContext::destroy(Framebuffer& fb) {
   destroyFbTexture(fb.depthStencil.resolveTexture);
 }
 
+uint64_t lvk::VulkanContext::gpuAddress(AccelStructHandle handle) const {
+  const lvk::AccelerationStructure* as = accelStructuresPool_.get(handle);
+
+  LVK_ASSERT(as);
+
+  return as ? (uint64_t)as->deviceAddress : 0u;
+}
+
 lvk::Result lvk::VulkanContext::upload(lvk::BufferHandle handle, const void* data, size_t size, size_t offset) {
   LVK_PROFILER_FUNCTION();
 

@@ -968,6 +968,8 @@ class IContext {
   virtual void destroy(AccelStructHandle handle) = 0;
   virtual void destroy(Framebuffer& fb) = 0;
 
+  [[nodiscard]] virtual uint64_t gpuAddress(AccelStructHandle handle) const = 0;
+
 #pragma region Buffer functions
   virtual Result upload(BufferHandle handle, const void* data, size_t size, size_t offset = 0) = 0;
   [[nodiscard]] virtual uint8_t* getMappedPtr(BufferHandle handle) const = 0;

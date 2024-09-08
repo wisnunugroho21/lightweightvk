@@ -476,6 +476,8 @@ class VulkanContext final : public IContext {
   void destroy(AccelStructHandle handle) override;
   void destroy(Framebuffer& fb) override;
 
+  uint64_t gpuAddress(AccelStructHandle handle) const override;
+
   Result upload(BufferHandle handle, const void* data, size_t size, size_t offset) override;
   uint8_t* getMappedPtr(BufferHandle handle) const override;
   uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) const override;
