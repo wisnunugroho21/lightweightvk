@@ -4847,6 +4847,13 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   useStaging_ = !isHostVisibleSingleHeapMemory(vkPhysicalDevice_);
 
+  if (isRequestedCustomDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
+    addNextPhysicalDeviceProperties(&accelerationStructureProperties_);
+  }
+  if (isRequestedCustomDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
+    addNextPhysicalDeviceProperties(&rayTracingPipelineProperties_);
+  }
+
   vkGetPhysicalDeviceFeatures2(vkPhysicalDevice_, &vkFeatures10_);
   vkGetPhysicalDeviceProperties2(vkPhysicalDevice_, &vkPhysicalDeviceProperties2_);
 
