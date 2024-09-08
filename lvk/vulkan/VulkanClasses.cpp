@@ -4815,6 +4815,28 @@ uint32_t lvk::VulkanContext::queryDevices(HWDeviceType deviceType, HWDeviceDesc*
   return numCompatibleDevices;
 }
 
+bool lvk::VulkanContext::isRequestedCustomDeviceExtension(const char* ext) const {
+  if (!ext)
+    return false;
+
+  for (const char* s : config_.extensionsDevice) {
+    if (s && strcmp(s, ext) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+void lvk::VulkanContext::addNextPhysicalDeviceProperties(void* properties) {
+  if (!properties)
+    return;
+
+  std::launder(reinterpret_cast<VkBaseOutStructure*>(properties))->pNext =
+      std::launder(reinterpret_cast<VkBaseOutStructure*>(vkPhysicalDeviceProperties2_.pNext));
+
+  vkPhysicalDeviceProperties2_.pNext = properties;
+}
+
 lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   if (desc.guid == 0UL) {
     LLOGW("Invalid hardwareGuid(%lu)", desc.guid);

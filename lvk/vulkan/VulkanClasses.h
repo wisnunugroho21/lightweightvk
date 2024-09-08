@@ -554,6 +554,8 @@ class VulkanContext final : public IContext {
   ShaderModuleState createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
   const VkSamplerYcbcrConversionInfo* getOrCreateYcbcrConversionInfo(lvk::Format format);
   VkSampler getOrCreateYcbcrSampler(lvk::Format format);
+  bool isRequestedCustomDeviceExtension(const char* ext) const;
+  void addNextPhysicalDeviceProperties(void* properties);
 
  private:
   friend class lvk::VulkanSwapchain;
