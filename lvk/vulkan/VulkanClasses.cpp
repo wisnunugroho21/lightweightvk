@@ -3617,9 +3617,19 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
   LVK_ASSERT(desc.geometryType == AccelStructGeomType_Triangles);
   LVK_ASSERT(desc.numIndices);
   LVK_ASSERT(desc.numIndices % 3 == 0);
+  LVK_ASSERT(desc.numVertices);
   LVK_ASSERT(desc.indexBuffer.valid());
   LVK_ASSERT(desc.vertexBuffer.valid());
   LVK_ASSERT(desc.transformBuffer.valid());
+
+  VkGeometryFlagsKHR geometryFlags = 0;
+
+  if (desc.geometryFlags & AccelStructGeometryFlagBits_Opaque) {
+    geometryFlags |= VK_GEOMETRY_OPAQUE_BIT_KHR;
+  }
+  if (desc.geometryFlags & AccelStructGeometryFlagBits_NoDuplicateAnyHit) {
+    geometryFlags |= VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
+  }
 
   const VkAccelerationStructureGeometryKHR accelerationStructureGeometry{
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
@@ -3632,7 +3642,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
                       .vertexFormat = vertexFormatToVkFormat(desc.vertexFormat),
                       .vertexData = {.deviceAddress = gpuAddress(desc.vertexBuffer)},
                       .vertexStride = desc.vertexStride ? desc.vertexStride : lvk::getVertexFormatSize(desc.vertexFormat),
-                      .maxVertex = desc.maxVertex,
+                      .maxVertex = desc.numVertices - 1,
                       .indexType = VK_INDEX_TYPE_UINT32,
                       .indexData = {.deviceAddress = gpuAddress(desc.indexBuffer)},
                       .transformData = {.deviceAddress = gpuAddress(desc.transformBuffer)},
@@ -3690,10 +3700,28 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
       },
       outResult);
 
+  VkBuildAccelerationStructureFlagsKHR buildFlags = 0;
+
+  if (desc.buildFlags & AccelStructBuildFlagBits_AllowUpdate) {
+    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+  }
+  if (desc.buildFlags & AccelStructBuildFlagBits_AllowCompaction) {
+    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+  }
+  if (desc.buildFlags & AccelStructBuildFlagBits_PreferFastTrace) {
+    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+  }
+  if (desc.buildFlags & AccelStructBuildFlagBits_PreferFastBuild) {
+    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+  }
+  if (desc.buildFlags & AccelStructBuildFlagBits_LowMemory) {
+    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_LOW_MEMORY_BIT_KHR;
+  }
+
   const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo{
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
       .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-      .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+      .flags = buildFlags,
       .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
       .dstAccelerationStructure = accelStruct.vkHandle,
       .geometryCount = 1,

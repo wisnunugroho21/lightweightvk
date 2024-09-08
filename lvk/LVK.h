@@ -795,21 +795,33 @@ enum AccelStructGeomType : uint8_t {
   AccelStructGeomType_Instances = 2,
 };
 
-enum AccelStructFlagBits : uint8_t {};
+enum AccelStructBuildFlagBits : uint8_t {
+  AccelStructBuildFlagBits_AllowUpdate = 1 << 0,
+  AccelStructBuildFlagBits_AllowCompaction = 1 << 1,
+  AccelStructBuildFlagBits_PreferFastTrace = 1 << 2,
+  AccelStructBuildFlagBits_PreferFastBuild = 1 << 3,
+  AccelStructBuildFlagBits_LowMemory = 1 << 4,
+};
+
+enum AccelStructGeometryFlagBits : uint8_t {
+  AccelStructGeometryFlagBits_Opaque = 1 << 0,
+  AccelStructGeometryFlagBits_NoDuplicateAnyHit = 1 << 1,
+};
 
 struct AccelStructDesc {
   AccelStructType type = AccelStructType_Invalid;
   AccelStructGeomType geometryType = AccelStructGeomType_Triangles;
+  uint8_t geometryFlags = AccelStructGeometryFlagBits_Opaque;
+  uint8_t buildFlags = AccelStructBuildFlagBits_PreferFastTrace;
 
   VertexFormat vertexFormat = VertexFormat::Invalid;
   BufferHandle vertexBuffer;
   uint32_t vertexStride = 0; // zero means the size of `vertexFormat`
-  uint32_t maxVertex = 0;
+  uint32_t numVertices = 0;
   IndexFormat indexFormat = IndexFormat_UI32;
   BufferHandle indexBuffer;
   uint32_t numIndices = 0;
   BufferHandle transformBuffer;
-  uint8_t flags = 0;
   const char* debugName = "";
 };
 
