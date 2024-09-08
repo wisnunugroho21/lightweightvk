@@ -117,4 +117,12 @@ VkFormat formatToVkFormat(lvk::Format format);
 VkCompareOp compareOpToVkCompareOp(lvk::CompareOp func);
 VkExtent2D getImagePlaneExtent(VkExtent2D plane0, lvk::Format format, uint32_t plane);
 
+// raw Vulkan helpers: use this if you want to interop LightweightVK API with your own raw Vulkan API calls
+VkDevice getVkDevice(const IContext* ctx);
+VkPhysicalDevice getVkPhysicalDevice(const IContext* ctx);
+VkCommandBuffer getVkCommandBuffer(const ICommandBuffer& buffer);
+VkBuffer getVkBuffer(const IContext* ctx, BufferHandle buffer);
+VkImageView getVkImageView(const IContext* ctx, TextureHandle texture);
+VkShaderModule getVkShaderModule(const IContext* ctx, ShaderModuleHandle shader);
+
 } // namespace lvk

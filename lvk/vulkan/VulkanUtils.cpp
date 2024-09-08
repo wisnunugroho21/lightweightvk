@@ -966,3 +966,42 @@ VkExtent2D lvk::getImagePlaneExtent(VkExtent2D plane0, lvk::Format format, uint3
   }
   return plane0;
 }
+
+VkDevice lvk::getVkDevice(const IContext* ctx) {
+  if (!ctx)
+    return VK_NULL_HANDLE;
+
+  return static_cast<const VulkanContext*>(ctx)->getVkDevice();
+}
+
+VkPhysicalDevice lvk::getVkPhysicalDevice(const IContext* ctx) {
+  if (!ctx)
+    return VK_NULL_HANDLE;
+
+  return static_cast<const VulkanContext*>(ctx)->getVkPhysicalDevice();
+}
+
+VkCommandBuffer lvk::getVkCommandBuffer(const ICommandBuffer& buffer) {
+  return static_cast<const lvk::CommandBuffer&>(buffer).getVkCommandBuffer();
+}
+
+VkBuffer lvk::getVkBuffer(const IContext* ctx, BufferHandle buffer) {
+  if (!ctx || buffer.empty())
+    return VK_NULL_HANDLE;
+
+  return static_cast<const VulkanContext*>(ctx)->buffersPool_.get(buffer)->vkBuffer_;
+}
+
+VkImageView lvk::getVkImageView(const IContext* ctx, TextureHandle texture) {
+  if (!ctx || texture.empty())
+    return VK_NULL_HANDLE;
+
+  return static_cast<const VulkanContext*>(ctx)->texturesPool_.get(texture)->imageView_;
+}
+
+VkShaderModule lvk::getVkShaderModule(const IContext* ctx, ShaderModuleHandle shader) {
+  if (!ctx || shader.empty())
+    return VK_NULL_HANDLE;
+
+  return static_cast<const VulkanContext*>(ctx)->shaderModulesPool_.get(shader)->sm;
+}
