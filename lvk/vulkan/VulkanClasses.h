@@ -290,6 +290,12 @@ struct ShaderModuleState final {
   uint32_t pushConstantsSize = 0;
 };
 
+struct AccelerationStructure {
+  VkAccelerationStructureKHR vkHandle = VK_NULL_HANDLE;
+  uint64_t deviceAddress = 0;
+  lvk::Holder<lvk::BufferHandle> buffer;
+};
+
 class CommandBuffer final : public ICommandBuffer {
  public:
   CommandBuffer() = default;
@@ -458,6 +464,8 @@ class VulkanContext final : public IContext {
 
   Holder<QueryPoolHandle> createQueryPool(uint32_t numQueries, const char* debugName, Result* outResult) override;
 
+  Holder<AccelStructHandle> createAccelerationStructure(const AccelStructDesc& desc, Result* outResult) override;
+
   void destroy(ComputePipelineHandle handle) override;
   void destroy(RenderPipelineHandle handle) override;
   void destroy(ShaderModuleHandle handle) override;
@@ -465,11 +473,12 @@ class VulkanContext final : public IContext {
   void destroy(BufferHandle handle) override;
   void destroy(TextureHandle handle) override;
   void destroy(QueryPoolHandle handle) override;
+  void destroy(AccelStructHandle handle) override;
   void destroy(Framebuffer& fb) override;
 
   Result upload(BufferHandle handle, const void* data, size_t size, size_t offset) override;
   uint8_t* getMappedPtr(BufferHandle handle) const override;
-  uint64_t gpuAddress(BufferHandle handle, size_t offset) const override;
+  uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) const override;
   void flushMappedMemory(BufferHandle handle, size_t offset, size_t size) const override;
 
   Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data) override;
@@ -507,6 +516,7 @@ class VulkanContext final : public IContext {
                               lvk::Result* outResult,
                               lvk::Format yuvFormat = Format_Invalid,
                               const char* debugName = nullptr);
+  AccelStructHandle createBLAS(const AccelStructDesc& desc, Result* outResult);
 
   bool hasSwapchain() const noexcept {
     return swapchain_ != nullptr;
@@ -629,6 +639,7 @@ public:
   lvk::Pool<lvk::Buffer, lvk::VulkanBuffer> buffersPool_;
   lvk::Pool<lvk::Texture, lvk::VulkanImage> texturesPool_;
   lvk::Pool<lvk::QueryPool, VkQueryPool> queriesPool_;
+  lvk::Pool<lvk::AccelerationStructure, lvk::AccelerationStructure> accelStructuresPool_;
 };
 
 } // namespace lvk

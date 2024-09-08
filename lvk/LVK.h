@@ -110,6 +110,7 @@ using SamplerHandle = lvk::Handle<struct Sampler>;
 using BufferHandle = lvk::Handle<struct Buffer>;
 using TextureHandle = lvk::Handle<struct Texture>;
 using QueryPoolHandle = lvk::Handle<struct QueryPool>;
+using AccelStructHandle = lvk::Handle<struct AccelerationStructure>;
 
 // forward declarations to access incomplete type IContext
 void destroy(lvk::IContext* ctx, lvk::ComputePipelineHandle handle);
@@ -119,6 +120,7 @@ void destroy(lvk::IContext* ctx, lvk::SamplerHandle handle);
 void destroy(lvk::IContext* ctx, lvk::BufferHandle handle);
 void destroy(lvk::IContext* ctx, lvk::TextureHandle handle);
 void destroy(lvk::IContext* ctx, lvk::QueryPoolHandle handle);
+void destroy(lvk::IContext* ctx, lvk::AccelStructHandle handle);
 
 template<typename HandleType>
 class Holder final {
@@ -781,6 +783,55 @@ struct TextureDesc {
   const char* debugName = "";
 };
 
+enum AccelStructType : uint8_t {
+  AccelStructType_Invalid = 0,
+  AccelStructType_TLAS = 1,
+  AccelStructType_BLAS = 2,
+};
+
+enum AccelStructGeomType : uint8_t {
+  AccelStructGeomType_Triangles = 0,
+  AccelStructGeomType_AABBs = 1,
+  AccelStructGeomType_Instances = 2,
+};
+
+enum AccelStructBuildFlagBits : uint8_t {
+  AccelStructBuildFlagBits_AllowUpdate = 1 << 0,
+  AccelStructBuildFlagBits_AllowCompaction = 1 << 1,
+  AccelStructBuildFlagBits_PreferFastTrace = 1 << 2,
+  AccelStructBuildFlagBits_PreferFastBuild = 1 << 3,
+  AccelStructBuildFlagBits_LowMemory = 1 << 4,
+};
+
+enum AccelStructGeometryFlagBits : uint8_t {
+  AccelStructGeometryFlagBits_Opaque = 1 << 0,
+  AccelStructGeometryFlagBits_NoDuplicateAnyHit = 1 << 1,
+};
+
+struct AccelStructBuildRange {
+  uint32_t primitiveCount = 0;
+  uint32_t primitiveOffset = 0;
+  uint32_t firstVertex = 0;
+  uint32_t transformOffset = 0;
+};
+
+struct AccelStructDesc {
+  AccelStructType type = AccelStructType_Invalid;
+  AccelStructGeomType geometryType = AccelStructGeomType_Triangles;
+  uint8_t geometryFlags = AccelStructGeometryFlagBits_Opaque;
+
+  VertexFormat vertexFormat = VertexFormat::Invalid;
+  BufferHandle vertexBuffer;
+  uint32_t vertexStride = 0; // zero means the size of `vertexFormat`
+  uint32_t numVertices = 0;
+  IndexFormat indexFormat = IndexFormat_UI32;
+  BufferHandle indexBuffer;
+  BufferHandle transformBuffer;
+  AccelStructBuildRange buildRange = {};
+  uint8_t buildFlags = AccelStructBuildFlagBits_PreferFastTrace;
+  const char* debugName = "";
+};
+
 struct Dependencies {
   enum { LVK_MAX_SUBMIT_DEPENDENCIES = 4 };
   TextureHandle textures[LVK_MAX_SUBMIT_DEPENDENCIES] = {};
@@ -905,6 +956,8 @@ class IContext {
                                                                 const char* debugName,
                                                                 Result* outResult = nullptr) = 0;
 
+  [[nodiscard]] virtual Holder<AccelStructHandle> createAccelerationStructure(const AccelStructDesc& desc, Result* outResult = nullptr) = 0;
+
   virtual void destroy(ComputePipelineHandle handle) = 0;
   virtual void destroy(RenderPipelineHandle handle) = 0;
   virtual void destroy(ShaderModuleHandle handle) = 0;
@@ -912,6 +965,7 @@ class IContext {
   virtual void destroy(BufferHandle handle) = 0;
   virtual void destroy(TextureHandle handle) = 0;
   virtual void destroy(QueryPoolHandle handle) = 0;
+  virtual void destroy(AccelStructHandle handle) = 0;
   virtual void destroy(Framebuffer& fb) = 0;
 
 #pragma region Buffer functions
