@@ -708,8 +708,8 @@ enum BufferUsageBits : uint8_t {
   BufferUsageBits_Indirect = 1 << 4,
   // ray tracing
   BufferUsageBits_ShaderBindingTable = 1 << 5,
-  BufferUsageBits_AccelerationStructureBuildInputReadOnly = 1 << 6,
-  BufferUsageBits_AccelerationStructureStorage = 1 << 7
+  BufferUsageBits_AccelStructBuildInputReadOnly = 1 << 6,
+  BufferUsageBits_AccelStructStorage = 1 << 7
 };
 
 struct BufferDesc final {
