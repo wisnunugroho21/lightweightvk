@@ -1005,3 +1005,10 @@ VkShaderModule lvk::getVkShaderModule(const IContext* ctx, ShaderModuleHandle sh
 
   return static_cast<const VulkanContext*>(ctx)->shaderModulesPool_.get(shader)->sm;
 }
+
+VkDeviceAddress lvk::getAccelerationStructureDeviceAddress(const IContext* ctx, AccelStructHandle accelStruct) {
+  if (!ctx || accelStruct.empty())
+    return 0;
+
+  return static_cast<const VulkanContext*>(ctx)->accelStructuresPool_.get(accelStruct)->deviceAddress;
+}
