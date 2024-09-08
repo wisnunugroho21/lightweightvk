@@ -255,6 +255,28 @@ VkMemoryPropertyFlags storageTypeToVkMemoryPropertyFlags(lvk::StorageType storag
   return memFlags;
 }
 
+VkBuildAccelerationStructureFlagsKHR buildFlagsToVkBuildAccelerationStructureFlags(uint8_t buildFlags) {
+  VkBuildAccelerationStructureFlagsKHR flags = 0;
+
+  if (buildFlags & lvk::AccelStructBuildFlagBits_AllowUpdate) {
+    flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
+  }
+  if (buildFlags & lvk::AccelStructBuildFlagBits_AllowCompaction) {
+    flags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
+  }
+  if (buildFlags & lvk::AccelStructBuildFlagBits_PreferFastTrace) {
+    flags |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+  }
+  if (buildFlags & lvk::AccelStructBuildFlagBits_PreferFastBuild) {
+    flags |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
+  }
+  if (buildFlags & lvk::AccelStructBuildFlagBits_LowMemory) {
+    flags |= VK_BUILD_ACCELERATION_STRUCTURE_LOW_MEMORY_BIT_KHR;
+  }
+
+  return flags;
+}
+
 VkPolygonMode polygonModeToVkPolygonMode(lvk::PolygonMode mode) {
   switch (mode) {
   case lvk::PolygonMode_Fill:
@@ -3697,28 +3719,10 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
       },
       outResult);
 
-  VkBuildAccelerationStructureFlagsKHR buildFlags = 0;
-
-  if (desc.buildFlags & AccelStructBuildFlagBits_AllowUpdate) {
-    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
-  }
-  if (desc.buildFlags & AccelStructBuildFlagBits_AllowCompaction) {
-    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR;
-  }
-  if (desc.buildFlags & AccelStructBuildFlagBits_PreferFastTrace) {
-    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-  }
-  if (desc.buildFlags & AccelStructBuildFlagBits_PreferFastBuild) {
-    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_BUILD_BIT_KHR;
-  }
-  if (desc.buildFlags & AccelStructBuildFlagBits_LowMemory) {
-    buildFlags |= VK_BUILD_ACCELERATION_STRUCTURE_LOW_MEMORY_BIT_KHR;
-  }
-
   const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo{
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
       .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-      .flags = buildFlags,
+      .flags = buildFlagsToVkBuildAccelerationStructureFlags(desc.buildFlags),
       .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR,
       .dstAccelerationStructure = accelStruct.vkHandle,
       .geometryCount = 1,
