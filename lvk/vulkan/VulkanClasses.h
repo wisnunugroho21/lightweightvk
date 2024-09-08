@@ -519,6 +519,7 @@ class VulkanContext final : public IContext {
                               lvk::Format yuvFormat = Format_Invalid,
                               const char* debugName = nullptr);
   AccelStructHandle createBLAS(const AccelStructDesc& desc, Result* outResult);
+  AccelStructHandle createTLAS(const AccelStructDesc& desc, Result* outResult);
 
   bool hasSwapchain() const noexcept {
     return swapchain_ != nullptr;
