@@ -1019,3 +1019,10 @@ VkAccelerationStructureKHR lvk::getVkAccelerationStructure(const IContext* ctx, 
 
   return static_cast<const VulkanContext*>(ctx)->accelStructuresPool_.get(accelStruct)->vkHandle;
 }
+
+VkBuffer lvk::getVkBuffer(const IContext* ctx, AccelStructHandle accelStruct) {
+  if (!ctx || accelStruct.empty())
+    return 0;
+
+  return getVkBuffer(ctx, static_cast<const VulkanContext*>(ctx)->accelStructuresPool_.get(accelStruct)->buffer);
+}

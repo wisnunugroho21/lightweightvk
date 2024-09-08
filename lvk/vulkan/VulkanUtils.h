@@ -126,5 +126,6 @@ VkImageView getVkImageView(const IContext* ctx, TextureHandle texture);
 VkShaderModule getVkShaderModule(const IContext* ctx, ShaderModuleHandle shader);
 VkDeviceAddress getVkAccelerationStructureDeviceAddress(const IContext* ctx, AccelStructHandle accelStruct);
 VkAccelerationStructureKHR getVkAccelerationStructure(const IContext* ctx, AccelStructHandle accelStruct);
+VkBuffer getVkBuffer(const IContext* ctx, AccelStructHandle accelStruct);
 
 } // namespace lvk
