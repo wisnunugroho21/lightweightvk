@@ -3298,6 +3298,11 @@ lvk::Holder<lvk::QueryPoolHandle> lvk::VulkanContext::createQueryPool(uint32_t n
 lvk::Holder<lvk::AccelStructHandle> lvk::VulkanContext::createAccelerationStructure(const AccelStructDesc& desc, Result* outResult) {
   LVK_PROFILER_FUNCTION();
 
+  if (!LVK_VERIFY(isAccelerationStructureEnabled_)) {
+    Result::setResult(outResult, Result(Result::Code::RuntimeError, "VK_KHR_acceleration_structure is not enabled"));
+    return {};
+  }
+
   Result result;
 
   AccelStructHandle handle;
@@ -4201,7 +4206,6 @@ VkPipeline lvk::VulkanContext::getVkPipeline(ComputePipelineHandle handle) {
         .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = -1,
     };
-    VkPipeline pipeline = VK_NULL_HANDLE;
     VK_ASSERT(vkCreateComputePipelines(vkDevice_, pipelineCache_, 1, &ci, nullptr, &cps->pipeline_));
     VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_PIPELINE, (uint64_t)cps->pipeline_, cps->desc_.debugName));
   }
@@ -5144,9 +5148,11 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   if (isRequestedCustomDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
     addNextPhysicalDeviceProperties(&accelerationStructureProperties_);
+    isAccelerationStructureEnabled_ = true;
   }
   if (isRequestedCustomDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
     addNextPhysicalDeviceProperties(&rayTracingPipelineProperties_);
+    isRayTracingEnabled_ = true;
   }
 
   vkGetPhysicalDeviceFeatures2(vkPhysicalDevice_, &vkFeatures10_);

@@ -617,11 +617,14 @@ public:
   std::unique_ptr<lvk::VulkanStagingDevice> stagingDevice_;
   uint32_t currentMaxTextures_ = 16;
   uint32_t currentMaxSamplers_ = 16;
+  uint32_t currentMaxAccelStructs_ = 1;
   VkDescriptorSetLayout vkDSL_ = VK_NULL_HANDLE;
   VkDescriptorPool vkDPool_ = VK_NULL_HANDLE;
   VkDescriptorSet vkDSet_ = VK_NULL_HANDLE;
   // don't use staging on devices with shared host-visible memory
   bool useStaging_ = true;
+  bool isAccelerationStructureEnabled_ = false;
+  bool isRayTracingEnabled_ = false;
 
   std::unique_ptr<struct VulkanContextImpl> pimpl_;
 
