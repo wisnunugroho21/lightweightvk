@@ -291,6 +291,7 @@ struct ShaderModuleState final {
 };
 
 struct AccelerationStructure {
+  bool isTLAS = false;
   VkAccelerationStructureKHR vkHandle = VK_NULL_HANDLE;
   uint64_t deviceAddress = 0;
   lvk::Holder<lvk::BufferHandle> buffer;
@@ -519,6 +520,7 @@ class VulkanContext final : public IContext {
                               lvk::Format yuvFormat = Format_Invalid,
                               const char* debugName = nullptr);
   AccelStructHandle createBLAS(const AccelStructDesc& desc, Result* outResult);
+  AccelStructHandle createTLAS(const AccelStructDesc& desc, Result* outResult);
 
   bool hasSwapchain() const noexcept {
     return swapchain_ != nullptr;
@@ -561,7 +563,7 @@ class VulkanContext final : public IContext {
   void processDeferredTasks() const;
   void waitDeferredTasks();
   void generateMipmap(TextureHandle handle) const;
-  lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers);
+  lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers, uint32_t maxAccelStructs);
   ShaderModuleState createShaderModuleFromSPIRV(const void* spirv, size_t numBytes, const char* debugName, Result* outResult) const;
   ShaderModuleState createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
   const VkSamplerYcbcrConversionInfo* getOrCreateYcbcrConversionInfo(lvk::Format format);
@@ -616,11 +618,14 @@ public:
   std::unique_ptr<lvk::VulkanStagingDevice> stagingDevice_;
   uint32_t currentMaxTextures_ = 16;
   uint32_t currentMaxSamplers_ = 16;
+  uint32_t currentMaxAccelStructs_ = 1;
   VkDescriptorSetLayout vkDSL_ = VK_NULL_HANDLE;
   VkDescriptorPool vkDPool_ = VK_NULL_HANDLE;
   VkDescriptorSet vkDSet_ = VK_NULL_HANDLE;
   // don't use staging on devices with shared host-visible memory
   bool useStaging_ = true;
+  bool isAccelerationStructureEnabled_ = false;
+  bool isRayTracingEnabled_ = false;
 
   std::unique_ptr<struct VulkanContextImpl> pimpl_;
 

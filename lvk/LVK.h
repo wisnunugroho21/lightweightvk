@@ -808,11 +808,31 @@ enum AccelStructGeometryFlagBits : uint8_t {
   AccelStructGeometryFlagBits_NoDuplicateAnyHit = 1 << 1,
 };
 
+enum AccelStructInstanceFlagBits : uint8_t {
+  AccelStructInstanceFlagBits_TriangleFacingCullDisable = 1 << 0,
+  AccelStructInstanceFlagBits_TriangleFlipFacing = 1 << 1,
+  AccelStructInstanceFlagBits_ForceOpaque = 1 << 2,
+  AccelStructInstanceFlagBits_ForceNoOpaque = 1 << 3,
+};
+
 struct AccelStructBuildRange {
   uint32_t primitiveCount = 0;
   uint32_t primitiveOffset = 0;
   uint32_t firstVertex = 0;
   uint32_t transformOffset = 0;
+};
+
+struct mat3x4 {
+  float matrix[3][4];
+};
+
+struct AccelStructInstance {
+  mat3x4 transform;
+  uint32_t instanceCustomIndex : 24 = 0;
+  uint32_t mask : 8 = 0xff;
+  uint32_t instanceShaderBindingTableRecordOffset : 24 = 0;
+  uint32_t flags : 8 = AccelStructInstanceFlagBits_TriangleFacingCullDisable;
+  uint64_t accelerationStructureReference = 0;
 };
 
 struct AccelStructDesc {
@@ -827,6 +847,7 @@ struct AccelStructDesc {
   IndexFormat indexFormat = IndexFormat_UI32;
   BufferHandle indexBuffer;
   BufferHandle transformBuffer;
+  BufferHandle instancesBuffer;
   AccelStructBuildRange buildRange = {};
   uint8_t buildFlags = AccelStructBuildFlagBits_PreferFastTrace;
   const char* debugName = "";
