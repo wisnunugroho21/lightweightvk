@@ -291,6 +291,7 @@ struct ShaderModuleState final {
 };
 
 struct AccelerationStructure {
+  bool isTLAS = false;
   VkAccelerationStructureKHR vkHandle = VK_NULL_HANDLE;
   uint64_t deviceAddress = 0;
   lvk::Holder<lvk::BufferHandle> buffer;
@@ -562,7 +563,7 @@ class VulkanContext final : public IContext {
   void processDeferredTasks() const;
   void waitDeferredTasks();
   void generateMipmap(TextureHandle handle) const;
-  lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers);
+  lvk::Result growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers, uint32_t maxAccelStructs);
   ShaderModuleState createShaderModuleFromSPIRV(const void* spirv, size_t numBytes, const char* debugName, Result* outResult) const;
   ShaderModuleState createShaderModuleFromGLSL(ShaderStage stage, const char* source, const char* debugName, Result* outResult) const;
   const VkSamplerYcbcrConversionInfo* getOrCreateYcbcrConversionInfo(lvk::Format format);

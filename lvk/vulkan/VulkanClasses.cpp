@@ -51,7 +51,8 @@ enum Bindings {
   kBinding_Samplers = 1,
   kBinding_StorageImages = 2,
   kBinding_YUVImages = 3,
-  kBinding_NumBindings = 4,
+  kBinding_AccelerationStructures = 4,
+  kBinding_NumBindings = 5,
 };
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msgSeverity,
@@ -3327,6 +3328,8 @@ lvk::Holder<lvk::AccelStructHandle> lvk::VulkanContext::createAccelerationStruct
 
   Result::setResult(outResult, result);
 
+  awaitingCreation_ = true;
+
   return {this, handle};
 }
 
@@ -3803,6 +3806,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
     snprintf(debugNameBuffer, sizeof(debugNameBuffer) - 1, "Buffer: %s", desc.debugName);
   }
   lvk::AccelerationStructure accelStruct = {
+      .isTLAS = true,
       .buffer = createBuffer(
           {
               .usage = lvk::BufferUsageBits_AccelStructStorage,
@@ -4397,6 +4401,7 @@ void lvk::VulkanContext::destroy(lvk::TextureHandle handle) {
 
   SCOPE_EXIT {
     texturesPool_.destroy(handle);
+    awaitingCreation_ = true; // make the validation layers happy
   };
 
   lvk::VulkanImage* tex = texturesPool_.get(handle);
@@ -5608,7 +5613,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       Format_Invalid,
       "Sampler: default");
 
-  growDescriptorPool(currentMaxTextures_, currentMaxSamplers_);
+  growDescriptorPool(currentMaxTextures_, currentMaxSamplers_, currentMaxAccelStructs_);
 
   querySurfaceCapabilities();
 
@@ -5636,9 +5641,10 @@ lvk::Result lvk::VulkanContext::initSwapchain(uint32_t width, uint32_t height) {
   return swapchain_ ? Result() : Result(Result::Code::RuntimeError, "Failed to create swapchain");
 }
 
-lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers) {
+lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_t maxSamplers, uint32_t maxAccelStructs) {
   currentMaxTextures_ = maxTextures;
   currentMaxSamplers_ = maxSamplers;
+  currentMaxAccelStructs_ = maxAccelStructs;
 
 #if LVK_VULKAN_PRINT_COMMANDS
   LLOGL("growDescriptorPool(%u, %u)\n", maxTextures, maxSamplers);
@@ -5691,15 +5697,18 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
   }
 
   // create default descriptor set layout which is going to be shared by graphics pipelines
-  const VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                        VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT |
-                                        VK_SHADER_STAGE_COMPUTE_BIT;
+  VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                                  VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
+  if (isRayTracingEnabled_) {
+    stageFlags |= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+  }
   const VkDescriptorSetLayoutBinding bindings[kBinding_NumBindings] = {
       lvk::getDSLBinding(kBinding_Textures, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures, stageFlags),
       lvk::getDSLBinding(kBinding_Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers, stageFlags),
       lvk::getDSLBinding(kBinding_StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures, stageFlags),
       lvk::getDSLBinding(
           kBinding_YUVImages, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, immutableSamplers.size(), stageFlags, immutableSamplersData),
+      lvk::getDSLBinding(kBinding_AccelerationStructures, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, maxAccelStructs, stageFlags),
   };
   const uint32_t flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
                          VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
@@ -5709,14 +5718,14 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
   }
   const VkDescriptorSetLayoutBindingFlagsCreateInfo setLayoutBindingFlagsCI = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
-      .bindingCount = kBinding_NumBindings,
+      .bindingCount = uint32_t(isAccelerationStructureEnabled_ ? kBinding_NumBindings : kBinding_NumBindings - 1),
       .pBindingFlags = bindingFlags,
   };
   const VkDescriptorSetLayoutCreateInfo dslci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .pNext = &setLayoutBindingFlagsCI,
       .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
-      .bindingCount = kBinding_NumBindings,
+      .bindingCount = uint32_t(isAccelerationStructureEnabled_ ? kBinding_NumBindings : kBinding_NumBindings - 1),
       .pBindings = bindings,
   };
   VK_ASSERT(vkCreateDescriptorSetLayout(vkDevice_, &dslci, nullptr, &vkDSL_));
@@ -5730,12 +5739,13 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextures},
+        VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, maxAccelStructs},
     };
     const VkDescriptorPoolCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
         .maxSets = 1,
-        .poolSizeCount = kBinding_NumBindings,
+        .poolSizeCount = uint32_t(isAccelerationStructureEnabled_ ? kBinding_NumBindings : kBinding_NumBindings - 1),
         .pPoolSizes = poolSizes,
     };
     VK_ASSERT_RETURN(vkCreateDescriptorPool(vkDevice_, &ci, nullptr, &vkDPool_));
@@ -5891,6 +5901,7 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
 
   uint32_t newMaxTextures = currentMaxTextures_;
   uint32_t newMaxSamplers = currentMaxSamplers_;
+  uint32_t newMaxAccelStructs = currentMaxAccelStructs_;
 
   while (texturesPool_.objects_.size() > newMaxTextures) {
     newMaxTextures *= 2;
@@ -5898,8 +5909,12 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   while (samplersPool_.objects_.size() > newMaxSamplers) {
     newMaxSamplers *= 2;
   }
-  if (newMaxTextures != currentMaxTextures_ || newMaxSamplers != currentMaxSamplers_ || awaitingNewImmutableSamplers_) {
-    growDescriptorPool(newMaxTextures, newMaxSamplers);
+  while (accelStructuresPool_.objects_.size() > newMaxAccelStructs) {
+    newMaxAccelStructs *= 2;
+  }
+  if (newMaxTextures != currentMaxTextures_ || newMaxSamplers != currentMaxSamplers_ || awaitingNewImmutableSamplers_ ||
+      newMaxAccelStructs != currentMaxAccelStructs_) {
+    growDescriptorPool(newMaxTextures, newMaxSamplers, newMaxAccelStructs);
   }
 
   // 1. Sampled and storage images
@@ -5955,8 +5970,41 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
     infoSamplers.push_back({sampler.obj_ ? sampler.obj_ : samplersPool_.objects_[0].obj_, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED});
   }
 
+  // 3. Acceleration structures
+  std::vector<VkAccelerationStructureKHR> handlesAccelStructs;
+  handlesAccelStructs.reserve(accelStructuresPool_.objects_.size());
+
+  VkAccelerationStructureKHR dummyTLAS = VK_NULL_HANDLE;
+  // use the first valid TLAS as a dummy
+  for (const auto& as : accelStructuresPool_.objects_) {
+    if (as.obj_.vkHandle && as.obj_.isTLAS) {
+      dummyTLAS = as.obj_.vkHandle;
+    }
+  }
+  for (const auto& as : accelStructuresPool_.objects_) {
+    handlesAccelStructs.push_back(as.obj_.isTLAS ? as.obj_.vkHandle : dummyTLAS);
+  }
+
+  VkWriteDescriptorSetAccelerationStructureKHR writeAccelStruct = {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR,
+      .accelerationStructureCount = (uint32_t)handlesAccelStructs.size(),
+      .pAccelerationStructures = handlesAccelStructs.data(),
+  };
+
   VkWriteDescriptorSet write[kBinding_NumBindings] = {};
   uint32_t numWrites = 0;
+
+  if (!handlesAccelStructs.empty()) {
+    write[numWrites++] = VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .pNext = &writeAccelStruct,
+        .dstSet = vkDSet_,
+        .dstBinding = kBinding_AccelerationStructures,
+        .dstArrayElement = 0,
+        .descriptorCount = (uint32_t)handlesAccelStructs.size(),
+        .descriptorType = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR,
+    };
+  }
 
   if (!infoSampledImages.empty()) {
     write[numWrites++] = VkWriteDescriptorSet{
