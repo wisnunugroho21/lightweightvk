@@ -4235,6 +4235,27 @@ lvk::Holder<lvk::ComputePipelineHandle> lvk::VulkanContext::createComputePipelin
   return {this, computePipelinesPool_.create(std::move(cps))};
 }
 
+lvk::Holder<lvk::RayTracingPipelineHandle> lvk::VulkanContext::createRayTracingPipeline(const RayTracingPipelineDesc& desc,
+                                                                                        Result* outResult) {
+  LVK_PROFILER_FUNCTION();
+
+  if (!LVK_VERIFY(isRayTracingEnabled_)) {
+    Result::setResult(outResult, Result(Result::Code::RuntimeError, "VK_KHR_ray_tracing_pipeline is not enabled"));
+    return {};
+  }
+
+  RayTracingPipelineState rtps{desc};
+
+  if (desc.specInfo.data && desc.specInfo.dataSize) {
+    // copy into a local storage
+    rtps.specConstantDataStorage_ = malloc(desc.specInfo.dataSize);
+    memcpy(rtps.specConstantDataStorage_, desc.specInfo.data, desc.specInfo.dataSize);
+    rtps.desc_.specInfo.data = rtps.specConstantDataStorage_;
+  }
+
+  return {this, rayTracingPipelinesPool_.create(std::move(rtps))};
+}
+
 lvk::Holder<lvk::RenderPipelineHandle> lvk::VulkanContext::createRenderPipeline(const RenderPipelineDesc& desc, Result* outResult) {
   const bool hasColorAttachments = desc.getNumColorAttachments() > 0;
   const bool hasDepthAttachment = desc.depthFormat != Format_Invalid;
@@ -4303,6 +4324,24 @@ lvk::Holder<lvk::RenderPipelineHandle> lvk::VulkanContext::createRenderPipeline(
   }
 
   return {this, renderPipelinesPool_.create(std::move(rps))};
+}
+
+
+void lvk::VulkanContext::destroy(lvk::RayTracingPipelineHandle handle) {
+  lvk::RayTracingPipelineState* rtps = rayTracingPipelinesPool_.get(handle);
+
+  if (!rtps) {
+    return;
+  }
+
+  free(rtps->specConstantDataStorage_);
+
+  deferredTask(
+      std::packaged_task<void()>([device = getVkDevice(), pipeline = rtps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
+  deferredTask(std::packaged_task<void()>(
+      [device = getVkDevice(), layout = rtps->pipelineLayout_]() { vkDestroyPipelineLayout(device, layout, nullptr); }));
+
+  rayTracingPipelinesPool_.destroy(handle);
 }
 
 void lvk::VulkanContext::destroy(lvk::ComputePipelineHandle handle) {

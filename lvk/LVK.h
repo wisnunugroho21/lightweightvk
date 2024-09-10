@@ -105,6 +105,7 @@ static_assert(sizeof(Handle<class Foo>) == sizeof(uint64_t));
 // specialized with dummy structs for type safety
 using ComputePipelineHandle = lvk::Handle<struct ComputePipeline>;
 using RenderPipelineHandle = lvk::Handle<struct RenderPipeline>;
+using RayTracingPipelineHandle = lvk::Handle<struct RayTracingPipeline>;
 using ShaderModuleHandle = lvk::Handle<struct ShaderModule>;
 using SamplerHandle = lvk::Handle<struct Sampler>;
 using BufferHandle = lvk::Handle<struct Buffer>;
@@ -115,6 +116,7 @@ using AccelStructHandle = lvk::Handle<struct AccelerationStructure>;
 // forward declarations to access incomplete type IContext
 void destroy(lvk::IContext* ctx, lvk::ComputePipelineHandle handle);
 void destroy(lvk::IContext* ctx, lvk::RenderPipelineHandle handle);
+void destroy(lvk::IContext* ctx, lvk::RayTracingPipelineHandle handle);
 void destroy(lvk::IContext* ctx, lvk::ShaderModuleHandle handle);
 void destroy(lvk::IContext* ctx, lvk::SamplerHandle handle);
 void destroy(lvk::IContext* ctx, lvk::BufferHandle handle);
@@ -983,6 +985,8 @@ class IContext {
   [[nodiscard]] virtual Holder<ComputePipelineHandle> createComputePipeline(const ComputePipelineDesc& desc,
                                                                             Result* outResult = nullptr) = 0;
   [[nodiscard]] virtual Holder<RenderPipelineHandle> createRenderPipeline(const RenderPipelineDesc& desc, Result* outResult = nullptr) = 0;
+  [[nodiscard]] virtual Holder<RayTracingPipelineHandle> createRayTracingPipeline(const RayTracingPipelineDesc& desc,
+                                                                            Result* outResult = nullptr) = 0;
   [[nodiscard]] virtual Holder<ShaderModuleHandle> createShaderModule(const ShaderModuleDesc& desc, Result* outResult = nullptr) = 0;
 
   [[nodiscard]] virtual Holder<QueryPoolHandle> createQueryPool(uint32_t numQueries,
@@ -993,6 +997,7 @@ class IContext {
 
   virtual void destroy(ComputePipelineHandle handle) = 0;
   virtual void destroy(RenderPipelineHandle handle) = 0;
+  virtual void destroy(RayTracingPipelineHandle) = 0;
   virtual void destroy(ShaderModuleHandle handle) = 0;
   virtual void destroy(SamplerHandle handle) = 0;
   virtual void destroy(BufferHandle handle) = 0;

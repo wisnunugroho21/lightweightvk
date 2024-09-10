@@ -247,6 +247,12 @@ void lvk::destroy(lvk::IContext* ctx, lvk::RenderPipelineHandle handle) {
   }
 }
 
+void lvk::destroy(lvk::IContext* ctx, lvk::RayTracingPipelineHandle handle) {
+  if (ctx) {
+    ctx->destroy(handle);
+  }
+}
+
 void lvk::destroy(lvk::IContext* ctx, lvk::ShaderModuleHandle handle) {
   if (ctx) {
     ctx->destroy(handle);

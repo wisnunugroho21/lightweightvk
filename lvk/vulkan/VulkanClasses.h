@@ -285,6 +285,18 @@ struct ComputePipelineState final {
   void* specConstantDataStorage_ = nullptr;
 };
 
+struct RayTracingPipelineState final {
+  RayTracingPipelineDesc desc_;
+
+  // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (invalidate all VkPipeline objects on new layout)
+  VkDescriptorSetLayout lastVkDescriptorSetLayout_ = VK_NULL_HANDLE;
+
+  VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+  VkPipeline pipeline_ = VK_NULL_HANDLE;
+
+  void* specConstantDataStorage_ = nullptr;
+};
+
 struct ShaderModuleState final {
   VkShaderModule sm = VK_NULL_HANDLE;
   uint32_t pushConstantsSize = 0;
@@ -461,6 +473,8 @@ class VulkanContext final : public IContext {
 
   Holder<ComputePipelineHandle> createComputePipeline(const ComputePipelineDesc& desc, Result* outResult) override;
   Holder<RenderPipelineHandle> createRenderPipeline(const RenderPipelineDesc& desc, Result* outResult) override;
+  Holder<RayTracingPipelineHandle> createRayTracingPipeline(const RayTracingPipelineDesc& desc,
+                                                            Result* outResult = nullptr) override;
   Holder<ShaderModuleHandle> createShaderModule(const ShaderModuleDesc& desc, Result* outResult) override;
 
   Holder<QueryPoolHandle> createQueryPool(uint32_t numQueries, const char* debugName, Result* outResult) override;
@@ -469,6 +483,7 @@ class VulkanContext final : public IContext {
 
   void destroy(ComputePipelineHandle handle) override;
   void destroy(RenderPipelineHandle handle) override;
+  void destroy(RayTracingPipelineHandle handle) override;
   void destroy(ShaderModuleHandle handle) override;
   void destroy(SamplerHandle handle) override;
   void destroy(BufferHandle handle) override;
@@ -642,6 +657,7 @@ public:
   lvk::Pool<lvk::ShaderModule, lvk::ShaderModuleState> shaderModulesPool_;
   lvk::Pool<lvk::RenderPipeline, lvk::RenderPipelineState> renderPipelinesPool_;
   lvk::Pool<lvk::ComputePipeline, lvk::ComputePipelineState> computePipelinesPool_;
+  lvk::Pool<lvk::RayTracingPipeline, lvk::RayTracingPipelineState> rayTracingPipelinesPool_;
   lvk::Pool<lvk::Sampler, VkSampler> samplersPool_;
   lvk::Pool<lvk::Buffer, lvk::VulkanBuffer> buffersPool_;
   lvk::Pool<lvk::Texture, lvk::VulkanImage> texturesPool_;
