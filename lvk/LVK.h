@@ -658,6 +658,18 @@ struct ComputePipelineDesc final {
   const char* debugName = "";
 };
 
+struct RayTracingPipelineDesc final {
+  ShaderModuleHandle smRayGen;
+  ShaderModuleHandle smAnyHit;
+  ShaderModuleHandle smClosestHit;
+  ShaderModuleHandle smMiss;
+  ShaderModuleHandle smIntersection;
+  ShaderModuleHandle smCallable;
+  SpecializationConstantDesc specInfo = {};
+  const char* entryPoint = "main";
+  const char* debugName = "";
+};
+
 struct RenderPass final {
   struct AttachmentDesc final {
     LoadOp loadOp = LoadOp_Invalid;
