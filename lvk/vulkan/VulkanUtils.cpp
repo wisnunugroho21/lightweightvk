@@ -1026,3 +1026,17 @@ VkBuffer lvk::getVkBuffer(const IContext* ctx, AccelStructHandle accelStruct) {
 
   return getVkBuffer(ctx, static_cast<const VulkanContext*>(ctx)->accelStructuresPool_.get(accelStruct)->buffer);
 }
+
+VkPipeline lvk::getVkPipeline(const IContext* ctx, RayTracingPipelineHandle pipeline) {
+  if (!ctx || pipeline.empty())
+    return 0;
+
+  return static_cast<const VulkanContext*>(ctx)->rayTracingPipelinesPool_.get(pipeline)->pipeline_;
+}
+
+VkPipelineLayout lvk::getVkPipelineLayout(const IContext* ctx, RayTracingPipelineHandle pipeline) {
+  if (!ctx || pipeline.empty())
+    return 0;
+
+  return static_cast<const VulkanContext*>(ctx)->rayTracingPipelinesPool_.get(pipeline)->pipelineLayout_;
+}
