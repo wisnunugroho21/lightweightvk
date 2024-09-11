@@ -905,6 +905,10 @@ void lvk::VulkanImage::transitionLayout(VkCommandBuffer commandBuffer,
     dstAccessMask |= VK_ACCESS_TRANSFER_READ_BIT;
     dstRemainingMask &= ~VK_PIPELINE_STAGE_TRANSFER_BIT;
   }
+  if (dstStageMask & VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR) {
+    dstAccessMask |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    dstRemainingMask &= ~VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR;
+  }
 
   LVK_ASSERT_MSG(dstRemainingMask == 0, "Automatic access mask deduction is not implemented (yet) for this dstStageMask");
 
