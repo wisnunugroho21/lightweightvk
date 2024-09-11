@@ -432,6 +432,8 @@ class VulkanStagingDevice final {
                     void* outData);
 
  private:
+  enum { kStagingBufferAlignment = 16 }; // updated to support BC7 compressed image
+
   struct MemoryRegionDesc {
     uint32_t offset_ = 0;
     uint32_t size_ = 0;
@@ -441,10 +443,6 @@ class VulkanStagingDevice final {
   MemoryRegionDesc getNextFreeOffset(uint32_t size);
   void ensureStagingBufferSize(uint32_t sizeNeeded);
   void waitAndReset();
-  static uint32_t getAlignedSize(uint32_t size) {
-    constexpr uint32_t kStagingBufferAlignment = 16; // updated to support BC7 compressed image
-    return (size + kStagingBufferAlignment - 1) & ~(kStagingBufferAlignment - 1);
-  }
 
  private:
   VulkanContext& ctx_;

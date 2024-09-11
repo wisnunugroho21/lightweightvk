@@ -55,6 +55,10 @@ enum Bindings {
   kBinding_NumBindings = 5,
 };
 
+uint32_t getAlignedSize(uint32_t value, uint32_t alignment) {
+  return (value + alignment - 1) & ~(alignment - 1);
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msgSeverity,
                                                    [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT msgType,
                                                    const VkDebugUtilsMessengerCallbackDataEXT* cbData,
@@ -2932,7 +2936,7 @@ void lvk::VulkanStagingDevice::getImageData(VulkanImage& image,
 void lvk::VulkanStagingDevice::ensureStagingBufferSize(uint32_t sizeNeeded) {
   LVK_PROFILER_FUNCTION();
 
-  const uint32_t alignedSize = std::max(getAlignedSize(sizeNeeded), minBufferSize_);
+  const uint32_t alignedSize = std::max(getAlignedSize(sizeNeeded, kStagingBufferAlignment), minBufferSize_);
 
   sizeNeeded = alignedSize < maxBufferSize_ ? alignedSize : maxBufferSize_;
 
@@ -2976,7 +2980,7 @@ void lvk::VulkanStagingDevice::ensureStagingBufferSize(uint32_t sizeNeeded) {
 lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFreeOffset(uint32_t size) {
   LVK_PROFILER_FUNCTION();
 
-  const uint32_t requestedAlignedSize = getAlignedSize(size);
+  const uint32_t requestedAlignedSize = getAlignedSize(size, kStagingBufferAlignment);
 
   ensureStagingBufferSize(requestedAlignedSize);
 
