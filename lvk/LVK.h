@@ -933,6 +933,7 @@ class ICommandBuffer {
                                              size_t countBufferOffset,
                                              uint32_t maxDrawCount,
                                              uint32_t stride = 0) = 0;
+  virtual void cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth = 1, const Dependencies& deps = {}) = 0;
 
   virtual void cmdSetBlendColor(const float color[4]) = 0;
   virtual void cmdSetDepthBias(float depthBias, float slopeScale, float clamp) = 0;

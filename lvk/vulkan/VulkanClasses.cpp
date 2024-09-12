@@ -2449,6 +2449,53 @@ void lvk::CommandBuffer::cmdDrawMeshTasksIndirectCount(BufferHandle indirectBuff
                                      stride ? stride : sizeof(VkDrawMeshTasksIndirectCommandEXT));
 }
 
+void lvk::CommandBuffer::cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth, const Dependencies& deps) {
+  LVK_PROFILER_FUNCTION();
+
+  lvk::RayTracingPipelineState* rtps = ctx_->rayTracingPipelinesPool_.get(currentPipelineRayTracing_);
+
+  if (!LVK_VERIFY(rtps)) {
+     return;
+  }
+
+  LVK_ASSERT(!isRendering_);
+
+  for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.textures[i]; i++) {
+    useComputeTexture(deps.textures[i], VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+  }
+  for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
+    bufferBarrier(deps.buffers[i],
+                  VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                  VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+  }
+
+  const auto& props = ctx_->rayTracingPipelineProperties_;
+  const uint32_t handleSizeAligned = getAlignedSize(props.shaderGroupHandleSize, props.shaderGroupHandleAlignment);
+
+  const VkStridedDeviceAddressRegionKHR raygenShaderSbtEntry{
+      .deviceAddress = rtps->sbtRayGen.valid() ? ctx_->gpuAddress(rtps->sbtRayGen) : 0,
+      .stride = handleSizeAligned,
+      .size = handleSizeAligned,
+  };
+  const VkStridedDeviceAddressRegionKHR missShaderSbtEntry{
+      .deviceAddress = rtps->sbtMiss.valid() ? ctx_->gpuAddress(rtps->sbtMiss) : 0,
+      .stride = handleSizeAligned,
+      .size = handleSizeAligned,
+  };
+  const VkStridedDeviceAddressRegionKHR hitShaderSbtEntry{
+      .deviceAddress = rtps->sbtHit.valid() ? ctx_->gpuAddress(rtps->sbtHit) : 0,
+      .stride = handleSizeAligned,
+      .size = handleSizeAligned,
+  };
+  const VkStridedDeviceAddressRegionKHR callableShaderSbtEntry{
+      .deviceAddress = rtps->sbtCallable.valid() ? ctx_->gpuAddress(rtps->sbtCallable) : 0,
+      .stride = handleSizeAligned,
+      .size = handleSizeAligned,
+  };
+  vkCmdTraceRaysKHR(
+      wrapper_->cmdBuf_, &raygenShaderSbtEntry, &missShaderSbtEntry, &hitShaderSbtEntry, &callableShaderSbtEntry, width, height, depth);
+}
+
 void lvk::CommandBuffer::cmdSetBlendColor(const float color[4]) {
   vkCmdSetBlendConstants(wrapper_->cmdBuf_, color);
 }

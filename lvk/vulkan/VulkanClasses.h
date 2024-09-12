@@ -374,6 +374,7 @@ class CommandBuffer final : public ICommandBuffer {
                                      size_t countBufferOffset,
                                      uint32_t maxDrawCount,
                                      uint32_t stride = 0) override;
+  void cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth, const Dependencies& deps) override;
 
   void cmdSetBlendColor(const float color[4]) override;
   void cmdSetDepthBias(float depthBias, float slopeScale, float clamp) override;
