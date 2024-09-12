@@ -1886,7 +1886,7 @@ void lvk::CommandBuffer::cmdDispatchThreadGroups(const Dimensions& threadgroupCo
   LVK_ASSERT(!isRendering_);
 
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.textures[i]; i++) {
-    useComputeTexture(deps.textures[i]);
+    useComputeTexture(deps.textures[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   }
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
     bufferBarrier(
@@ -1936,7 +1936,7 @@ void lvk::CommandBuffer::cmdPopDebugGroupLabel() const {
   vkCmdEndDebugUtilsLabelEXT(wrapper_->cmdBuf_);
 }
 
-void lvk::CommandBuffer::useComputeTexture(TextureHandle handle) {
+void lvk::CommandBuffer::useComputeTexture(TextureHandle handle, VkPipelineStageFlags dstStage) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_BARRIER);
 
   LVK_ASSERT(!handle.empty());
@@ -1953,7 +1953,7 @@ void lvk::CommandBuffer::useComputeTexture(TextureHandle handle) {
   tex.transitionLayout(wrapper_->cmdBuf_,
                        VK_IMAGE_LAYOUT_GENERAL,
                        srcStage,
-                       VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                       dstStage,
                        VkImageSubresourceRange{tex.getImageAspectFlags(), 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS});
 }
 
