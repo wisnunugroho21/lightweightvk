@@ -883,6 +883,8 @@ class ICommandBuffer {
   virtual void cmdInsertDebugEventLabel(const char* label, uint32_t colorRGBA = 0xffffffff) const = 0;
   virtual void cmdPopDebugGroupLabel() const = 0;
 
+  virtual void cmdBindRayTracingPipeline(lvk::RayTracingPipelineHandle handle) = 0;
+
   virtual void cmdBindComputePipeline(lvk::ComputePipelineHandle handle) = 0;
   virtual void cmdDispatchThreadGroups(const Dimensions& threadgroupCount, const Dependencies& deps = {}) = 0;
 

@@ -330,6 +330,8 @@ class CommandBuffer final : public ICommandBuffer {
 
   void transitionToShaderReadOnly(TextureHandle surface) const override;
 
+  void cmdBindRayTracingPipeline(lvk::RayTracingPipelineHandle handle) override;
+
   void cmdBindComputePipeline(lvk::ComputePipelineHandle handle) override;
   void cmdDispatchThreadGroups(const Dimensions& threadgroupCount, const Dependencies& deps) override;
 

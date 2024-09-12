@@ -1855,6 +1855,32 @@ void lvk::CommandBuffer::transitionToShaderReadOnly(TextureHandle handle) const 
   }
 }
 
+void lvk::CommandBuffer::cmdBindRayTracingPipeline(lvk::RayTracingPipelineHandle handle) {
+  LVK_PROFILER_FUNCTION();
+
+  if (!LVK_VERIFY(!handle.empty() && ctx_->isRayTracingEnabled_)) {
+    return;
+  }
+
+  currentPipelineGraphics_ = {};
+  currentPipelineCompute_ = {};
+  currentPipelineRayTracing_ = handle;
+
+  VkPipeline pipeline = ctx_->getVkPipeline(handle);
+
+  const lvk::RayTracingPipelineState* rtps = ctx_->rayTracingPipelinesPool_.get(handle);
+
+  LVK_ASSERT(rtps);
+  LVK_ASSERT(pipeline != VK_NULL_HANDLE);
+
+  if (lastPipelineBound_ != pipeline) {
+    lastPipelineBound_ = pipeline;
+    vkCmdBindPipeline(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, pipeline);
+    ctx_->checkAndUpdateDescriptorSets();
+    ctx_->bindDefaultDescriptorSets(wrapper_->cmdBuf_, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, rtps->pipelineLayout_);
+  }
+}
+
 void lvk::CommandBuffer::cmdBindComputePipeline(lvk::ComputePipelineHandle handle) {
   LVK_PROFILER_FUNCTION();
 
