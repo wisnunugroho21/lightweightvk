@@ -296,6 +296,11 @@ struct RayTracingPipelineState final {
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 
   void* specConstantDataStorage_ = nullptr;
+
+  lvk::Holder<lvk::BufferHandle> sbtRayGen;
+  lvk::Holder<lvk::BufferHandle> sbtMiss;
+  lvk::Holder<lvk::BufferHandle> sbtHit;
+  lvk::Holder<lvk::BufferHandle> sbtCallable;
 };
 
 struct ShaderModuleState final {
@@ -521,6 +526,7 @@ class VulkanContext final : public IContext {
 
   VkPipeline getVkPipeline(ComputePipelineHandle handle);
   VkPipeline getVkPipeline(RenderPipelineHandle handle);
+  VkPipeline getVkPipeline(RayTracingPipelineHandle handle);
 
   uint32_t queryDevices(HWDeviceType deviceType, HWDeviceDesc* outDevices, uint32_t maxOutDevices = 1);
   lvk::Result initContext(const HWDeviceDesc& desc);
