@@ -1864,6 +1864,7 @@ void lvk::CommandBuffer::cmdBindComputePipeline(lvk::ComputePipelineHandle handl
 
   currentPipelineGraphics_ = {};
   currentPipelineCompute_ = handle;
+  currentPipelineRayTracing_ = {};
 
   VkPipeline pipeline = ctx_->getVkPipeline(handle);
 
@@ -2208,6 +2209,7 @@ void lvk::CommandBuffer::cmdBindRenderPipeline(lvk::RenderPipelineHandle handle)
 
   currentPipelineGraphics_ = handle;
   currentPipelineCompute_ = {};
+  currentPipelineRayTracing_ = {};
 
   const lvk::RenderPipelineState* rps = ctx_->renderPipelinesPool_.get(handle);
 
@@ -2284,18 +2286,21 @@ void lvk::CommandBuffer::cmdPushConstants(const void* data, size_t size, size_t 
     LLOGW("Push constants size exceeded %u (max %u bytes)", size + offset, limits.maxPushConstantsSize);
   }
 
-  if (currentPipelineGraphics_.empty() && currentPipelineCompute_.empty()) {
+  if (currentPipelineGraphics_.empty() && currentPipelineCompute_.empty() && currentPipelineRayTracing_.empty()) {
     LVK_ASSERT_MSG(false, "No pipeline bound - cannot set push constants");
     return;
   }
 
   const lvk::RenderPipelineState* stateGraphics = ctx_->renderPipelinesPool_.get(currentPipelineGraphics_);
   const lvk::ComputePipelineState* stateCompute = ctx_->computePipelinesPool_.get(currentPipelineCompute_);
+  const lvk::RayTracingPipelineState* stateRayTracing = ctx_->rayTracingPipelinesPool_.get(currentPipelineRayTracing_);
 
-  LVK_ASSERT(stateGraphics || stateCompute);
+  LVK_ASSERT(stateGraphics || stateCompute || stateRayTracing);
 
-  VkPipelineLayout layout = stateGraphics ? stateGraphics->pipelineLayout_ : stateCompute->pipelineLayout_;
-  VkShaderStageFlags shaderStageFlags = stateGraphics ? stateGraphics->shaderStageFlags_ : VK_SHADER_STAGE_COMPUTE_BIT;
+  VkPipelineLayout layout = stateGraphics ? stateGraphics->pipelineLayout_
+                                          : (stateCompute ? stateCompute->pipelineLayout_ : stateRayTracing->pipelineLayout_);
+  VkShaderStageFlags shaderStageFlags = stateGraphics ? stateGraphics->shaderStageFlags_
+                                                      : (stateCompute ? VK_SHADER_STAGE_COMPUTE_BIT : stateRayTracing->shaderStageFlags_);
 
   vkCmdPushConstants(wrapper_->cmdBuf_, layout, shaderStageFlags, (uint32_t)offset, (uint32_t)size, data);
 }

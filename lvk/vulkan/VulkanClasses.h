@@ -405,6 +405,7 @@ class CommandBuffer final : public ICommandBuffer {
 
   lvk::RenderPipelineHandle currentPipelineGraphics_ = {};
   lvk::ComputePipelineHandle currentPipelineCompute_ = {};
+  lvk::RayTracingPipelineHandle currentPipelineRayTracing_ = {};
 };
 
 class VulkanStagingDevice final {
