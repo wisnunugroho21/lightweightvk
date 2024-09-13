@@ -2639,6 +2639,111 @@ void lvk::CommandBuffer::cmdGenerateMipmap(TextureHandle handle) {
   tex->generateMipmap(wrapper_->cmdBuf_);
 }
 
+void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle instancesBuffer) {
+  if (handle.empty()) {
+    return;
+  }
+
+  lvk::AccelerationStructure* as = ctx_->accelStructuresPool_.get(handle);
+
+  const VkAccelerationStructureGeometryKHR accelerationStructureGeometry{
+      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+      .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
+      .geometry =
+          {
+              .instances =
+                  {
+                      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
+                      .arrayOfPointers = VK_FALSE,
+                      .data = {.deviceAddress = ctx_->gpuAddress(instancesBuffer)},
+                  },
+          },
+      .flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
+  };
+
+  VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo{
+      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+      .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+      .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+      .geometryCount = 1,
+      .pGeometries = &accelerationStructureGeometry,
+  };
+  VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo{
+      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+  };
+  vkGetAccelerationStructureBuildSizesKHR(ctx_->getVkDevice(),
+                                          VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                                          &accelerationStructureBuildGeometryInfo,
+                                          &as->buildRangeInfo.primitiveCount,
+                                          &accelerationStructureBuildSizesInfo);
+
+  lvk::Holder<lvk::BufferHandle> scratchBuffer = ctx_->createBuffer(lvk::BufferDesc{
+      .usage = lvk::BufferUsageBits_Storage,
+      .storage = lvk::StorageType_Device,
+      .size = accelerationStructureBuildSizesInfo.buildScratchSize,
+      .debugName = "scratchBuffer",
+  }, nullptr);
+
+  const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = {
+      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+      .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+      .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR,
+      .mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR,
+      .srcAccelerationStructure = as->vkHandle,
+      .dstAccelerationStructure = as->vkHandle,
+      .geometryCount = 1,
+      .pGeometries = &accelerationStructureGeometry,
+      .scratchData = {.deviceAddress = ctx_->gpuAddress(scratchBuffer)},
+  };
+
+  const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&as->buildRangeInfo};
+
+  {
+    const VkBufferMemoryBarrier2 barriers[] = {
+        {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+            .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+            .buffer = getVkBuffer(ctx_, handle),
+            .size = VK_WHOLE_SIZE,
+        },
+        {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+            .srcStageMask = VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT,
+            .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
+            .dstStageMask = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+            .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+            .buffer = getVkBuffer(ctx_, instancesBuffer),
+            .size = VK_WHOLE_SIZE,
+        },
+    };
+    const VkDependencyInfo dependencyInfo{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+        .bufferMemoryBarrierCount = LVK_ARRAY_NUM_ELEMENTS(barriers),
+        .pBufferMemoryBarriers = barriers,
+    };
+    vkCmdPipelineBarrier2(wrapper_->cmdBuf_, &dependencyInfo);
+  }
+  vkCmdBuildAccelerationStructuresKHR(wrapper_->cmdBuf_, 1, &accelerationBuildGeometryInfo, accelerationBuildStructureRangeInfos);
+  {
+    const VkBufferMemoryBarrier2 barrier = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+        .srcStageMask = VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR,
+        .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR,
+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT,
+        .buffer = getVkBuffer(ctx_, handle),
+        .offset = 0,
+        .size = VK_WHOLE_SIZE,
+    };
+    const VkDependencyInfo dependencyInfo{
+        .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO, .bufferMemoryBarrierCount = 1, .pBufferMemoryBarriers = &barrier};
+    vkCmdPipelineBarrier2(wrapper_->cmdBuf_, &dependencyInfo);
+  }
+}
+
 lvk::VulkanStagingDevice::VulkanStagingDevice(VulkanContext& ctx) : ctx_(ctx) {
   LVK_PROFILER_FUNCTION();
 

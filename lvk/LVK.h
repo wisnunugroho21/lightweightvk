@@ -949,6 +949,7 @@ class ICommandBuffer {
                             const TextureLayers& srcLayers = {},
                             const TextureLayers& dstLayers = {}) = 0;
   virtual void cmdGenerateMipmap(TextureHandle handle) = 0;
+  virtual void cmdUpdateTLAS(AccelStructHandle handle, BufferHandle instancesBuffer) = 0;
 };
 
 struct SubmitHandle {

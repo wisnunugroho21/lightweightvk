@@ -390,6 +390,7 @@ class CommandBuffer final : public ICommandBuffer {
                     const TextureLayers& srcLayers,
                     const TextureLayers& dstLayers) override;
   void cmdGenerateMipmap(TextureHandle handle) override;
+  void cmdUpdateTLAS(AccelStructHandle handle, BufferHandle instancesBuffer) override;
 
   VkCommandBuffer getVkCommandBuffer() const {
     return wrapper_ ? wrapper_->cmdBuf_ : VK_NULL_HANDLE;
