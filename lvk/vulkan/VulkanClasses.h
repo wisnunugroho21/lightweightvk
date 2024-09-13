@@ -305,6 +305,7 @@ struct ShaderModuleState final {
 
 struct AccelerationStructure {
   bool isTLAS = false;
+  VkAccelerationStructureBuildRangeInfoKHR buildRangeInfo = {};
   VkAccelerationStructureKHR vkHandle = VK_NULL_HANDLE;
   uint64_t deviceAddress = 0;
   lvk::Holder<lvk::BufferHandle> buffer;

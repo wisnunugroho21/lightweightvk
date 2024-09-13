@@ -2590,6 +2590,8 @@ void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOff
 
   lvk::VulkanBuffer* stagingBuffer = ctx_.buffersPool_.get(stagingBuffer_);
 
+  LVK_ASSERT(stagingBuffer);
+
   while (size) {
     // get next staging buffer free offset
     MemoryRegionDesc desc = getNextFreeOffset((uint32_t)size);
@@ -3720,6 +3722,13 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
     snprintf(debugNameBuffer, sizeof(debugNameBuffer) - 1, "Buffer: %s", desc.debugName);
   }
   lvk::AccelerationStructure accelStruct = {
+      .buildRangeInfo =
+          {
+              .primitiveCount = desc.buildRange.primitiveCount,
+              .primitiveOffset = desc.buildRange.primitiveOffset,
+              .firstVertex = desc.buildRange.firstVertex,
+              .transformOffset = desc.buildRange.transformOffset,
+          },
       .buffer = createBuffer(
           {
               .usage = lvk::BufferUsageBits_AccelStructStorage,
@@ -3757,13 +3766,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
       .scratchData = {.deviceAddress = gpuAddress(scratchBuffer)},
   };
 
-  const VkAccelerationStructureBuildRangeInfoKHR accelerationStructureBuildRangeInfo = {
-      .primitiveCount = desc.buildRange.primitiveCount,
-      .primitiveOffset = desc.buildRange.primitiveOffset,
-      .firstVertex = desc.buildRange.firstVertex,
-      .transformOffset = desc.buildRange.transformOffset,
-  };
-  const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&accelerationStructureBuildRangeInfo};
+  const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&accelStruct.buildRangeInfo};
 
   lvk::ICommandBuffer& buffer = acquireCommandBuffer();
   vkCmdBuildAccelerationStructuresKHR(
@@ -3824,6 +3827,13 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
   }
   lvk::AccelerationStructure accelStruct = {
       .isTLAS = true,
+      .buildRangeInfo =
+          {
+              .primitiveCount = desc.buildRange.primitiveCount,
+              .primitiveOffset = desc.buildRange.primitiveOffset,
+              .firstVertex = desc.buildRange.firstVertex,
+              .transformOffset = desc.buildRange.transformOffset,
+          },
       .buffer = createBuffer(
           {
               .usage = lvk::BufferUsageBits_AccelStructStorage,
@@ -3862,13 +3872,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
       .scratchData = {.deviceAddress = gpuAddress(scratchBuffer)},
   };
 
-  const VkAccelerationStructureBuildRangeInfoKHR accelerationStructureBuildRangeInfo{
-      .primitiveCount = desc.buildRange.primitiveCount,
-      .primitiveOffset = desc.buildRange.primitiveOffset,
-      .firstVertex = desc.buildRange.firstVertex,
-      .transformOffset = desc.buildRange.transformOffset,
-  };
-  const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&accelerationStructureBuildRangeInfo};
+  const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&accelStruct.buildRangeInfo};
 
   lvk::ICommandBuffer& buffer = acquireCommandBuffer();
   vkCmdBuildAccelerationStructuresKHR(
