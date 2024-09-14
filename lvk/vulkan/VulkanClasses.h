@@ -296,6 +296,11 @@ struct RayTracingPipelineState final {
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 
   void* specConstantDataStorage_ = nullptr;
+
+  lvk::Holder<lvk::BufferHandle> sbtRayGen;
+  lvk::Holder<lvk::BufferHandle> sbtMiss;
+  lvk::Holder<lvk::BufferHandle> sbtHit;
+  lvk::Holder<lvk::BufferHandle> sbtCallable;
 };
 
 struct ShaderModuleState final {
@@ -324,6 +329,8 @@ class CommandBuffer final : public ICommandBuffer {
   }
 
   void transitionToShaderReadOnly(TextureHandle surface) const override;
+
+  void cmdBindRayTracingPipeline(lvk::RayTracingPipelineHandle handle) override;
 
   void cmdBindComputePipeline(lvk::ComputePipelineHandle handle) override;
   void cmdDispatchThreadGroups(const Dimensions& threadgroupCount, const Dependencies& deps) override;
@@ -367,6 +374,7 @@ class CommandBuffer final : public ICommandBuffer {
                                      size_t countBufferOffset,
                                      uint32_t maxDrawCount,
                                      uint32_t stride = 0) override;
+  void cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth, const Dependencies& deps) override;
 
   void cmdSetBlendColor(const float color[4]) override;
   void cmdSetDepthBias(float depthBias, float slopeScale, float clamp) override;
@@ -382,6 +390,7 @@ class CommandBuffer final : public ICommandBuffer {
                     const TextureLayers& srcLayers,
                     const TextureLayers& dstLayers) override;
   void cmdGenerateMipmap(TextureHandle handle) override;
+  void cmdUpdateTLAS(AccelStructHandle handle, BufferHandle instancesBuffer) override;
 
   VkCommandBuffer getVkCommandBuffer() const {
     return wrapper_ ? wrapper_->cmdBuf_ : VK_NULL_HANDLE;
@@ -521,6 +530,7 @@ class VulkanContext final : public IContext {
 
   VkPipeline getVkPipeline(ComputePipelineHandle handle);
   VkPipeline getVkPipeline(RenderPipelineHandle handle);
+  VkPipeline getVkPipeline(RayTracingPipelineHandle handle);
 
   uint32_t queryDevices(HWDeviceType deviceType, HWDeviceDesc* outDevices, uint32_t maxOutDevices = 1);
   lvk::Result initContext(const HWDeviceDesc& desc);

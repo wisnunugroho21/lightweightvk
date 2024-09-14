@@ -883,6 +883,8 @@ class ICommandBuffer {
   virtual void cmdInsertDebugEventLabel(const char* label, uint32_t colorRGBA = 0xffffffff) const = 0;
   virtual void cmdPopDebugGroupLabel() const = 0;
 
+  virtual void cmdBindRayTracingPipeline(lvk::RayTracingPipelineHandle handle) = 0;
+
   virtual void cmdBindComputePipeline(lvk::ComputePipelineHandle handle) = 0;
   virtual void cmdDispatchThreadGroups(const Dimensions& threadgroupCount, const Dependencies& deps = {}) = 0;
 
@@ -931,6 +933,7 @@ class ICommandBuffer {
                                              size_t countBufferOffset,
                                              uint32_t maxDrawCount,
                                              uint32_t stride = 0) = 0;
+  virtual void cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth = 1, const Dependencies& deps = {}) = 0;
 
   virtual void cmdSetBlendColor(const float color[4]) = 0;
   virtual void cmdSetDepthBias(float depthBias, float slopeScale, float clamp) = 0;
@@ -946,6 +949,7 @@ class ICommandBuffer {
                             const TextureLayers& srcLayers = {},
                             const TextureLayers& dstLayers = {}) = 0;
   virtual void cmdGenerateMipmap(TextureHandle handle) = 0;
+  virtual void cmdUpdateTLAS(AccelStructHandle handle, BufferHandle instancesBuffer) = 0;
 };
 
 struct SubmitHandle {
