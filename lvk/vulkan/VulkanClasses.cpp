@@ -1415,6 +1415,8 @@ const lvk::VulkanImmediateCommands::CommandBufferWrapper& lvk::VulkanImmediateCo
   };
   VK_ASSERT(vkBeginCommandBuffer(current->cmdBuf_, &bi));
 
+  nextSubmitHandle_ = current->handle_;
+
   return *current;
 }
 
@@ -1551,6 +1553,10 @@ VkFence lvk::VulkanImmediateCommands::getVkFence(lvk::SubmitHandle handle) const
 
 lvk::SubmitHandle lvk::VulkanImmediateCommands::getLastSubmitHandle() const {
   return lastSubmitHandle_;
+}
+
+lvk::SubmitHandle lvk::VulkanImmediateCommands::getNextSubmitHandle() const {
+  return nextSubmitHandle_;
 }
 
 lvk::VulkanPipelineBuilder::VulkanPipelineBuilder() :
@@ -6620,7 +6626,7 @@ std::vector<uint8_t> lvk::VulkanContext::getPipelineCacheData() const {
 
 void lvk::VulkanContext::deferredTask(std::packaged_task<void()>&& task, SubmitHandle handle) const {
   if (handle.empty()) {
-    handle = immediate_->getLastSubmitHandle();
+    handle = immediate_->getNextSubmitHandle();
   }
   pimpl_->deferredTasks_.emplace_back(std::move(task), handle);
 }

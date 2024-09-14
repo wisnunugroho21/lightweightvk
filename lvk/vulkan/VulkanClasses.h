@@ -173,6 +173,7 @@ class VulkanImmediateCommands final {
   VkSemaphore acquireLastSubmitSemaphore();
   VkFence getVkFence(SubmitHandle handle) const;
   SubmitHandle getLastSubmitHandle() const;
+  SubmitHandle getNextSubmitHandle() const;
   bool isReady(SubmitHandle handle, bool fastCheckNoVulkan = false) const;
   void wait(SubmitHandle handle);
   void waitAll();
@@ -188,6 +189,7 @@ class VulkanImmediateCommands final {
   const char* debugName_ = "";
   CommandBufferWrapper buffers_[kMaxCommandBuffers];
   SubmitHandle lastSubmitHandle_ = SubmitHandle();
+  SubmitHandle nextSubmitHandle_ = SubmitHandle();
   VkSemaphore lastSubmitSemaphore_ = VK_NULL_HANDLE;
   VkSemaphore waitSemaphore_ = VK_NULL_HANDLE;
   uint32_t numAvailableCommandBuffers_ = kMaxCommandBuffers;
