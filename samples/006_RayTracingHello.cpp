@@ -103,13 +103,6 @@ FramesPerSecondCounter fps_;
 
 std::unique_ptr<lvk::IContext> ctx_;
 
-// Ray tracing acceleration structure
-struct AccelerationStructure {
-  VkAccelerationStructureKHR handle;
-  uint64_t deviceAddress = 0;
-  lvk::Holder<lvk::BufferHandle> buffer;
-};
-
 struct Resources {
   lvk::Holder<lvk::AccelStructHandle> BLAS;
   lvk::Holder<lvk::AccelStructHandle> TLAS;
