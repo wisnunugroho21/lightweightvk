@@ -299,10 +299,12 @@ struct RayTracingPipelineState final {
 
   void* specConstantDataStorage_ = nullptr;
 
-  lvk::Holder<lvk::BufferHandle> sbtRayGen;
-  lvk::Holder<lvk::BufferHandle> sbtMiss;
-  lvk::Holder<lvk::BufferHandle> sbtHit;
-  lvk::Holder<lvk::BufferHandle> sbtCallable;
+  lvk::Holder<lvk::BufferHandle> sbt;
+
+  VkStridedDeviceAddressRegionKHR sbtEntryRayGen = {};
+  VkStridedDeviceAddressRegionKHR sbtEntryMiss = {};
+  VkStridedDeviceAddressRegionKHR sbtEntryHit = {};
+  VkStridedDeviceAddressRegionKHR sbtEntryCallable = {};
 };
 
 struct ShaderModuleState final {

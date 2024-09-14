@@ -2461,7 +2461,7 @@ void lvk::CommandBuffer::cmdTraceRays(uint32_t width, uint32_t height, uint32_t 
   lvk::RayTracingPipelineState* rtps = ctx_->rayTracingPipelinesPool_.get(currentPipelineRayTracing_);
 
   if (!LVK_VERIFY(rtps)) {
-     return;
+    return;
   }
 
   LVK_ASSERT(!isRendering_);
@@ -2475,31 +2475,8 @@ void lvk::CommandBuffer::cmdTraceRays(uint32_t width, uint32_t height, uint32_t 
                   VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
   }
 
-  const auto& props = ctx_->rayTracingPipelineProperties_;
-  const uint32_t handleSizeAligned = getAlignedSize(props.shaderGroupHandleSize, props.shaderGroupHandleAlignment);
-
-  const VkStridedDeviceAddressRegionKHR raygenShaderSbtEntry{
-      .deviceAddress = rtps->sbtRayGen.valid() ? ctx_->gpuAddress(rtps->sbtRayGen) : 0,
-      .stride = handleSizeAligned,
-      .size = handleSizeAligned,
-  };
-  const VkStridedDeviceAddressRegionKHR missShaderSbtEntry{
-      .deviceAddress = rtps->sbtMiss.valid() ? ctx_->gpuAddress(rtps->sbtMiss) : 0,
-      .stride = handleSizeAligned,
-      .size = handleSizeAligned,
-  };
-  const VkStridedDeviceAddressRegionKHR hitShaderSbtEntry{
-      .deviceAddress = rtps->sbtHit.valid() ? ctx_->gpuAddress(rtps->sbtHit) : 0,
-      .stride = handleSizeAligned,
-      .size = handleSizeAligned,
-  };
-  const VkStridedDeviceAddressRegionKHR callableShaderSbtEntry{
-      .deviceAddress = rtps->sbtCallable.valid() ? ctx_->gpuAddress(rtps->sbtCallable) : 0,
-      .stride = handleSizeAligned,
-      .size = handleSizeAligned,
-  };
   vkCmdTraceRaysKHR(
-      wrapper_->cmdBuf_, &raygenShaderSbtEntry, &missShaderSbtEntry, &hitShaderSbtEntry, &callableShaderSbtEntry, width, height, depth);
+      wrapper_->cmdBuf_, &rtps->sbtEntryRayGen, &rtps->sbtEntryMiss, &rtps->sbtEntryHit, &rtps->sbtEntryCallable, width, height, depth);
 }
 
 void lvk::CommandBuffer::cmdSetBlendColor(const float color[4]) {
@@ -4392,6 +4369,8 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   const lvk::ShaderModuleState* moduleIntr = shaderModulesPool_.get(desc.smIntersection);
   const lvk::ShaderModuleState* moduleCall = shaderModulesPool_.get(desc.smCallable);
 
+  LVK_ASSERT(moduleRGen);
+
   // create pipeline layout
   {
 #define UPDATE_PUSH_CONSTANT_SIZE(sm, bit)                                  \
@@ -4460,6 +4439,9 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   VkRayTracingShaderGroupCreateInfoKHR shaderGroups[kMaxShaderGroups];
   uint32_t numShaderGroups = 0;
   uint32_t numShaders = 0;
+  uint32_t idxMiss = 0;
+  uint32_t idxHit = 0;
+  uint32_t idxCallable = 0;
   if (moduleRGen) {
     // ray generation group
     shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
@@ -4473,6 +4455,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   }
   if (moduleMiss) {
     // miss group
+    idxMiss = numShaders;
     shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
         .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
         .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
@@ -4484,6 +4467,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   }
   // hit group
   if (moduleAHit || moduleCHit || moduleIntr) {
+    idxHit = numShaders;
     shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
         .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
         .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
@@ -4495,6 +4479,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   }
   // callable group
   if (moduleCall) {
+    idxCallable = numShaders;
     shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
         .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
         .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
@@ -4525,45 +4510,45 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   std::vector<uint8_t> shaderHandleStorage(sbtSize);
   VK_ASSERT(vkGetRayTracingShaderGroupHandlesKHR(vkDevice_, rtps->pipeline_, 0, numShaderGroups, sbtSize, shaderHandleStorage.data()));
 
-  rtps->sbtRayGen = createBuffer(
+  const uint32_t sbtEntrySizeAligned = getAlignedSize(handleSizeAligned, props.shaderGroupBaseAlignment);
+  const uint32_t sbtBufferSize = numShaderGroups * sbtEntrySizeAligned;
+
+  // repack SBT respecting `shaderGroupBaseAlignment`
+  std::vector<uint8_t> sbtStorage(sbtBufferSize);
+  for (uint32_t i = 0; i != numShaderGroups; i++) {
+    memcpy(sbtStorage.data() + i * sbtEntrySizeAligned, shaderHandleStorage.data() + i * handleSizeAligned, handleSize);
+  }
+
+  rtps->sbt = createBuffer(
       {
           .usage = lvk::BufferUsageBits_ShaderBindingTable,
-          .storage = lvk::StorageType_HostVisible,
-          .size = handleSize,
-          .data = shaderHandleStorage.data(),
-          .debugName = "Buffer: SBT RayGen",
+          .storage = lvk::StorageType_Device,
+          .size = sbtBufferSize,
+          .data = sbtStorage.data(),
+          .debugName = "Buffer: SBT",
       },
       nullptr);
-  rtps->sbtMiss = createBuffer(
-      {
-          .usage = lvk::BufferUsageBits_ShaderBindingTable,
-          .storage = lvk::StorageType_HostVisible,
-          .size = handleSize,
-          .data = shaderHandleStorage.data() + handleSizeAligned,
-          .debugName = "Buffer: SBT Miss",
-      },
-      nullptr);
-  rtps->sbtHit = createBuffer(
-      {
-          .usage = lvk::BufferUsageBits_ShaderBindingTable,
-          .storage = lvk::StorageType_HostVisible,
-          .size = handleSize,
-          .data = shaderHandleStorage.data() + handleSizeAligned * 2,
-          .debugName = "Buffer: SBT Hit",
-      },
-      nullptr);
-  /*
-  // TODO:
-  rtps->sbtCallable = createBuffer(
-      {
-          .usage = lvk::BufferUsageBits_ShaderBindingTable,
-          .storage = lvk::StorageType_HostVisible,
-          .size = handleSize,
-          .data = shaderHandleStorage.data() + handleSizeAligned * 2,
-          .debugName = "Buffer: SBT Callable",
-      },
-      nullptr);
-   */
+  // generate SBT entries
+  rtps->sbtEntryRayGen = {
+      .deviceAddress = gpuAddress(rtps->sbt),
+      .stride = handleSizeAligned,
+      .size = handleSizeAligned,
+  };
+  rtps->sbtEntryMiss = {
+      .deviceAddress = idxMiss ? gpuAddress(rtps->sbt, idxMiss * sbtEntrySizeAligned) : 0,
+      .stride = handleSizeAligned,
+      .size = handleSizeAligned,
+  };
+  rtps->sbtEntryHit = {
+      .deviceAddress = idxHit ? gpuAddress(rtps->sbt, idxHit * sbtEntrySizeAligned) : 0,
+      .stride = handleSizeAligned,
+      .size = handleSizeAligned,
+  };
+  rtps->sbtEntryCallable = {
+      .deviceAddress = idxCallable ? gpuAddress(rtps->sbt, idxCallable * sbtEntrySizeAligned) : 0,
+      .stride = handleSizeAligned,
+      .size = handleSizeAligned,
+  };
 
   return rtps->pipeline_;
 }
