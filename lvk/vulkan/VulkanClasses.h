@@ -654,8 +654,6 @@ public:
   VkDescriptorSet vkDSet_ = VK_NULL_HANDLE;
   // don't use staging on devices with shared host-visible memory
   bool useStaging_ = true;
-  bool isAccelerationStructureEnabled_ = false;
-  bool isRayTracingEnabled_ = false;
 
   std::unique_ptr<struct VulkanContextImpl> pimpl_;
 

@@ -10,10 +10,6 @@
 #include <GLFW/glfw3.h>
 #include <lvk/LVK.h>
 
-// we are going to use raw Vulkan here
-#include <lvk/vulkan/VulkanClasses.h>
-#include <lvk/vulkan/VulkanUtils.h>
-
 #include <glm/ext.hpp>
 #include <glm/glm.hpp>
 
@@ -127,7 +123,7 @@ void createBottomLevelAccelerationStructure() {
     float pos[3];
   };
   const float t = (1.0f + sqrtf(5.0f)) / 2.0f;
-  std::vector<Vertex> vertices = {
+  const Vertex vertices[] = {
       {-1, t, 0},
       {1, t, 0},
       {-1, -t, 0},
@@ -144,22 +140,22 @@ void createBottomLevelAccelerationStructure() {
       {-t, 0, 1},
   };
 
-  std::vector<uint32_t> indices = {0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4,  11, 10, 2,  10, 7, 6, 7, 1, 8,
-                                   3, 9,  4, 3, 4, 2, 3, 2, 6, 3, 6, 8,  3, 8,  9,  4, 9, 5, 2, 4,  11, 6,  2,  10, 8,  6, 7, 9, 8, 1};
+  const uint32_t indices[] = {0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4,  11, 10, 2,  10, 7, 6, 7, 1, 8,
+                              3, 9,  4, 3, 4, 2, 3, 2, 6, 3, 6, 8,  3, 8,  9,  4, 9, 5, 2, 4,  11, 6,  2,  10, 8,  6, 7, 9, 8, 1};
 
   const glm::mat3x4 transformMatrix(1.0f);
 
   res.vertexBuffer = ctx_->createBuffer({
       .usage = lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
       .storage = lvk::StorageType_HostVisible,
-      .size = vertices.size() * sizeof(Vertex),
-      .data = vertices.data(),
+      .size = sizeof(vertices),
+      .data = vertices,
   });
   res.indexBuffer = ctx_->createBuffer({
       .usage = lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
       .storage = lvk::StorageType_HostVisible,
-      .size = indices.size() * sizeof(uint32_t),
-      .data = indices.data(),
+      .size = sizeof(indices),
+      .data = indices,
   });
   lvk::Holder<lvk::BufferHandle> transformBuffer = ctx_->createBuffer({
       .usage = lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
@@ -173,11 +169,11 @@ void createBottomLevelAccelerationStructure() {
       .geometryType = lvk::AccelStructGeomType_Triangles,
       .vertexFormat = lvk::VertexFormat::Float3,
       .vertexBuffer = res.vertexBuffer,
-      .numVertices = (uint32_t)vertices.size(),
+      .numVertices = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(vertices),
       .indexFormat = lvk::IndexFormat_UI32,
       .indexBuffer = res.indexBuffer,
       .transformBuffer = transformBuffer,
-      .buildRange = {.primitiveCount = (uint32_t)indices.size() / 3},
+      .buildRange = {.primitiveCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(indices) / 3},
       .debugName = "BLAS",
   });
 }
@@ -200,7 +196,7 @@ void createTopLevelAccelerationStructure() {
   res.instancesBuffer = ctx_->createBuffer(lvk::BufferDesc{
       .usage = lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
       .storage = lvk::StorageType_HostVisible,
-      .size = sizeof(VkAccelerationStructureInstanceKHR),
+      .size = sizeof(lvk::AccelStructInstance),
       .data = &instance,
       .debugName = "instanceBuffer",
   });
@@ -301,44 +297,13 @@ int main(int argc, char* argv[]) {
 
   GLFWwindow* window = lvk::initWindow("Vulkan Hello Ray Tracing", width_, height_, true);
 
-  VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingFeatures = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
-      .rayTracingPipeline = VK_TRUE,
-      .rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE,
-      .rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE,
-      .rayTracingPipelineTraceRaysIndirect = VK_TRUE,
-      .rayTraversalPrimitiveCulling = VK_FALSE,
-  };
-  VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-      .pNext = &rayTracingFeatures,
-      .accelerationStructure = VK_TRUE,
-      .accelerationStructureCaptureReplay = VK_FALSE,
-      .accelerationStructureIndirectBuild = VK_FALSE,
-      .accelerationStructureHostCommands = VK_FALSE,
-      .descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE,
-  };
-  VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
-      .pNext = &accelerationStructureFeatures,
-      .rayQuery = VK_TRUE,
-  };
-
   ctx_ = lvk::createVulkanContextWithSwapchain(window, width_, height_, {
 #if defined(NDEBUG)
     .enableValidation = false,
 #else
     .enableValidation = true,
 #endif
-    .extensionsDevice =
-        {
-            "VK_KHR_acceleration_structure",
-            "VK_KHR_deferred_host_operations",
-            "VK_KHR_pipeline_library",
-            "VK_KHR_ray_query",
-            "VK_KHR_ray_tracing_pipeline",
-        },
-    .extensionsDeviceFeatures = &rayQueryFeatures,
+    .enableAccelerationStructure = true, .enableRayTracingPipeline = true,
   });
   if (!ctx_) {
     return 255;

@@ -29,9 +29,6 @@
 #include <lvk/HelpersImGui.h>
 #include <lvk/LVK.h>
 
-// we are going to use raw Vulkan here
-#include <lvk/vulkan/VulkanClasses.h>
-
 constexpr uint32_t kMeshCacheVersion = 0xC0DE000A;
 constexpr int kNumSamplesMSAA = 4;
 #if defined(NDEBUG)
@@ -768,7 +765,7 @@ bool initModel() {
   sbInstances_ = ctx_->createBuffer(lvk::BufferDesc{
       .usage = lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
       .storage = lvk::StorageType_HostVisible,
-      .size = sizeof(VkAccelerationStructureInstanceKHR),
+      .size = sizeof(lvk::AccelStructInstance),
       .data = &instance,
       .debugName = "sbInstances_",
   });
@@ -1126,34 +1123,14 @@ int main(int argc, char* argv[]) {
     folderContentRoot = (dir / subdir).string();
   }
 
-  VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
-      .accelerationStructure = VK_TRUE,
-      .accelerationStructureCaptureReplay = VK_FALSE,
-      .accelerationStructureIndirectBuild = VK_FALSE,
-      .accelerationStructureHostCommands = VK_FALSE,
-      .descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE,
-  };
-  VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
-      .pNext = &accelerationStructureFeatures,
-      .rayQuery = VK_TRUE,
-  };
-
   GLFWwindow* window = lvk::initWindow("Vulkan Bistro", width_, height_);
   ctx_ = lvk::createVulkanContextWithSwapchain(window,
                                                width_,
                                                height_,
                                                {
                                                    .enableValidation = kEnableValidationLayers,
-                                                   .extensionsDevice =
-                                                       {
-                                                           "VK_KHR_acceleration_structure",
-                                                           "VK_KHR_deferred_host_operations",
-                                                           "VK_KHR_pipeline_library",
-                                                           "VK_KHR_ray_query",
-                                                       },
-                                                   .extensionsDeviceFeatures = &rayQueryFeatures,
+                                                   .enableAccelerationStructure = true,
+                                                   .enableRayQuery = true,
                                                },
                                                lvk::HWDeviceType_Discrete);
   if (!ctx_) {

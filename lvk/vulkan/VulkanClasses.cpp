@@ -1864,7 +1864,7 @@ void lvk::CommandBuffer::transitionToShaderReadOnly(TextureHandle handle) const 
 void lvk::CommandBuffer::cmdBindRayTracingPipeline(lvk::RayTracingPipelineHandle handle) {
   LVK_PROFILER_FUNCTION();
 
-  if (!LVK_VERIFY(!handle.empty() && ctx_->isRayTracingEnabled_)) {
+  if (!LVK_VERIFY(!handle.empty() && ctx_->config_.enableRayTracingPipeline)) {
     return;
   }
 
@@ -3479,7 +3479,7 @@ lvk::Holder<lvk::QueryPoolHandle> lvk::VulkanContext::createQueryPool(uint32_t n
 lvk::Holder<lvk::AccelStructHandle> lvk::VulkanContext::createAccelerationStructure(const AccelStructDesc& desc, Result* outResult) {
   LVK_PROFILER_FUNCTION();
 
-  if (!LVK_VERIFY(isAccelerationStructureEnabled_)) {
+  if (!LVK_VERIFY(config_.enableAccelerationStructure)) {
     Result::setResult(outResult, Result(Result::Code::RuntimeError, "VK_KHR_acceleration_structure is not enabled"));
     return {};
   }
@@ -4507,6 +4507,8 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   const uint32_t handleSizeAligned = getAlignedSize(props.shaderGroupHandleSize, props.shaderGroupHandleAlignment);
   const uint32_t sbtSize = numShaderGroups * handleSizeAligned;
 
+  LVK_ASSERT(sbtSize);
+
   std::vector<uint8_t> shaderHandleStorage(sbtSize);
   VK_ASSERT(vkGetRayTracingShaderGroupHandlesKHR(vkDevice_, rtps->pipeline_, 0, numShaderGroups, sbtSize, shaderHandleStorage.data()));
 
@@ -4640,7 +4642,7 @@ lvk::Holder<lvk::RayTracingPipelineHandle> lvk::VulkanContext::createRayTracingP
                                                                                         Result* outResult) {
   LVK_PROFILER_FUNCTION();
 
-  if (!LVK_VERIFY(isRayTracingEnabled_)) {
+  if (!LVK_VERIFY(config_.enableRayTracingPipeline)) {
     Result::setResult(outResult, Result(Result::Code::RuntimeError, "VK_KHR_ray_tracing_pipeline is not enabled"));
     return {};
   }
@@ -5591,13 +5593,34 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   useStaging_ = !isHostVisibleSingleHeapMemory(vkPhysicalDevice_);
 
+  bool addExtAccelerationStructure = config_.enableAccelerationStructure;
+  bool addExtRayTracingPipeline = config_.enableRayTracingPipeline;
+  bool addExtRayQuery = config_.enableRayQuery;
   if (isRequestedCustomDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)) {
-    addNextPhysicalDeviceProperties(&accelerationStructureProperties_);
-    isAccelerationStructureEnabled_ = true;
+    LVK_ASSERT_MSG(!config_.enableAccelerationStructure,
+                   "ContextConfig::enableAccelerationStructure is already enabled, no need to add `VK_KHR_acceleration_structure` manually");
+    config_.enableAccelerationStructure = true;
+    addExtAccelerationStructure = false;
   }
   if (isRequestedCustomDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME)) {
+    LVK_ASSERT_MSG(
+        !config_.enableRayTracingPipeline,
+        "ContextConfig::enableRayTracingPipeline is already enabled, no need to add `VK_KHR_ray_tracing_pipeline` manually");
+    config_.enableRayTracingPipeline = true;
+    addExtRayTracingPipeline = false;
+  }
+  if (isRequestedCustomDeviceExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME)) {
+    LVK_ASSERT_MSG(!config_.enableRayQuery,
+                   "ContextConfig::enableRayQuery is already enabled, no need to add `VK_KHR_ray_query` manually");
+    config_.enableRayQuery = true;
+    addExtRayQuery = false;
+  }
+
+  if (config_.enableAccelerationStructure) {
+    addNextPhysicalDeviceProperties(&accelerationStructureProperties_);
+  }
+  if (config_.enableRayTracingPipeline) {
     addNextPhysicalDeviceProperties(&rayTracingPipelineProperties_);
-    isRayTracingEnabled_ = true;
   }
 
   vkGetPhysicalDeviceFeatures2(vkPhysicalDevice_, &vkFeatures10_);
@@ -5694,6 +5717,17 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     }
   }
 
+  if (addExtAccelerationStructure) {
+    deviceExtensionNames.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+    deviceExtensionNames.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+  }
+  if (addExtRayQuery) {
+    deviceExtensionNames.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+  }
+  if (addExtRayTracingPipeline) {
+    deviceExtensionNames.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+  }
+
   VkPhysicalDeviceFeatures deviceFeatures10 = {
 #if !defined(__APPLE__)
     .geometryShader = VK_TRUE,
@@ -5770,10 +5804,42 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .synchronization2 = VK_TRUE,
   };
 
-  const void* createInfoNext = &synchronization2Feature;
+  void* createInfoNext = &synchronization2Feature;
 #else
-  const void* createInfoNext = &deviceFeatures13;
+  void* createInfoNext = &deviceFeatures13;
 #endif
+  VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR,
+      .accelerationStructure = VK_TRUE,
+      .accelerationStructureCaptureReplay = VK_FALSE,
+      .accelerationStructureIndirectBuild = VK_FALSE,
+      .accelerationStructureHostCommands = VK_FALSE,
+      .descriptorBindingAccelerationStructureUpdateAfterBind = VK_TRUE,
+  };
+  VkPhysicalDeviceRayTracingPipelineFeaturesKHR rayTracingFeatures = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR,
+      .rayTracingPipeline = VK_TRUE,
+      .rayTracingPipelineShaderGroupHandleCaptureReplay = VK_FALSE,
+      .rayTracingPipelineShaderGroupHandleCaptureReplayMixed = VK_FALSE,
+      .rayTracingPipelineTraceRaysIndirect = VK_TRUE,
+      .rayTraversalPrimitiveCulling = VK_FALSE,
+  };
+  VkPhysicalDeviceRayQueryFeaturesKHR rayQueryFeatures = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
+      .rayQuery = VK_TRUE,
+  };
+  if (addExtAccelerationStructure) {
+    accelerationStructureFeatures.pNext = createInfoNext;
+    createInfoNext = &accelerationStructureFeatures;
+  }
+  if (addExtRayQuery) {
+    rayQueryFeatures.pNext = createInfoNext;
+    createInfoNext = &rayQueryFeatures;
+  }
+  if (addExtRayTracingPipeline) {
+    rayTracingFeatures.pNext = createInfoNext;
+    createInfoNext = &rayTracingFeatures;
+  }
 
   const VkDeviceCreateInfo ci = {
       .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -6139,7 +6205,7 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
   // create default descriptor set layout which is going to be shared by graphics pipelines
   VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
                                   VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
-  if (isRayTracingEnabled_) {
+  if (config_.enableRayTracingPipeline) {
     stageFlags |= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
   }
   const VkDescriptorSetLayoutBinding bindings[kBinding_NumBindings] = {
@@ -6158,14 +6224,14 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
   }
   const VkDescriptorSetLayoutBindingFlagsCreateInfo setLayoutBindingFlagsCI = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT,
-      .bindingCount = uint32_t(isAccelerationStructureEnabled_ ? kBinding_NumBindings : kBinding_NumBindings - 1),
+      .bindingCount = uint32_t(config_.enableAccelerationStructure ? kBinding_NumBindings : kBinding_NumBindings - 1),
       .pBindingFlags = bindingFlags,
   };
   const VkDescriptorSetLayoutCreateInfo dslci = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .pNext = &setLayoutBindingFlagsCI,
       .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT,
-      .bindingCount = uint32_t(isAccelerationStructureEnabled_ ? kBinding_NumBindings : kBinding_NumBindings - 1),
+      .bindingCount = uint32_t(config_.enableAccelerationStructure ? kBinding_NumBindings : kBinding_NumBindings - 1),
       .pBindings = bindings,
   };
   VK_ASSERT(vkCreateDescriptorSetLayout(vkDevice_, &dslci, nullptr, &vkDSL_));
@@ -6185,7 +6251,7 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
         .maxSets = 1,
-        .poolSizeCount = uint32_t(isAccelerationStructureEnabled_ ? kBinding_NumBindings : kBinding_NumBindings - 1),
+        .poolSizeCount = uint32_t(config_.enableAccelerationStructure ? kBinding_NumBindings : kBinding_NumBindings - 1),
         .pPoolSizes = poolSizes,
     };
     VK_ASSERT_RETURN(vkCreateDescriptorPool(vkDevice_, &ci, nullptr, &vkDPool_));

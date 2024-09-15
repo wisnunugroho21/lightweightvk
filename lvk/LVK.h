@@ -1070,6 +1070,11 @@ struct ContextConfig {
   const char* extensionsInstance[kMaxCustomExtensions] = {}; // add extra instance extensions on top of required ones
   const char* extensionsDevice[kMaxCustomExtensions] = {}; // add extra device extensions on top of required ones
   void* extensionsDeviceFeatures = nullptr; // inserted into VkPhysicalDeviceVulkan11Features::pNext
+
+  // LVK knows about these extensions and can manage them automatically upon request
+  bool enableAccelerationStructure = false; // VK_KHR_acceleration_structure + VK_KHR_deferred_host_operations
+  bool enableRayQuery = false; // VK_KHR_ray_query
+  bool enableRayTracingPipeline = false; // VK_KHR_ray_tracing_pipeline
 };
 
 [[nodiscard]] bool isDepthOrStencilFormat(lvk::Format format);
