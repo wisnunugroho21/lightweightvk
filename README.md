@@ -1,12 +1,12 @@
 LightweightVK [![Build Status](https://github.com/corporateshark/lightweightvk/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/corporateshark/lightweightvk/actions)
 ========================
 
-LightweightVK is a deeply refactored fork of [IGL](https://github.com/facebook/igl) which is designed to run on top of Vulkan 1.3 with optional mesh shaders and ray tracing support.
+LightweightVK is a deeply refactored fork of [IGL](https://github.com/facebook/igl) which is designed to run on top of **Vulkan 1.3** with optional **mesh shaders** and **ray tracing** support.
 
 The main goals of LightweightVK:
 
 1. **Lean.** Minimalistic API without bloat (no `std::vector`, `std::unordered_map` etc in the API).
-2. **Bindless.** Utilize Vulkan 1.3+ dynamic rendering, descriptor indexing, and buffer device address features for modern bindless-only API design.
+2. **Bindless.** Utilize Vulkan 1.3+ dynamic rendering, descriptor indexing, and buffer device address features for modern bindless-only API design. Ray tracing features are fully integrated with the bindless-only design.
 3. **Agile.** A playground for experiments to enable quick exploration of ideas and adoption of Vulkan API changes.
 Designed for rapid prototyping of Vulkan-based renderers.
 
