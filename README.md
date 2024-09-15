@@ -121,7 +121,7 @@ Check out [https://github.com/corporateshark/lightweightvk/samples](https://gith
 
 The header file `lvk/vulkan/VulkanUtils.h` offers a collection of functions that allow you to access the underlying Vulkan API objects from LightweightVK handles. This makes it easy to mix LVK and Vulkan code, as shown in the following example:
 
-```
+```c
 lvk::Holder<lvk::BufferHandle> vertexBuffer = ctx_->createBuffer({...});
 ...
 lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
