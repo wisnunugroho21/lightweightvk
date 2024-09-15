@@ -128,6 +128,7 @@ ADD_DEMO("004_YUV")
 if(WIN32 OR UNIX AND NOT (ANDROID OR APPLE))
   ADD_DEMO("005_MeshShaders")
   ADD_DEMO("006_RayTracingHello")
+  ADD_DEMO("007_RayTracingAO")
 endif()
 
 ADD_DEMO("Tiny")
