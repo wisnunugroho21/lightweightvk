@@ -1,7 +1,7 @@
 LightweightVK [![Build Status](https://github.com/corporateshark/lightweightvk/actions/workflows/c-cpp.yml/badge.svg)](https://github.com/corporateshark/lightweightvk/actions)
 ========================
 
-LightweightVK is a deeply refactored fork of [IGL](https://github.com/facebook/igl) which is designed to run on top of Vulkan 1.3.
+LightweightVK is a deeply refactored fork of [IGL](https://github.com/facebook/igl) which is designed to run on top of Vulkan 1.3 with optional mesh shaders and ray tracing support.
 
 The main goals of LightweightVK:
 
@@ -116,6 +116,22 @@ Check out [https://github.com/corporateshark/lightweightvk/samples](https://gith
 
 ![image](.github/screenshot01.jpg)
 ![image](.github/samples/007_RayTracingAO.jpg)
+
+## Interop with raw Vulkan API calls
+
+The header file `lvk/vulkan/VulkanUtils.h` offers a collection of functions that allow you to access the underlying Vulkan API objects from LightweightVK handles. This makes it easy to mix LVK and Vulkan code, as shown in the following example:
+
+```
+lvk::Holder<lvk::BufferHandle> vertexBuffer = ctx_->createBuffer({...});
+...
+lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
+VkCommandBuffer cmdBuf = getVkCommandBuffer(buffer);
+VkBuffer buf = getVkBuffer(vertexBuffer);
+vkCmdUpdateBuffer(cmdBuf, buf, 0, sizeof(params), &params);
+ctx_->submit(buffer, ctx_->getCurrentSwapchainTexture());
+```
+
+If you'd like to add more helper functions, feel free to submit a pull request.
 
 ## License
 
