@@ -15,9 +15,10 @@ There are no plans to keep this fork in sync with the upstream.
 ## Supported rendering backends
 
  * Vulkan 1.3 (Windows, Linux, Android)
-   * optional **VK_EXT_mesh_shader** (Windows, Linux)
    * optional **VK_KHR_acceleration_structure** (Windows, Linux)
+   * optional **VK_KHR_ray_query** (Windows, Linux)
    * optional **VK_KHR_ray_tracing_pipeline** (Windows, Linux)
+   * optional **VK_EXT_mesh_shader** (Windows, Linux)
  * Vulkan 1.2 + extensions (MacOS)
 
 ## Supported platforms
@@ -33,9 +34,10 @@ There are no plans to keep this fork in sync with the upstream.
 | ----------------------------- | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
 | Vulkan 1.3                    | :heavy_check_mark:         | :heavy_check_mark:         | :heavy_exclamation_mark:   | :heavy_check_mark:         |
 | Vulkan 1.2                    |                            |                            | :heavy_check_mark:         |                            |
-| VK_EXT_mesh_shader            | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
 | VK_KHR_acceleration_structure | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
+| VK_KHR_ray_query              | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
 | VK_KHR_ray_tracing_pipeline   | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
+| VK_EXT_mesh_shader            | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
 
 On MacOS, features required by LightweightVK are enabled via extensions `VK_KHR_dynamic_rendering`, `VK_EXT_subgroup_size_control`,
 `VK_EXT_extended_dynamic_state`, `VK_EXT_extended_dynamic_state2`, and `VK_KHR_synchronization2`.
@@ -51,7 +53,6 @@ Before building, run the deployment scripts:
 ```
 python3 deploy_content.py
 python3 deploy_deps.py
-
 ```
 
 These scripts download external third-party dependencies. Please check [LICENSE.md](./LICENSE.md) for the full list.
@@ -108,7 +109,7 @@ python3 deploy_content_android.py
 
 > NOTE: To run demos on an Android device, it should support Vulkan 1.3. Please check https://vulkan.gpuinfo.org/listdevices.php?platform=android 
 
-> NOTE: At the moment, no touch input is supported on Android.
+> NOTE: At the moment, demo apps do not support touch input on Android.
 
 ## Screenshots
 
