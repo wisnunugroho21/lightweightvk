@@ -115,6 +115,7 @@ python3 deploy_content_android.py
 Check out [https://github.com/corporateshark/lightweightvk/samples](https://github.com/corporateshark/lightweightvk/tree/master/samples).
 
 ![image](.github/screenshot01.jpg)
+![image](.github/samples/007_RayTracingAO.jpg)
 
 ## License
 
