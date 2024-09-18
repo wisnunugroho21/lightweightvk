@@ -3953,6 +3953,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
   LVK_ASSERT(desc.numVertices == 0);
   LVK_ASSERT(desc.instancesBuffer.valid());
   LVK_ASSERT(desc.buildRange.primitiveCount);
+  LVK_ASSERT(buffersPool_.get(desc.instancesBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
 
   const VkAccelerationStructureGeometryKHR accelerationStructureGeometry{
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
