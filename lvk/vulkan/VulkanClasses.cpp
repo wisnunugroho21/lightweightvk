@@ -3833,6 +3833,10 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
   LVK_ASSERT(desc.transformBuffer.valid());
   LVK_ASSERT(desc.buildRange.primitiveCount);
 
+  LVK_ASSERT(buffersPool_.get(desc.indexBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+  LVK_ASSERT(buffersPool_.get(desc.vertexBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+  LVK_ASSERT(buffersPool_.get(desc.transformBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+
   VkGeometryFlagsKHR geometryFlags = 0;
 
   if (desc.geometryFlags & AccelStructGeometryFlagBits_Opaque) {
