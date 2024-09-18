@@ -25,7 +25,14 @@
 #include <shared/UtilsFPS.h>
 #include <tiny_obj_loader.h>
 
+#if defined(ANDROID)
+#include <android_native_app_glue.h>
+#include <jni.h>
+#include <time.h>
+#else
 #include <GLFW/glfw3.h>
+#endif
+
 #include <lvk/HelpersImGui.h>
 #include <lvk/LVK.h>
 
@@ -1102,6 +1109,7 @@ inline ImVec4 toVec4(const vec4& c) {
   return ImVec4(c.x, c.y, c.z, c.w);
 }
 
+#if !defined(ANDROID)
 int main(int argc, char* argv[]) {
   minilog::initialize(nullptr, {.threadNames = false});
 
@@ -1246,3 +1254,98 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
+#else
+double getCurrentTimestamp() {
+  timespec t = {0, 0};
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return (double)t.tv_sec + 1.0e-9 * t.tv_nsec;
+}
+
+extern "C" {
+void handle_cmd(android_app* app, int32_t cmd) {
+  switch (cmd) {
+  case APP_CMD_INIT_WINDOW:
+    if (app->window != nullptr) {
+      width_ = ANativeWindow_getWidth(app->window);
+      height_ = ANativeWindow_getHeight(app->window);
+      ctx_ = lvk::createVulkanContextWithSwapchain(app->window,
+                                                   width_,
+                                                   height_,
+                                                   {
+                                                     .enableValidation = kEnableValidationLayers,
+                                                     .enableAccelerationStructure = true,
+                                                     .enableRayQuery = true,
+                                                   });
+      if (!init()) {
+        LLOGW("Failed to initialize the app\n");
+        std::terminate();
+      }
+    }
+    break;
+  case APP_CMD_TERM_WINDOW:
+    destroy();
+    break;
+  }
+}
+
+void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
+  int w = ANativeWindow_getWidth(window);
+  int h = ANativeWindow_getHeight(window);
+  if (width_ != w || height_ != h) {
+    width_ = w;
+    height_ = h;
+    if (ctx_) {
+      resize();
+    }
+  }
+}
+
+void android_main(android_app* app) {
+  minilog::initialize(nullptr, {.threadNames = false});
+  app->onAppCmd = handle_cmd;
+  app->activity->callbacks->onNativeWindowResized = resize_callback;
+
+  // find the content folder
+  {
+    using namespace std::filesystem;
+    if (const char* externalStorage = std::getenv("EXTERNAL_STORAGE")) {
+      folderThirdParty = (std::filesystem::path(externalStorage) / "LVK" / "deps" / "src").string() + "/";
+      folderContentRoot = (std::filesystem::path(externalStorage) / "LVK" / "content").string() + "/";
+      if (!exists(folderThirdParty) || !exists(folderContentRoot)) {
+        LLOGW("Cannot find the content directory. Run `deploy_content_android.py` before running this app.\n");
+        LVK_ASSERT(false);
+        std::terminate();
+      }
+    } else {
+      LLOGW("Cannot find EXTERNAL_STORAGE.\n");
+      LVK_ASSERT(false);
+      std::terminate();
+    }
+  }
+
+  fps_.printFPS_ = false;
+
+  double prevTime = getCurrentTimestamp();
+  uint32_t frameIndex = 0;
+
+  int events = 0;
+  android_poll_source* source = nullptr;
+  do {
+    double newTime = getCurrentTimestamp();
+    double delta = newTime - prevTime;
+    fps_.tick(delta);
+    LLOGL("FPS: %.1f\n", fps_.getFPS());
+    prevTime = newTime;
+    if (ctx_) {
+      render(delta, frameIndex);
+    }
+    if (ALooper_pollOnce(0, nullptr, &events, (void**)&source) >= 0) {
+      if (source) {
+        source->process(app, source);
+      }
+    }
+    frameIndex = (frameIndex + 1) % kNumBufferedFrames;
+  } while (!app->destroyRequested);
+}
+} // extern "C"
+#endif
