@@ -5219,6 +5219,7 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
       )";
     }
     if (vkStage == VK_SHADER_STAGE_FRAGMENT_BIT) {
+      const bool bInjectTLAS = strstr(source, "kTLAS[") != nullptr;
       // Note how nonuniformEXT() should be used:
       // https://github.com/KhronosGroup/Vulkan-Samples/blob/main/shaders/descriptor_indexing/nonuniform-quads.frag#L33-L39
       sourcePatched += R"(
@@ -5228,7 +5229,16 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
       #extension GL_EXT_nonuniform_qualifier : require
       #extension GL_EXT_samplerless_texture_functions : require
       #extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
+      )";
+      if (bInjectTLAS) {
+        sourcePatched += R"(
+      #extension GL_EXT_buffer_reference : require
+      #extension GL_EXT_ray_query : require
 
+      layout(set = 0, binding = 4) uniform accelerationStructureEXT kTLAS[];
+      )";
+      }
+      sourcePatched += R"(
       layout (set = 0, binding = 0) uniform texture2D kTextures2D[];
       layout (set = 1, binding = 0) uniform texture3D kTextures3D[];
       layout (set = 2, binding = 0) uniform textureCube kTexturesCube[];
