@@ -476,6 +476,8 @@ FramesPerSecondCounter fps_;
 
 constexpr uint32_t kNumBufferedFrames = 3;
 
+uint32_t mtlBufIndex = 0;
+
 std::unique_ptr<lvk::IContext> ctx_;
 lvk::Framebuffer fbMain_; // swapchain
 lvk::Framebuffer fbOffscreen_;
@@ -502,7 +504,7 @@ lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Shadow_;
 lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Skybox_;
 lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Fullscreen_;
 lvk::Holder<lvk::BufferHandle> vb0_, ib0_; // buffers for vertices and indices
-lvk::Holder<lvk::BufferHandle> sbMaterials_; // storage buffer for materials
+std::vector<lvk::Holder<lvk::BufferHandle>> sbMaterials_; // storage buffer for materials
 std::vector<lvk::Holder<lvk::BufferHandle>> ubPerFrame_, ubPerFrameShadow_, ubPerObject_;
 lvk::Holder<lvk::SamplerHandle> sampler_;
 lvk::Holder<lvk::SamplerHandle> samplerShadow_;
@@ -775,7 +777,7 @@ void destroy() {
 
   vb0_ = nullptr;
   ib0_ = nullptr;
-  sbMaterials_ = nullptr;
+  sbMaterials_.clear();
   ubPerFrame_.clear();
   ubPerFrameShadow_.clear();
   ubPerObject_.clear();
@@ -1001,12 +1003,15 @@ bool initModel() {
                                      textureDummyWhite_.index(),
                                      textureDummyWhite_.index()});
   }
-  sbMaterials_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage,
-                                        .storage = lvk::StorageType_Device,
-                                        .size = sizeof(GPUMaterial) * materials_.size(),
-                                        .data = materials_.data(),
-                                        .debugName = "Buffer: materials"},
-                                       nullptr);
+
+  for (uint32_t i = 0; i != kNumBufferedFrames; i++) {
+    sbMaterials_.push_back(ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage,
+                                               .storage = lvk::StorageType_Device,
+                                               .size = sizeof(GPUMaterial) * materials_.size(),
+                                               .data = materials_.data(),
+                                               .debugName = "Buffer: materials"},
+                                              nullptr));
+  }
 
   vb0_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Vertex,
                                 .storage = lvk::StorageType_Device,
@@ -1374,7 +1379,7 @@ void render(double delta, uint32_t frameIndex) {
       } bindings = {
           .perFrame = ctx_->gpuAddress(ubPerFrame_[frameIndex]),
           .perObject = ctx_->gpuAddress(ubPerObject_[frameIndex]),
-          .materials = ctx_->gpuAddress(sbMaterials_),
+          .materials = ctx_->gpuAddress(sbMaterials_[mtlBufIndex]),
       };
       buffer.cmdPushConstants(bindings);
       buffer.cmdBindIndexBuffer(ib0_, lvk::IndexFormat_UI32);
@@ -1938,7 +1943,8 @@ void processLoadedMaterials() {
   LVK_ASSERT(materials_[mtl.idx].texAmbient >= 0);
   LVK_ASSERT(materials_[mtl.idx].texDiffuse >= 0);
   LVK_ASSERT(materials_[mtl.idx].texAlpha >= 0);
-  ctx_->upload(sbMaterials_, materials_.data(), sizeof(GPUMaterial) * materials_.size());
+  mtlBufIndex = (mtlBufIndex + 1) % sbMaterials_.size();
+  ctx_->upload(sbMaterials_[mtlBufIndex], materials_.data(), sizeof(GPUMaterial) * materials_.size());
 }
 
 inline ImVec4 toVec4(const vec4& c) {
