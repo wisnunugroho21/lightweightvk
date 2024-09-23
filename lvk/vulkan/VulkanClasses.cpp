@@ -1927,6 +1927,8 @@ void lvk::CommandBuffer::cmdDispatchThreadGroups(const Dimensions& threadgroupCo
     useComputeTexture(deps.textures[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   }
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
+    const lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(deps.buffers[i]);
+    LVK_ASSERT_MSG(buf->vkUsageFlags_ & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "Did you forget to specify BufferUsageBits_Storage on your buffer?");
     bufferBarrier(
         deps.buffers[i], VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   }
