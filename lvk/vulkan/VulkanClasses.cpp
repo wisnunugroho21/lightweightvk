@@ -5794,6 +5794,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     .descriptorBindingPartiallyBound = VK_TRUE,
     .descriptorBindingVariableDescriptorCount = VK_TRUE,
     .runtimeDescriptorArray = VK_TRUE,
+    .scalarBlockLayout = VK_TRUE,
     .uniformBufferStandardLayout = VK_TRUE,
     .timelineSemaphore = VK_TRUE,
     .bufferDeviceAddress = VK_TRUE,
