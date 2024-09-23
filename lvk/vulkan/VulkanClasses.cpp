@@ -1423,6 +1423,11 @@ const lvk::VulkanImmediateCommands::CommandBufferWrapper& lvk::VulkanImmediateCo
 void lvk::VulkanImmediateCommands::wait(const SubmitHandle handle) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_WAIT);
 
+  if (handle.empty()) {
+    vkDeviceWaitIdle(device_);
+    return;
+  }
+
   if (isReady(handle)) {
     return;
   }
