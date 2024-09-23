@@ -4954,7 +4954,7 @@ void lvk::VulkanContext::destroy(Framebuffer& fb) {
 uint64_t lvk::VulkanContext::gpuAddress(AccelStructHandle handle) const {
   const lvk::AccelerationStructure* as = accelStructuresPool_.get(handle);
 
-  LVK_ASSERT(as);
+  LVK_ASSERT(as && as->deviceAddress);
 
   return as ? (uint64_t)as->deviceAddress : 0u;
 }
@@ -4996,7 +4996,7 @@ uint64_t lvk::VulkanContext::gpuAddress(BufferHandle handle, size_t offset) cons
 
   const lvk::VulkanBuffer* buf = buffersPool_.get(handle);
 
-  LVK_ASSERT(buf);
+  LVK_ASSERT(buf && buf->vkDeviceAddress_);
 
   return buf ? (uint64_t)buf->vkDeviceAddress_ + offset : 0u;
 }
