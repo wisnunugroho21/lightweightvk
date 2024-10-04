@@ -52,11 +52,67 @@
     }
 },
 {
-    "name": "3D-Graphics-Rendering-Cookbook",
+    "name": "3D-Graphics-Rendering-Cookbook/data",
     "source": {
-        "type": "git",
-        "url": "https://github.com/PacktPublishing/3D-Graphics-Rendering-Cookbook.git",
-        "revision": "1c907bc3b2f0bb39bdd0042e0644b3b471bbded3"
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/data/OpenSans-Light.ttf",
+        "sha1": "40442c189568184b6e6c27a25d69f14d91b65039"
+    }
+},
+{
+    "name": "3D-Graphics-Rendering-Cookbook/shared",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsFPS.h",
+        "sha1": "cf19e032be65f471e12274d15dcc2989e8c2e469"
+    }
+},
+{
+    "name": "3D-Graphics-Rendering-Cookbook/shared",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Trackball.h",
+        "sha1": "da9a729862ba4df957e89984c1655186d2ec74f0"
+    }
+},
+{
+    "name": "3D-Graphics-Rendering-Cookbook/shared",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Camera.h",
+        "sha1": "d0fa491b2a075689ed5bf3f802269b546f267815"
+    }
+},
+{
+    "name": "3D-Graphics-Rendering-Cookbook/shared",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsMath.h",
+        "sha1": "e50eb2ecfe9342ad66423493cd127ff00c1053b2"
+    }
+},
+{
+    "name": "3D-Graphics-Rendering-Cookbook/shared",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsCubemap.h",
+        "sha1": "ddcfd57f144982bb2b2a43f0f47780be933a50df"
+    }
+},
+{
+    "name": "3D-Graphics-Rendering-Cookbook/shared",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/UtilsCubemap.cpp",
+        "sha1": "37093b74ee4a3f9b5073e8c777511cba53793a2a"
+    }
+},
+{
+    "name": "3D-Graphics-Rendering-Cookbook/shared",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/e8bf80a2f4f2f9fafc49860f4d5b201101d42af8/shared/Bitmap.h",
+        "sha1": "3c13995fb713547357ed6858018ed389ef76718b"
     }
 },
 {
