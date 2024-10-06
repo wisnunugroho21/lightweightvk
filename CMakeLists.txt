@@ -3,9 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.19)
 
 include(CMakeDependentOption)
+include(FetchContent)
 
 project("LVK" CXX C)
 
@@ -125,6 +126,15 @@ if(LVK_DEPLOY_DEPS)
   add_custom_target(LVKDependencies DEPENDS ${LVK_DEPS_CACHE_FILE})
 
   lvk_set_folder(LVKDependencies "LVK")
+
+  if(LVK_WITH_SLANG)
+    FetchContent_Populate(
+      slang
+      GIT_REPOSITORY https://github.com/shader-slang/slang
+      GIT_TAG        v2024.9.2
+      SOURCE_DIR     ${LVK_ROOT_DIR}/third-party/deps/src/slang
+    )
+  endif()
 endif()
 
 if(LVK_WITH_WAYLAND)
