@@ -5102,6 +5102,22 @@ lvk::Dimensions lvk::VulkanContext::getDimensions(TextureHandle handle) const {
   };
 }
 
+float lvk::VulkanContext::getAspectRatio(TextureHandle handle) const {
+  if (!handle) {
+    return 1.0f;
+  }
+
+  const lvk::VulkanImage* tex = texturesPool_.get(handle);
+
+  LVK_ASSERT(tex);
+
+  if (!tex) {
+    return 1.0f;
+  }
+
+  return static_cast<float>(tex->vkExtent_.width) / static_cast<float>(tex->vkExtent_.height);
+}
+
 void lvk::VulkanContext::generateMipmap(TextureHandle handle) const {
   if (handle.empty()) {
     return;

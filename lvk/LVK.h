@@ -1024,6 +1024,7 @@ class IContext {
   virtual Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data) = 0;
   virtual Result download(TextureHandle handle, const TextureRangeDesc& range, void* outData) = 0;
   [[nodiscard]] virtual Dimensions getDimensions(TextureHandle handle) const = 0;
+  [[nodiscard]] virtual float getAspectRatio(TextureHandle handle) const = 0;
   [[nodiscard]] virtual Format getFormat(TextureHandle handle) const = 0;
 #pragma endregion
 

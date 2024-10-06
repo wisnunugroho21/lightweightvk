@@ -516,6 +516,7 @@ class VulkanContext final : public IContext {
   Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data) override;
   Result download(TextureHandle handle, const TextureRangeDesc& range, void* outData) override;
   Dimensions getDimensions(TextureHandle handle) const override;
+  float getAspectRatio(TextureHandle handle) const override;
   Format getFormat(TextureHandle handle) const override;
 
   TextureHandle getCurrentSwapchainTexture() override;
