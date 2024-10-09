@@ -589,6 +589,7 @@ class VulkanContext final : public IContext {
  private:
   void createInstance();
   void createSurface(void* window, void* display);
+  void createHeadlessSurface();
   void querySurfaceCapabilities();
   void processDeferredTasks() const;
   void waitDeferredTasks();

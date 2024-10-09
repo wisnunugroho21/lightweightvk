@@ -3253,8 +3253,12 @@ lvk::VulkanContext::VulkanContext(const lvk::ContextConfig& config, void* window
 
   createInstance();
 
-  if (window && !surface) {
-    createSurface(window, display);
+  if (!surface) {
+    if (config_.enableHeadlessSurface) {
+      createHeadlessSurface();
+    } else if (window || display) {
+      createSurface(window, display);
+    }
   }
 }
 
@@ -5397,6 +5401,10 @@ void lvk::VulkanContext::createInstance() {
     instanceExtensionNames.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME); // enabled only for validation
   }
 
+  if (config_.enableHeadlessSurface) {
+    instanceExtensionNames.push_back(VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME);
+  }
+
   for (const char* ext : config_.extensionsInstance) {
     if (ext) {
       instanceExtensionNames.push_back(ext);
@@ -5506,6 +5514,15 @@ void lvk::VulkanContext::createInstance() {
   for (const auto& extension : allInstanceExtensions) {
     LLOGL("  %s\n", extension.extensionName);
   }
+}
+
+void lvk::VulkanContext::createHeadlessSurface() {
+  const VkHeadlessSurfaceCreateInfoEXT ci = {
+      .sType = VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT,
+      .pNext = nullptr,
+      .flags = 0,
+  };
+  LVK_ASSERT(vkCreateHeadlessSurfaceEXT(vkInstance_, &ci, nullptr, &vkSurface_));
 }
 
 void lvk::VulkanContext::createSurface(void* window, void* display) {

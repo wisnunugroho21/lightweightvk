@@ -1076,6 +1076,7 @@ struct ContextConfig {
   bool enableAccelerationStructure = false; // VK_KHR_acceleration_structure + VK_KHR_deferred_host_operations
   bool enableRayQuery = false; // VK_KHR_ray_query
   bool enableRayTracingPipeline = false; // VK_KHR_ray_tracing_pipeline
+  bool enableHeadlessSurface = false; // VK_EXT_headless_surface
 };
 
 [[nodiscard]] bool isDepthOrStencilFormat(lvk::Format format);
