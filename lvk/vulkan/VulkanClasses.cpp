@@ -2743,9 +2743,6 @@ lvk::VulkanStagingDevice::VulkanStagingDevice(VulkanContext& ctx) : ctx_(ctx) {
   maxBufferSize_ = std::min(limits.maxStorageBufferRange, 128u * 1024u * 1024u);
 
   LVK_ASSERT(minBufferSize_ <= maxBufferSize_);
-
-  immediate_ = std::make_unique<lvk::VulkanImmediateCommands>(
-      ctx_.getVkDevice(), ctx_.deviceQueues_.graphicsQueueFamilyIndex, "VulkanStagingDevice::immediate_");
 }
 
 void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOffset, size_t size, const void* data) {
@@ -2775,7 +2772,7 @@ void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOff
         .size = chunkSize,
     };
 
-    auto& wrapper = immediate_->acquire();
+    auto& wrapper = ctx_.immediate_->acquire();
     vkCmdCopyBuffer(wrapper.cmdBuf_, stagingBuffer->vkBuffer_, buffer.vkBuffer_, 1, &copy);
     VkBufferMemoryBarrier barrier = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -2806,7 +2803,7 @@ void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOff
     }
     vkCmdPipelineBarrier(
         wrapper.cmdBuf_, VK_PIPELINE_STAGE_TRANSFER_BIT, dstMask, VkDependencyFlags{}, 0, nullptr, 1, &barrier, 0, nullptr);
-    desc.handle_ = immediate_->submit(wrapper);
+    desc.handle_ = ctx_.immediate_->submit(wrapper);
     regions_.push_back(desc);
 
     size -= chunkSize;
@@ -2859,7 +2856,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
   }
   LVK_ASSERT(desc.size_ >= storageSize);
 
-  auto& wrapper = immediate_->acquire();
+  auto& wrapper = ctx_.immediate_->acquire();
 
   lvk::VulkanBuffer* stagingBuffer = ctx_.buffersPool_.get(stagingBuffer_);
 
@@ -2953,7 +2950,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
 
   image.vkImageLayout_ = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-  desc.handle_ = immediate_->submit(wrapper);
+  desc.handle_ = ctx_.immediate_->submit(wrapper);
   regions_.push_back(desc);
 }
 
@@ -2988,7 +2985,7 @@ void lvk::VulkanStagingDevice::imageData3D(VulkanImage& image,
   // 1. Copy the pixel data into the host visible staging buffer
   stagingBuffer->bufferSubData(ctx_, desc.offset_, storageSize, data);
 
-  auto& wrapper = immediate_->acquire();
+  auto& wrapper = ctx_.immediate_->acquire();
 
   // 1. Transition initial image layout into TRANSFER_DST_OPTIMAL
   lvk::imageMemoryBarrier(wrapper.cmdBuf_,
@@ -3025,7 +3022,7 @@ void lvk::VulkanStagingDevice::imageData3D(VulkanImage& image,
 
   image.vkImageLayout_ = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-  desc.handle_ = immediate_->submit(wrapper);
+  desc.handle_ = ctx_.immediate_->submit(wrapper);
   regions_.push_back(desc);
 }
 
@@ -3058,7 +3055,7 @@ void lvk::VulkanStagingDevice::getImageData(VulkanImage& image,
 
   lvk::VulkanBuffer* stagingBuffer = ctx_.buffersPool_.get(stagingBuffer_);
 
-  auto& wrapper1 = immediate_->acquire();
+  auto& wrapper1 = ctx_.immediate_->acquire();
 
   // 1. Transition to VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
   lvk::imageMemoryBarrier(wrapper1.cmdBuf_,
@@ -3088,7 +3085,7 @@ void lvk::VulkanStagingDevice::getImageData(VulkanImage& image,
   };
   vkCmdCopyImageToBuffer(wrapper1.cmdBuf_, image.vkImage_, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, stagingBuffer->vkBuffer_, 1, &copy);
 
-  desc.handle_ = immediate_->submit(wrapper1);
+  desc.handle_ = ctx_.immediate_->submit(wrapper1);
   regions_.push_back(desc);
 
   waitAndReset();
@@ -3101,7 +3098,7 @@ void lvk::VulkanStagingDevice::getImageData(VulkanImage& image,
   memcpy(outData, stagingBuffer->getMappedPtr() + desc.offset_, storageSize);
 
   // 4. Transition back to the initial image layout
-  auto& wrapper2 = immediate_->acquire();
+  auto& wrapper2 = ctx_.immediate_->acquire();
 
   lvk::imageMemoryBarrier(wrapper2.cmdBuf_,
                           image.vkImage_,
@@ -3113,7 +3110,7 @@ void lvk::VulkanStagingDevice::getImageData(VulkanImage& image,
                           VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, // dstStageMask
                           range);
 
-  immediate_->wait(immediate_->submit(wrapper2));
+  ctx_.immediate_->wait(ctx_.immediate_->submit(wrapper2));
 }
 
 void lvk::VulkanStagingDevice::ensureStagingBufferSize(uint32_t sizeNeeded) {
@@ -3174,7 +3171,7 @@ lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFree
   auto bestNextIt = regions_.begin();
 
   for (auto it = regions_.begin(); it != regions_.end(); ++it) {
-    if (immediate_->isReady(it->handle_)) {
+    if (ctx_.immediate_->isReady(it->handle_)) {
       // This region is free, but is it big enough?
       if (it->size_ >= requestedAlignedSize) {
         // It is big enough!
@@ -3199,7 +3196,7 @@ lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFree
   }
 
   // we found a region that is available that is smaller than the requested size. It's the best we can do
-  if (bestNextIt != regions_.end() && immediate_->isReady(bestNextIt->handle_)) {
+  if (bestNextIt != regions_.end() && ctx_.immediate_->isReady(bestNextIt->handle_)) {
     SCOPE_EXIT {
       regions_.erase(bestNextIt);
     };
@@ -3234,7 +3231,7 @@ void lvk::VulkanStagingDevice::waitAndReset() {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_WAIT);
 
   for (const auto& r : regions_) {
-    immediate_->wait(r.handle_);
+    ctx_.immediate_->wait(r.handle_);
   };
 
   regions_.clear();

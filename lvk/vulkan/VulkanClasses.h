@@ -463,7 +463,6 @@ class VulkanStagingDevice final {
  private:
   VulkanContext& ctx_;
   lvk::Holder<BufferHandle> stagingBuffer_;
-  std::unique_ptr<lvk::VulkanImmediateCommands> immediate_;
   uint32_t stagingBufferSize_ = 0;
   uint32_t stagingBufferCounter_ = 0;
   uint32_t maxBufferSize_ = 0;
