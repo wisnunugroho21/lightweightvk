@@ -247,6 +247,7 @@ layout(push_constant) uniform constants {
   int aoSamples;
   float aoRadius;
   float aoPower;
+  uint frameId;
 } pc;
 
 layout (location=0) in PerVertex vtx;
@@ -322,7 +323,7 @@ void main() {
     vec3 tangent, bitangent;
     computeTBN(n, tangent, bitangent);
 
-    uint seed = tea(uint(gl_FragCoord.y * 4003.0 + gl_FragCoord.x), 0); // prime
+    uint seed = tea(uint(gl_FragCoord.y * 4003.0 + gl_FragCoord.x), pc.frameId); // prime
 
     float occl = 0.0;
 
@@ -400,6 +401,9 @@ int aoSamples_ = 8;
 bool aoDistanceBased_ = false;
 float aoRadius_ = 8.0f;
 float aoPower_ = 1.0f;
+bool timeVaryingNoise = false;
+
+uint32_t frameId = 0;
 
 vec3 lightDir_ = normalize(vec3(0.032f, 0.835f, 0.549f));
 
@@ -953,6 +957,7 @@ void render(double delta, uint32_t frameIndex) {
     ImGui::Text("1/2 - camera up/down");
     ImGui::Text("Shift - fast movement");
     ImGui::Separator();
+    ImGui::Checkbox("Time-varying noise", &timeVaryingNoise);
     ImGui::Checkbox("Ray traced shadows", &enableShadows_);
     ImGui::Indent(indentSize);
     imGuiPushFlagsAndStyles(enableShadows_);
@@ -1054,6 +1059,7 @@ void render(double delta, uint32_t frameIndex) {
       int aoSamples;
       float aoRadius;
       float aoPower;
+      uint32_t frameId;
     } pc = {
         .lightDir = vec4(lightDir_, 1.0),
         .perFrame = ctx_->gpuAddress(ubPerFrame_[frameIndex]),
@@ -1066,6 +1072,7 @@ void render(double delta, uint32_t frameIndex) {
         .aoSamples = aoSamples_,
         .aoRadius = aoRadius_,
         .aoPower = aoPower_,
+        .frameId = timeVaryingNoise ? frameId++ : 0,
     };
     buffer.cmdPushConstants(pc);
     buffer.cmdBindDepthState({.compareOp = lvk::CompareOp_Equal, .isDepthWriteEnabled = false});
