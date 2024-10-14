@@ -15,9 +15,9 @@ There are no plans to keep this fork in sync with the upstream.
 ## Supported rendering backends
 
  * Vulkan 1.3 (Windows, Linux, Android)
-   * optional **VK_KHR_acceleration_structure** (Windows, Linux)
+   * optional **VK_KHR_acceleration_structure** (Windows, Linux, Android)   
+   * optional **VK_KHR_ray_tracing_pipeline** (Windows, Linux, Android)
    * optional **VK_KHR_ray_query** (Windows, Linux)
-   * optional **VK_KHR_ray_tracing_pipeline** (Windows, Linux)
    * optional **VK_EXT_mesh_shader** (Windows, Linux)
  * Vulkan 1.2 + extensions (MacOS)
 
@@ -34,9 +34,9 @@ There are no plans to keep this fork in sync with the upstream.
 | ----------------------------- | -------------------------- | -------------------------- | -------------------------- | -------------------------- |
 | Vulkan 1.3                    | :heavy_check_mark:         | :heavy_check_mark:         | :heavy_exclamation_mark:   | :heavy_check_mark:         |
 | Vulkan 1.2                    |                            |                            | :heavy_check_mark:         |                            |
-| VK_KHR_acceleration_structure | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
+| VK_KHR_acceleration_structure | :heavy_check_mark:         | :heavy_check_mark:         |                            | :heavy_check_mark:         |
+| VK_KHR_ray_tracing_pipeline   | :heavy_check_mark:         | :heavy_check_mark:         |                            | :heavy_check_mark:         |
 | VK_KHR_ray_query              | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
-| VK_KHR_ray_tracing_pipeline   | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
 | VK_EXT_mesh_shader            | :heavy_check_mark:         | :heavy_check_mark:         |                            |                            |
 
 On MacOS, features required by LightweightVK are enabled via extensions `VK_KHR_dynamic_rendering`, `VK_EXT_subgroup_size_control`,
