@@ -300,9 +300,10 @@ void android_main(android_app* app) {
   do {
     timespec newTime = {0, 0};
     clock_gettime(CLOCK_MONOTONIC, &newTime);
-    fps_.tick(((double)newTime.tv_sec + 1.0e-9 * newTime.tv_nsec) - 
-              ((double)prevTime.tv_sec + 1.0e-9 * prevTime.tv_nsec));
-    LLOGL("FPS: %.1f\n", fps_.getFPS());
+    if (fps_.tick(((double)newTime.tv_sec + 1.0e-9 * newTime.tv_nsec) - 
+                  ((double)prevTime.tv_sec + 1.0e-9 * prevTime.tv_nsec))) {
+      LLOGL("FPS: %.1f\n", fps_.getFPS());
+    }
     prevTime = newTime;
     if (ctx_) {
       render();
