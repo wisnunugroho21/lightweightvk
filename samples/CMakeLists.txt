@@ -126,9 +126,13 @@ ADD_DEMO("002_RenderToCubeMap")
 ADD_DEMO("003_RenderToCubeMapSinglePass")
 ADD_DEMO("004_YUV")
 if(WIN32 OR UNIX AND NOT (APPLE))
+  # Windows and Linux
   ADD_DEMO("005_MeshShaders")
-  ADD_DEMO("006_RayTracingHello")
   ADD_DEMO("007_RayTracingAO")
+endif()
+if((WIN32 OR UNIX AND NOT (APPLE)) OR LVK_WITH_SAMPLES_ANDROID)
+  # Windows, Linux and Android
+  ADD_DEMO("006_RayTracingHello")
 endif()
 
 ADD_DEMO("Tiny")
