@@ -1340,8 +1340,9 @@ void android_main(android_app* app) {
   do {
     double newTime = getCurrentTimestamp();
     double delta = newTime - prevTime;
-    fps_.tick(delta);
-    LLOGL("FPS: %.1f\n", fps_.getFPS());
+    if (fps_.tick(delta)) {
+      LLOGL("FPS: %.1f\n", fps_.getFPS());
+    }
     prevTime = newTime;
     if (ctx_) {
       render(delta, frameIndex);
