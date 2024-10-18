@@ -2355,6 +2355,32 @@ void lvk::CommandBuffer::cmdPushConstants(const void* data, size_t size, size_t 
   vkCmdPushConstants(wrapper_->cmdBuf_, layout, shaderStageFlags, (uint32_t)offset, (uint32_t)size, data);
 }
 
+void lvk::CommandBuffer::cmdUpdateBuffer(BufferHandle buffer, size_t bufferOffset, size_t size, const void* data) {
+  LVK_PROFILER_FUNCTION();
+  LVK_ASSERT(buffer.valid());
+  LVK_ASSERT(data);
+  LVK_ASSERT(size && size <= 65536);
+  LVK_ASSERT(size % 4 == 0);
+  LVK_ASSERT(bufferOffset % 4 == 0);
+
+  lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(buffer);
+
+  bufferBarrier(buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+
+  vkCmdUpdateBuffer(wrapper_->cmdBuf_, buf->vkBuffer_, bufferOffset, size, data);
+
+  VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+
+  if (buf->vkUsageFlags_ & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) {
+    dstStage |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+  }
+  if (buf->vkUsageFlags_ & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
+    dstStage |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+  }
+
+  bufferBarrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage);
+}
+
 void lvk::CommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t baseInstance) {
   LVK_PROFILER_FUNCTION();
 

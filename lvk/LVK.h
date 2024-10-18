@@ -905,6 +905,12 @@ class ICommandBuffer {
     this->cmdPushConstants(&data, sizeof(Struct), offset);
   }
 
+  virtual void cmdUpdateBuffer(BufferHandle buffer, size_t bufferOffset, size_t size, const void* data) = 0;
+  template<typename Struct>
+  void cmdUpdateBuffer(BufferHandle buffer, const Struct& data, size_t bufferOffset = 0) {
+    this->cmdUpdateBuffer(buffer, bufferOffset, sizeof(Struct), &data);
+  }
+
   virtual void cmdDraw(uint32_t vertexCount, uint32_t instanceCount = 1, uint32_t firstVertex = 0, uint32_t baseInstance = 0) = 0;
   virtual void cmdDrawIndexed(uint32_t indexCount,
                               uint32_t instanceCount = 1,
