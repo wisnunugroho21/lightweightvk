@@ -2004,8 +2004,8 @@ void lvk::CommandBuffer::bufferBarrier(BufferHandle handle, VkPipelineStageFlags
 
   VkBufferMemoryBarrier barrier = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-      .srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
-      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT,
+      .srcAccessMask = 0,
+      .dstAccessMask = 0,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .buffer = buf->vkBuffer_,
@@ -2013,6 +2013,17 @@ void lvk::CommandBuffer::bufferBarrier(BufferHandle handle, VkPipelineStageFlags
       .size = VK_WHOLE_SIZE,
   };
 
+  if (srcStage & VK_PIPELINE_STAGE_TRANSFER_BIT) {
+    barrier.srcAccessMask |= VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  } else {
+    barrier.srcAccessMask |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+  }
+
+  if (dstStage & VK_PIPELINE_STAGE_TRANSFER_BIT) {
+    barrier.dstAccessMask |= VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  } else {
+    barrier.dstAccessMask |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+  }
   if (dstStage & VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT) {
     barrier.dstAccessMask |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
   }
