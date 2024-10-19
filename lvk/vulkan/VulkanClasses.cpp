@@ -2108,10 +2108,10 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
     }
     const VkExtent3D dim = colorTexture.vkExtent_;
     if (fbWidth) {
-      LVK_ASSERT_MSG(dim.width == fbWidth, "All attachments should have the save width");
+      LVK_ASSERT_MSG(dim.width == fbWidth, "All attachments should have the same width");
     }
     if (fbHeight) {
-      LVK_ASSERT_MSG(dim.height == fbHeight, "All attachments should have the save width");
+      LVK_ASSERT_MSG(dim.height == fbHeight, "All attachments should have the same height");
     }
     mipLevel = descColor.level;
     fbWidth = dim.width;
@@ -2171,10 +2171,10 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
     }
     const VkExtent3D dim = depthTexture.vkExtent_;
     if (fbWidth) {
-      LVK_ASSERT_MSG(dim.width == fbWidth, "All attachments should have the save width");
+      LVK_ASSERT_MSG(dim.width == fbWidth, "All attachments should have the same width");
     }
     if (fbHeight) {
-      LVK_ASSERT_MSG(dim.height == fbHeight, "All attachments should have the save width");
+      LVK_ASSERT_MSG(dim.height == fbHeight, "All attachments should have the same height");
     }
     mipLevel = descDepth.level;
     fbWidth = dim.width;
