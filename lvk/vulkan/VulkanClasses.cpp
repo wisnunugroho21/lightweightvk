@@ -5276,6 +5276,7 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromGLSL(ShaderStag
       #extension GL_EXT_buffer_reference_uvec2 : require
       #extension GL_EXT_debug_printf : enable
       #extension GL_EXT_nonuniform_qualifier : require
+      #extension GL_EXT_samplerless_texture_functions : require
       #extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
       )";
     }
