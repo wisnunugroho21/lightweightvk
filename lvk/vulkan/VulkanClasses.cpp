@@ -2159,6 +2159,16 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
         .storeOp = storeOpToVkAttachmentStoreOp(descDepth.storeOp),
         .clearValue = {.depthStencil = {.depth = descDepth.clearDepth, .stencil = descDepth.clearStencil}},
     };
+    // handle depth MSAA
+    if (descDepth.storeOp == StoreOp_MsaaResolve) {
+      LVK_ASSERT(depthTexture.vkSamples_ == samples);
+      const lvk::Framebuffer::AttachmentDesc& attachment = fb.depthStencil;
+      LVK_ASSERT_MSG(!attachment.resolveTexture.empty(), "Framebuffer attachment should contain a resolve texture");
+      lvk::VulkanImage& depthResolveTexture = *ctx_->texturesPool_.get(attachment.resolveTexture);
+      depthAttachment.resolveImageView = depthResolveTexture.getOrCreateVkImageViewForFramebuffer(*ctx_, descDepth.level, descDepth.layer);
+      depthAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+      depthAttachment.resolveMode = VK_RESOLVE_MODE_AVERAGE_BIT;
+    }
     const VkExtent3D dim = depthTexture.vkExtent_;
     if (fbWidth) {
       LVK_ASSERT_MSG(dim.width == fbWidth, "All attachments should have the save width");
