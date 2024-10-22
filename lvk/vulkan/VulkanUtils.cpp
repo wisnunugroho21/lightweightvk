@@ -546,7 +546,7 @@ VkSamplerCreateInfo lvk::samplerStateDescToVkSamplerCreateInfo(const lvk::Sample
       .compareEnable = desc.depthCompareEnabled ? VK_TRUE : VK_FALSE,
       .compareOp = desc.depthCompareEnabled ? lvk::compareOpToVkCompareOp(desc.depthCompareOp) : VK_COMPARE_OP_ALWAYS,
       .minLod = float(desc.mipLodMin),
-      .maxLod = desc.mipMap == lvk::SamplerMip_Disabled ? 0.0f : float(desc.mipLodMax),
+      .maxLod = desc.mipMap == lvk::SamplerMip_Disabled ? float(desc.mipLodMin) : float(desc.mipLodMax),
       .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
       .unnormalizedCoordinates = VK_FALSE,
   };
