@@ -3852,8 +3852,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
       vkDevice_, vkImageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, numLayers, mapping, ycbcrInfo, debugNameImageView);
 
   if (image.vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) {
-    if (desc.swizzle.r != Swizzle_Default || desc.swizzle.g != Swizzle_Default || desc.swizzle.b != Swizzle_Default ||
-        desc.swizzle.a != Swizzle_Default) {
+    if (!desc.swizzle.identity()) {
       // use identity swizzle for storage images
       image.imageViewStorage_ = image.createImageView(
           vkDevice_, vkImageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, numLayers, {}, ycbcrInfo, debugNameImageView);
@@ -3888,6 +3887,102 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
 
   return {this, handle};
 }
+
+lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTextureView(lvk::TextureHandle texture,
+                                                                      const TextureViewDesc& desc,
+                                                                      const char* debugName,
+                                                                      Result* outResult) {
+  LVK_ASSERT(texture.valid());
+
+  // TODO: Texture views are still work-in-progress. Beware!
+
+  const VulkanImage* baseImage = texturesPool_.get(texture);
+
+  VulkanImage newImage = *baseImage;
+
+  // drop old existing views - the baseImage owns them
+  memset(&newImage.imageViewStorage_, 0, sizeof(newImage.imageViewStorage_));
+  memset(&newImage.imageViewForFramebuffer_, 0, sizeof(newImage.imageViewForFramebuffer_));
+
+  newImage.isSwapchainImage_ = true; // TODO: rename this to `isExternallyManaged` etc
+
+  VkImageAspectFlags aspect = 0;
+  if (newImage.isDepthFormat_ || newImage.isStencilFormat_) {
+    if (newImage.isDepthFormat_) {
+      aspect |= VK_IMAGE_ASPECT_DEPTH_BIT;
+    } else if (newImage.isStencilFormat_) {
+      aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    }
+  } else {
+    aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+
+  VkImageViewType vkImageViewType = VK_IMAGE_VIEW_TYPE_MAX_ENUM;
+  switch (desc.type) {
+  case TextureType_2D:
+    vkImageViewType = desc.numLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+    break;
+  case TextureType_3D:
+    vkImageViewType = VK_IMAGE_VIEW_TYPE_3D;
+    break;
+  case TextureType_Cube:
+    vkImageViewType = desc.numLayers > 1 ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_CUBE;
+    break;
+  default:
+    LVK_ASSERT_MSG(false, "Code should NOT be reached");
+    Result::setResult(outResult, Result::Code::RuntimeError, "Unsupported texture view type");
+    return {};
+  }
+
+  const VkComponentMapping mapping = {
+      .r = VkComponentSwizzle(desc.swizzle.r),
+      .g = VkComponentSwizzle(desc.swizzle.g),
+      .b = VkComponentSwizzle(desc.swizzle.b),
+      .a = VkComponentSwizzle(desc.swizzle.a),
+  };
+
+  newImage.imageView_ = newImage.createImageView(vkDevice_,
+                                                 vkImageViewType,
+                                                 newImage.vkImageFormat_,
+                                                 aspect,
+                                                 desc.mipLevel,
+                                                 desc.numMipLevels,
+                                                 desc.layer,
+                                                 desc.numLayers,
+                                                 mapping,
+                                                 nullptr,
+                                                 debugName);
+
+  if (!LVK_VERIFY(newImage.imageView_ != VK_NULL_HANDLE)) {
+    Result::setResult(outResult, Result::Code::RuntimeError, "Cannot create VkImageView");
+    return {};
+  }
+
+  if (newImage.vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) {
+    if (!desc.swizzle.identity()) {
+      // use identity swizzle for storage images
+      newImage.imageViewStorage_ = newImage.createImageView(vkDevice_,
+                                                            vkImageViewType,
+                                                            newImage.vkImageFormat_,
+                                                            aspect,
+                                                            0,
+                                                            VK_REMAINING_MIP_LEVELS,
+                                                            0,
+                                                            desc.numLayers,
+                                                            {},
+                                                            nullptr,
+                                                            debugName);
+      LVK_ASSERT(newImage.imageViewStorage_ != VK_NULL_HANDLE);
+    }
+  }
+
+  TextureHandle handle = texturesPool_.create(std::move(newImage));
+
+  awaitingCreation_ = true;
+
+  return {this, handle};
+}
+
 
 lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& desc, Result* outResult) {
   LVK_ASSERT(desc.type == AccelStructType_BLAS);

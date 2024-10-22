@@ -800,6 +800,15 @@ struct TextureDesc {
   const char* debugName = "";
 };
 
+struct TextureViewDesc {
+  TextureType type = TextureType_2D;
+  uint32_t layer = 0;
+  uint32_t numLayers = 1;
+  uint32_t mipLevel = 0;
+  uint32_t numMipLevels = 1;
+  ComponentMapping swizzle = {};
+};
+
 enum AccelStructType : uint8_t {
   AccelStructType_Invalid = 0,
   AccelStructType_TLAS = 1,
@@ -995,6 +1004,10 @@ class IContext {
   [[nodiscard]] virtual Holder<TextureHandle> createTexture(const TextureDesc& desc,
                                                             const char* debugName = nullptr,
                                                             Result* outResult = nullptr) = 0;
+  [[nodiscard]] virtual Holder<TextureHandle> createTextureView(TextureHandle texture,
+                                                                const TextureViewDesc& desc,
+                                                                const char* debugName = nullptr,
+                                                                Result* outResult = nullptr) = 0;
   [[nodiscard]] virtual Holder<ComputePipelineHandle> createComputePipeline(const ComputePipelineDesc& desc,
                                                                             Result* outResult = nullptr) = 0;
   [[nodiscard]] virtual Holder<RenderPipelineHandle> createRenderPipeline(const RenderPipelineDesc& desc, Result* outResult = nullptr) = 0;

@@ -486,6 +486,10 @@ class VulkanContext final : public IContext {
   Holder<BufferHandle> createBuffer(const BufferDesc& desc, Result* outResult) override;
   Holder<SamplerHandle> createSampler(const SamplerStateDesc& desc, Result* outResult) override;
   Holder<TextureHandle> createTexture(const TextureDesc& desc, const char* debugName, Result* outResult) override;
+  Holder<TextureHandle> createTextureView(TextureHandle texture,
+                                          const TextureViewDesc& desc,
+                                          const char* debugName,
+                                          Result* outResult) override;
 
   Holder<ComputePipelineHandle> createComputePipeline(const ComputePipelineDesc& desc, Result* outResult) override;
   Holder<RenderPipelineHandle> createRenderPipeline(const RenderPipelineDesc& desc, Result* outResult) override;
