@@ -778,6 +778,9 @@ struct ComponentMapping {
   Swizzle g = Swizzle_Default;
   Swizzle b = Swizzle_Default;
   Swizzle a = Swizzle_Default;
+  bool identity() const {
+    return r == Swizzle_Default && g == Swizzle_Default && b == Swizzle_Default && a == Swizzle_Default;
+  }
 };
 
 struct TextureDesc {
