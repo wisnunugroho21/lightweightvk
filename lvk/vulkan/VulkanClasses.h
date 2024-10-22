@@ -113,6 +113,7 @@ struct VulkanImage final {
   mutable VkImageLayout vkImageLayout_ = VK_IMAGE_LAYOUT_UNDEFINED;
   // precached image views - owned by this VulkanImage
   VkImageView imageView_ = VK_NULL_HANDLE; // default view with all mip-levels
+  VkImageView imageViewStorage_ = VK_NULL_HANDLE; // default view with identity swizzle (all mip-levels)
   VkImageView imageViewForFramebuffer_[LVK_MAX_MIP_LEVELS][6] = {}; // max 6 faces for cubemap rendering
 };
 

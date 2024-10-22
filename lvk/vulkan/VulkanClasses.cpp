@@ -3851,6 +3851,16 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   image.imageView_ = image.createImageView(
       vkDevice_, vkImageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, numLayers, mapping, ycbcrInfo, debugNameImageView);
 
+  if (image.vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) {
+    if (desc.swizzle.r != Swizzle_Default || desc.swizzle.g != Swizzle_Default || desc.swizzle.b != Swizzle_Default ||
+        desc.swizzle.a != Swizzle_Default) {
+      // use identity swizzle for storage images
+      image.imageViewStorage_ = image.createImageView(
+          vkDevice_, vkImageViewType, vkFormat, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, numLayers, {}, ycbcrInfo, debugNameImageView);
+      LVK_ASSERT(image.imageViewStorage_ != VK_NULL_HANDLE);
+    }
+  }
+
   if (!LVK_VERIFY(image.imageView_ != VK_NULL_HANDLE)) {
     Result::setResult(outResult, Result::Code::RuntimeError, "Cannot create VkImageView");
     return {};
@@ -4914,6 +4924,10 @@ void lvk::VulkanContext::destroy(lvk::TextureHandle handle) {
 
   deferredTask(std::packaged_task<void()>(
       [device = getVkDevice(), imageView = tex->imageView_]() { vkDestroyImageView(device, imageView, nullptr); }));
+  if (tex->imageViewStorage_) {
+    deferredTask(std::packaged_task<void()>(
+        [device = getVkDevice(), imageView = tex->imageViewStorage_]() { vkDestroyImageView(device, imageView, nullptr); }));
+  }
 
   for (size_t i = 0; i != LVK_MAX_MIP_LEVELS; i++) {
     for (size_t j = 0; j != LVK_ARRAY_NUM_ELEMENTS(tex->imageViewForFramebuffer_[0]); j++) {
@@ -6544,6 +6558,7 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   for (const auto& obj : texturesPool_.objects_) {
     const VulkanImage& img = obj.obj_;
     const VkImageView view = obj.obj_.imageView_;
+    const VkImageView storageView = obj.obj_.imageViewStorage_ ? obj.obj_.imageViewStorage_ : view;
     // multisampled images cannot be directly accessed from shaders
     const bool isTextureAvailable = (img.vkSamples_ & VK_SAMPLE_COUNT_1_BIT) == VK_SAMPLE_COUNT_1_BIT;
     const bool isYUVImage = isTextureAvailable && img.isSampledImage() && lvk::getNumImagePlanes(img.vkImageFormat_) > 1;
@@ -6557,7 +6572,7 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
     LVK_ASSERT(infoSampledImages.back().imageView != VK_NULL_HANDLE);
     infoStorageImages.push_back(VkDescriptorImageInfo{
         .sampler = VK_NULL_HANDLE,
-        .imageView = isStorageImage ? view : dummyImageView,
+        .imageView = isStorageImage ? storageView : dummyImageView,
         .imageLayout = VK_IMAGE_LAYOUT_GENERAL,
     });
     if (hasYcbcrSamplers) {
