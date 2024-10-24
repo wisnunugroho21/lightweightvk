@@ -105,6 +105,7 @@ struct VulkanImage final {
   VkSampleCountFlagBits vkSamples_ = VK_SAMPLE_COUNT_1_BIT;
   void* mappedPtr_ = nullptr;
   bool isSwapchainImage_ = false;
+  bool isOwningVkImage_ = true;
   uint32_t numLevels_ = 1u;
   uint32_t numLayers_ = 1u;
   bool isDepthFormat_ = false;

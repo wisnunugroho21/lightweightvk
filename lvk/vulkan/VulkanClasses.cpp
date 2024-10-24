@@ -1186,6 +1186,7 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
         .vkType_ = VK_IMAGE_TYPE_2D,
         .vkImageFormat_ = surfaceFormat_.format,
         .isSwapchainImage_ = true,
+        .isOwningVkImage_ = false,
         .isDepthFormat_ = VulkanImage::isDepthFormat(surfaceFormat_.format),
         .isStencilFormat_ = VulkanImage::isStencilFormat(surfaceFormat_.format),
     };
@@ -3892,25 +3893,24 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTextureView(lvk::Textu
                                                                       const TextureViewDesc& desc,
                                                                       const char* debugName,
                                                                       Result* outResult) {
-  LVK_ASSERT(texture.valid());
+  if (!texture) {
+    LVK_ASSERT(texture.valid());
+    return {};
+  }
 
-  // TODO: Texture views are still work-in-progress. Beware!
+  // make a copy and make it non-owning
+  VulkanImage image = *texturesPool_.get(texture);
+  image.isOwningVkImage_ = false;
 
-  const VulkanImage* baseImage = texturesPool_.get(texture);
-
-  VulkanImage newImage = *baseImage;
-
-  // drop old existing views - the baseImage owns them
-  memset(&newImage.imageViewStorage_, 0, sizeof(newImage.imageViewStorage_));
-  memset(&newImage.imageViewForFramebuffer_, 0, sizeof(newImage.imageViewForFramebuffer_));
-
-  newImage.isSwapchainImage_ = true; // TODO: rename this to `isExternallyManaged` etc
+  // drop all existing image views - they belong to the base image
+  memset(&image.imageViewStorage_, 0, sizeof(image.imageViewStorage_));
+  memset(&image.imageViewForFramebuffer_, 0, sizeof(image.imageViewForFramebuffer_));
 
   VkImageAspectFlags aspect = 0;
-  if (newImage.isDepthFormat_ || newImage.isStencilFormat_) {
-    if (newImage.isDepthFormat_) {
+  if (image.isDepthFormat_ || image.isStencilFormat_) {
+    if (image.isDepthFormat_) {
       aspect |= VK_IMAGE_ASPECT_DEPTH_BIT;
-    } else if (newImage.isStencilFormat_) {
+    } else if (image.isStencilFormat_) {
       aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
     }
   } else {
@@ -3941,42 +3941,35 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTextureView(lvk::Textu
       .a = VkComponentSwizzle(desc.swizzle.a),
   };
 
-  newImage.imageView_ = newImage.createImageView(vkDevice_,
-                                                 vkImageViewType,
-                                                 newImage.vkImageFormat_,
-                                                 aspect,
-                                                 desc.mipLevel,
-                                                 desc.numMipLevels,
-                                                 desc.layer,
-                                                 desc.numLayers,
-                                                 mapping,
-                                                 nullptr,
-                                                 debugName);
+  LVK_ASSERT_MSG(lvk::getNumImagePlanes(image.vkImageFormat_) == 1, "Unsupported multiplanar image");
 
-  if (!LVK_VERIFY(newImage.imageView_ != VK_NULL_HANDLE)) {
+  image.imageView_ = image.createImageView(vkDevice_,
+                                           vkImageViewType,
+                                           image.vkImageFormat_,
+                                           aspect,
+                                           desc.mipLevel,
+                                           desc.numMipLevels,
+                                           desc.layer,
+                                           desc.numLayers,
+                                           mapping,
+                                           nullptr,
+                                           debugName);
+
+  if (!LVK_VERIFY(image.imageView_ != VK_NULL_HANDLE)) {
     Result::setResult(outResult, Result::Code::RuntimeError, "Cannot create VkImageView");
     return {};
   }
 
-  if (newImage.vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) {
+  if (image.vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) {
     if (!desc.swizzle.identity()) {
       // use identity swizzle for storage images
-      newImage.imageViewStorage_ = newImage.createImageView(vkDevice_,
-                                                            vkImageViewType,
-                                                            newImage.vkImageFormat_,
-                                                            aspect,
-                                                            0,
-                                                            VK_REMAINING_MIP_LEVELS,
-                                                            0,
-                                                            desc.numLayers,
-                                                            {},
-                                                            nullptr,
-                                                            debugName);
-      LVK_ASSERT(newImage.imageViewStorage_ != VK_NULL_HANDLE);
+      image.imageViewStorage_ = image.createImageView(
+          vkDevice_, vkImageViewType, image.vkImageFormat_, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, desc.numLayers, {}, nullptr, debugName);
+      LVK_ASSERT(image.imageViewStorage_ != VK_NULL_HANDLE);
     }
   }
 
-  TextureHandle handle = texturesPool_.create(std::move(newImage));
+  TextureHandle handle = texturesPool_.create(std::move(image));
 
   awaitingCreation_ = true;
 
@@ -5034,7 +5027,7 @@ void lvk::VulkanContext::destroy(lvk::TextureHandle handle) {
     }
   }
 
-  if (tex->isSwapchainImage_) {
+  if (!tex->isOwningVkImage_) {
     return;
   }
 
@@ -5093,7 +5086,7 @@ void lvk::VulkanContext::destroy(Framebuffer& fb) {
       if (handle.empty())
         return;
       lvk::VulkanImage* tex = texturesPool_.get(handle);
-      if (!tex || tex->isSwapchainImage_)
+      if (!tex || !tex->isOwningVkImage_)
         return;
       destroy(handle);
       handle = {};
