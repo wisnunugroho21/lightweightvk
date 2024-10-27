@@ -5948,6 +5948,9 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 #endif // !defined(ANDROID)
     .fragmentStoresAndAtomics = VK_TRUE,
     .shaderImageGatherExtended = VK_TRUE,
+#if !defined(ANDROID) && !defined(__APPLE__)
+    .shaderInt64 = VK_TRUE,
+#endif // !defined(ANDROID)
   };
   VkPhysicalDeviceVulkan11Features deviceFeatures11 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
