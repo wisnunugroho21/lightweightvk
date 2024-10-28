@@ -1245,7 +1245,7 @@ void render(double delta, uint32_t frameIndex) {
 
     if (!textures_[1].diffuse.empty()) {
       ImGui::Begin("Texture Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-      ImGui::Image(ImTextureID(textures_[1].diffuse.indexAsVoid()), ImVec2(256, 256));
+      ImGui::Image(textures_[1].diffuse.index(), ImVec2(256, 256));
       ImGui::End();
     }
 

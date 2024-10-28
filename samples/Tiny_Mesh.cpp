@@ -363,7 +363,7 @@ void render(uint32_t frameIndex, float time) {
 
   // imGui
   ImGui::Begin("Texture Viewer", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-  ImGui::Image(ImTextureID(texture1_.indexAsVoid()), ImVec2(512, 512));
+  ImGui::Image(texture1_.index(), ImVec2(512, 512));
   ImGui::End();
 
   const float fov = float(45.0f * (M_PI / 180.0f));

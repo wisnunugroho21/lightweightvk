@@ -148,7 +148,7 @@ void ImGuiRenderer::updateFont(const char* defaultFontTTF, float fontSizePixels)
                                      .usage = lvk::TextureUsageBits_Sampled,
                                      .data = pixels},
                                     nullptr);
-  io.Fonts->TexID = ImTextureID(fontTexture_.indexAsVoid());
+  io.Fonts->TexID = fontTexture_.index();
   io.FontDefault = font;
 }
 
