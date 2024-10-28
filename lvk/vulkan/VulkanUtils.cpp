@@ -992,6 +992,13 @@ VkBuffer lvk::getVkBuffer(const IContext* ctx, BufferHandle buffer) {
   return static_cast<const VulkanContext*>(ctx)->buffersPool_.get(buffer)->vkBuffer_;
 }
 
+VkImage lvk::getVkImage(const IContext* ctx, TextureHandle texture) {
+  if (!ctx || texture.empty())
+    return VK_NULL_HANDLE;
+
+  return static_cast<const VulkanContext*>(ctx)->texturesPool_.get(texture)->vkImage_;
+}
+
 VkImageView lvk::getVkImageView(const IContext* ctx, TextureHandle texture) {
   if (!ctx || texture.empty())
     return VK_NULL_HANDLE;

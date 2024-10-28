@@ -122,6 +122,7 @@ VkDevice getVkDevice(const IContext* ctx);
 VkPhysicalDevice getVkPhysicalDevice(const IContext* ctx);
 VkCommandBuffer getVkCommandBuffer(const ICommandBuffer& buffer);
 VkBuffer getVkBuffer(const IContext* ctx, BufferHandle buffer);
+VkImage getVkImage(const IContext* ctx, TextureHandle texture);
 VkImageView getVkImageView(const IContext* ctx, TextureHandle texture);
 VkShaderModule getVkShaderModule(const IContext* ctx, ShaderModuleHandle shader);
 VkDeviceAddress getVkAccelerationStructureDeviceAddress(const IContext* ctx, AccelStructHandle accelStruct);
