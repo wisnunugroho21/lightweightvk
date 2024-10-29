@@ -21,7 +21,6 @@
 static const char* codeVS = R"(
 layout (location = 0) out vec4 out_color;
 layout (location = 1) out vec2 out_uv;
-layout (location = 2) out flat uint out_textureId;
 
 struct Vertex {
   float x, y;
@@ -37,6 +36,7 @@ layout(push_constant) uniform PushConstants {
   vec4 LRTB;
   VertexBuffer vb;
   uint textureId;
+  uint samplerId;
 } pc;
 
 void main() {
@@ -52,21 +52,26 @@ void main() {
   Vertex v = pc.vb.vertices[gl_VertexIndex];
   out_color = unpackUnorm4x8(v.rgba);
   out_uv = vec2(v.u, v.v);
-  out_textureId = pc.textureId;
   gl_Position = proj * vec4(v.x, v.y, 0, 1);
 })";
 
 static const char* codeFS = R"(
 layout (location = 0) in vec4 in_color;
 layout (location = 1) in vec2 in_uv;
-layout (location = 2) in flat uint in_textureId;
 
 layout (location = 0) out vec4 out_color;
 
 layout (constant_id = 0) const bool kNonLinearColorSpace = false;
 
+layout(push_constant) uniform PushConstants {
+  vec4 LRTB;
+  vec2 vb;
+  uint textureId;
+  uint samplerId;
+} pc;
+
 void main() {
-  vec4 c = in_color * texture(sampler2D(kTextures2D[in_textureId], kSamplers[0]), in_uv);
+  vec4 c = in_color * texture(sampler2D(kTextures2D[pc.textureId], kSamplers[pc.samplerId]), in_uv);
   // Render UI in linear color space to sRGB framebuffer.
   out_color = kNonLinearColorSpace ? vec4(pow(c.rgb, vec3(2.2)), c.a) : c;
 })";
@@ -108,6 +113,11 @@ ImGuiRenderer::ImGuiRenderer(lvk::IContext& device, const char* defaultFontTTF, 
   
   vert_ = ctx_.createShaderModule({codeVS, Stage_Vert, "Shader Module: imgui (vert)"});
   frag_ = ctx_.createShaderModule({codeFS, Stage_Frag, "Shader Module: imgui (frag)"});
+  samplerClamp_ = ctx_.createSampler({
+      .wrapU = lvk::SamplerWrap_Clamp,
+      .wrapV = lvk::SamplerWrap_Clamp,
+      .wrapW = lvk::SamplerWrap_Clamp,
+  });
 }
 
 ImGuiRenderer::~ImGuiRenderer() {
@@ -262,10 +272,12 @@ void ImGuiRenderer::endFrame(lvk::ICommandBuffer& cmdBuffer) {
         float LRTB[4]; // ortho projection: left, right, top, bottom
         uint64_t vb = 0;
         uint32_t textureId = 0;
+        uint32_t samplerId = 0;
       } bindData = {
           .LRTB = {L, R, T, B},
           .vb = ctx_.gpuAddress(drawableData.vb_),
           .textureId = static_cast<uint32_t>(cmd.TextureId),
+          .samplerId = samplerClamp_.index(),
       };
       cmdBuffer.cmdPushConstants(bindData);
       cmdBuffer.cmdBindScissorRect(

@@ -35,6 +35,7 @@ class ImGuiRenderer {
   lvk::Holder<lvk::ShaderModuleHandle> frag_;
   lvk::Holder<lvk::RenderPipelineHandle> pipeline_;
   lvk::Holder<lvk::TextureHandle> fontTexture_;
+  lvk::Holder<lvk::SamplerHandle> samplerClamp_;
   float displayScale_ = 1.0f;
 
   uint32_t frameIndex_ = 0;
