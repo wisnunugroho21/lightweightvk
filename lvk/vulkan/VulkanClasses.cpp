@@ -5757,18 +5757,6 @@ uint32_t lvk::VulkanContext::queryDevices(HWDeviceType deviceType, HWDeviceDesc*
   return numCompatibleDevices;
 }
 
-bool lvk::VulkanContext::isRequestedCustomDeviceExtension(const char* ext) const {
-  if (!ext)
-    return false;
-
-  for (const char* s : config_.extensionsDevice) {
-    if (s && strcmp(s, ext) == 0) {
-      return true;
-    }
-  }
-  return false;
-}
-
 void lvk::VulkanContext::addNextPhysicalDeviceProperties(void* properties) {
   if (!properties)
     return;
@@ -5789,16 +5777,18 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   useStaging_ = !isHostVisibleSingleHeapMemory(vkPhysicalDevice_);
 
-  uint32_t count = 0;
-  VK_ASSERT(vkEnumerateDeviceExtensionProperties(vkPhysicalDevice_, nullptr, &count, nullptr));
+  std::vector<VkExtensionProperties> allDeviceExtensions;
+  getDeviceExtensionProps(vkPhysicalDevice_, allDeviceExtensions);
+  if (config_.enableValidation) {
+    for (const char* layer : kDefaultValidationLayers) {
+      getDeviceExtensionProps(vkPhysicalDevice_, allDeviceExtensions, layer);
+    }
+  }
 
-  std::vector<VkExtensionProperties> allPhysicalDeviceExtensions(count);
-  VK_ASSERT(vkEnumerateDeviceExtensionProperties(vkPhysicalDevice_, nullptr, &count, allPhysicalDeviceExtensions.data()));
-
-  if (hasExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, allPhysicalDeviceExtensions)) {
+  if (hasExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, allDeviceExtensions)) {
     addNextPhysicalDeviceProperties(&accelerationStructureProperties_);
   }
-  if (hasExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, allPhysicalDeviceExtensions) ) {
+  if (hasExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, allDeviceExtensions) ) {
     addNextPhysicalDeviceProperties(&rayTracingPipelineProperties_);
   }
 
@@ -5818,7 +5808,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   LLOGL("Vulkan physical device extensions:\n");
 
   // log available physical device extensions
-  for (const auto& ext : allPhysicalDeviceExtensions) {
+  for (const auto& ext : allDeviceExtensions) {
     LLOGL("  %s\n", ext.extensionName);
   }
 
@@ -5883,44 +5873,10 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 #endif
   };
 
-  std::vector<VkExtensionProperties> allDeviceExtensions;
-  getDeviceExtensionProps(vkPhysicalDevice_, allDeviceExtensions);
-  if (config_.enableValidation) {
-    for (const char* layer : kDefaultValidationLayers) {
-      getDeviceExtensionProps(vkPhysicalDevice_, allDeviceExtensions, layer);
-    }
-  }
-
   for (const char* ext : config_.extensionsDevice) {
     if (ext) {
       deviceExtensionNames.push_back(ext);
     }
-  }
-
-  if (hasExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, allPhysicalDeviceExtensions) &&
-      hasExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, allPhysicalDeviceExtensions)) {
-    hasAccelerationStructure_ = true;
-    if (!isRequestedCustomDeviceExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME))
-      deviceExtensionNames.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-    if (!isRequestedCustomDeviceExtension(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME))
-      deviceExtensionNames.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
-  }
-  if (hasExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME, allPhysicalDeviceExtensions)) {
-    hasRayQuery_ = true;
-    if (!isRequestedCustomDeviceExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME))
-      deviceExtensionNames.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-  }
-  if (hasExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, allPhysicalDeviceExtensions)) {
-    hasRayTracingPipeline_ = true;
-    if (!isRequestedCustomDeviceExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME))
-      deviceExtensionNames.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-  }
-  if (hasExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME, allDeviceExtensions)) {
-    if (!isRequestedCustomDeviceExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME))
-      deviceExtensionNames.push_back(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME);
-  } else if (hasExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, allDeviceExtensions)) {
-    if (!isRequestedCustomDeviceExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME))
-      deviceExtensionNames.push_back(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
   }
 
   VkPhysicalDeviceFeatures deviceFeatures10 = {
@@ -6031,22 +5987,45 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_KHR,
       .indexTypeUint8 = VK_TRUE,
   };
-  if (hasExtension(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, allDeviceExtensions)) {
-    accelerationStructureFeatures.pNext = createInfoNext;
-    createInfoNext = &accelerationStructureFeatures;
-  }
-  if (hasExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME, allDeviceExtensions)) {
-    rayQueryFeatures.pNext = createInfoNext;
-    createInfoNext = &rayQueryFeatures;
-  }
-  if (hasExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, allDeviceExtensions)) {
-    rayTracingFeatures.pNext = createInfoNext;
-    createInfoNext = &rayTracingFeatures;
-  }
-  if (hasExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME, allDeviceExtensions) ||
-      hasExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, allDeviceExtensions)) {
-    indexTypeUint8Features.pNext = createInfoNext;
-    createInfoNext = &indexTypeUint8Features;
+
+  auto addOptionalExtension = [&allDeviceExtensions, &deviceExtensionNames, &createInfoNext](
+                                  const char* name, bool& enabled, void* features = nullptr) mutable -> bool {
+    if (!hasExtension(name, allDeviceExtensions))
+      return false;
+    enabled = true;
+    deviceExtensionNames.push_back(name);
+    if (features) {
+      std::launder(reinterpret_cast<VkBaseOutStructure*>(features))->pNext =
+          std::launder(reinterpret_cast<VkBaseOutStructure*>(createInfoNext));
+      createInfoNext = features;
+    }
+    return true;
+  };
+  auto addOptionalExtensions = [&allDeviceExtensions, &deviceExtensionNames, &createInfoNext](
+                                   const char* name1, const char* name2, bool& enabled, void* features = nullptr) mutable {
+    if (!hasExtension(name1, allDeviceExtensions) || !hasExtension(name2, allDeviceExtensions))
+      return;
+    enabled = true;
+    deviceExtensionNames.push_back(name1);
+    deviceExtensionNames.push_back(name2);
+    if (features) {
+      std::launder(reinterpret_cast<VkBaseOutStructure*>(features))->pNext =
+          std::launder(reinterpret_cast<VkBaseOutStructure*>(createInfoNext));
+      createInfoNext = features;
+    }
+  };
+
+  addOptionalExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
+                        VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
+                        hasAccelerationStructure_,
+                        &accelerationStructureFeatures);
+  addOptionalExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME, hasRayQuery_, &rayQueryFeatures);
+  addOptionalExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, hasRayTracingPipeline_, &rayTracingFeatures);
+#if defined(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME)
+  if (!addOptionalExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME, has8BitIndices_, &indexTypeUint8Features))
+#endif // VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME
+  {
+    addOptionalExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, has8BitIndices_, &indexTypeUint8Features);
   }
 
   const VkDeviceCreateInfo ci = {
