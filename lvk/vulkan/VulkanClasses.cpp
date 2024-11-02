@@ -5905,6 +5905,14 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 #endif
   };
 
+  std::vector<VkExtensionProperties> allDeviceExtensions;
+  getDeviceExtensionProps(vkPhysicalDevice_, allDeviceExtensions);
+  if (config_.enableValidation) {
+    for (const char* layer : kDefaultValidationLayers) {
+      getDeviceExtensionProps(vkPhysicalDevice_, allDeviceExtensions, layer);
+    }
+  }
+
   for (const char* ext : config_.extensionsDevice) {
     if (ext) {
       deviceExtensionNames.push_back(ext);
@@ -6051,16 +6059,9 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   // check extensions
   {
-    std::vector<VkExtensionProperties> props;
-    getDeviceExtensionProps(vkPhysicalDevice_, props);
-    if (config_.enableValidation) {
-      for (const char* layer : kDefaultValidationLayers) {
-        getDeviceExtensionProps(vkPhysicalDevice_, props, layer);
-      }
-    }
     std::string missingExtensions;
     for (const char* ext : deviceExtensionNames) {
-      if (!hasExtension(ext, props))
+      if (!hasExtension(ext, allDeviceExtensions))
         missingExtensions += "\n   " + std::string(ext);
     }
     if (!missingExtensions.empty()) {
