@@ -5343,8 +5343,8 @@ lvk::ShaderModuleState lvk::VulkanContext::createShaderModuleFromSPIRV(const voi
   uint32_t pushConstantsSize = 0;
 
   for (uint32_t i = 0; i < mdl.push_constant_block_count; ++i) {
-    const SpvReflectBlockVariable* block = &mdl.push_constant_blocks[i];
-    pushConstantsSize = std::max(pushConstantsSize, block->offset + block->size);
+    const SpvReflectBlockVariable& block = mdl.push_constant_blocks[i];
+    pushConstantsSize = std::max(pushConstantsSize, block.offset + block.size);
   }
 
   return {
