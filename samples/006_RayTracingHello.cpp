@@ -313,7 +313,6 @@ int main(int argc, char* argv[]) {
 #else
     .enableValidation = true,
 #endif
-    .enableAccelerationStructure = true, .enableRayTracingPipeline = true,
   });
   if (!ctx_) {
     return 255;

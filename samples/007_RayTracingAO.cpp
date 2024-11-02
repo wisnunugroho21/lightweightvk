@@ -1139,15 +1139,8 @@ int main(int argc, char* argv[]) {
   }
 
   GLFWwindow* window = lvk::initWindow("Vulkan Bistro", width_, height_);
-  ctx_ = lvk::createVulkanContextWithSwapchain(window,
-                                               width_,
-                                               height_,
-                                               {
-                                                   .enableValidation = kEnableValidationLayers,
-                                                   .enableAccelerationStructure = true,
-                                                   .enableRayQuery = true,
-                                               },
-                                               lvk::HWDeviceType_Discrete);
+  ctx_ = lvk::createVulkanContextWithSwapchain(
+      window, width_, height_, {.enableValidation = kEnableValidationLayers}, lvk::HWDeviceType_Discrete);
   if (!ctx_) {
     return EXIT_FAILURE;
   }

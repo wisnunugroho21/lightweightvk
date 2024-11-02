@@ -672,6 +672,9 @@ public:
   mutable bool awaitingNewImmutableSamplers_ = false;
 
   lvk::ContextConfig config_;
+  bool hasAccelerationStructure_ = false;
+  bool hasRayQuery_ = false;
+  bool hasRayTracingPipeline_ = false;
 
   TextureHandle dummyTexture_;
 
