@@ -5932,26 +5932,26 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   VkPhysicalDeviceFeatures deviceFeatures10 = {
 #if !defined(__APPLE__)
-    .geometryShader = VK_TRUE,
-    .tessellationShader = VK_TRUE,
+      .geometryShader = VK_TRUE,
+      .tessellationShader = VK_TRUE,
 #endif // !defined(__APPLE__)
-    .multiDrawIndirect = VK_TRUE,
-    .drawIndirectFirstInstance = VK_TRUE,
-    .depthBiasClamp = VK_TRUE,
+      .multiDrawIndirect = VK_TRUE,
+      .drawIndirectFirstInstance = VK_TRUE,
+      .depthBiasClamp = VK_TRUE,
 #if !defined(ANDROID)
-    .fillModeNonSolid = VK_TRUE,
+      .fillModeNonSolid = VK_TRUE,
 #endif
-    .samplerAnisotropy = VK_TRUE,
+      .samplerAnisotropy = VK_TRUE,
 #if !defined(ANDROID)
-    .textureCompressionBC = VK_TRUE,
-    .vertexPipelineStoresAndAtomics = VK_TRUE,
+      .textureCompressionBC = VK_TRUE,
+      .vertexPipelineStoresAndAtomics = VK_TRUE,
 #endif // !defined(ANDROID)
-    .fragmentStoresAndAtomics = VK_TRUE,
-    .shaderImageGatherExtended = VK_TRUE,
+      .fragmentStoresAndAtomics = VK_TRUE,
+      .shaderImageGatherExtended = VK_TRUE,
 #if !defined(ANDROID) && !defined(__APPLE__)
-    .shaderInt64 = VK_TRUE,
+      .shaderInt64 = VK_TRUE,
 #endif // !defined(ANDROID)
-  };
+    };
   VkPhysicalDeviceVulkan11Features deviceFeatures11 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
       .pNext = config_.extensionsDeviceFeatures,
