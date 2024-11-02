@@ -5983,8 +5983,8 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
       .rayQuery = VK_TRUE,
   };
-  VkPhysicalDeviceIndexTypeUint8FeaturesKHR indexTypeUint8Features = {
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_KHR,
+  VkPhysicalDeviceIndexTypeUint8FeaturesEXT indexTypeUint8Features = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT,
       .indexTypeUint8 = VK_TRUE,
   };
 
