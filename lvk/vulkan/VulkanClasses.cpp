@@ -148,6 +148,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFl
 
 VkIndexType indexFormatToVkIndexType(lvk::IndexFormat fmt) {
   switch (fmt) {
+  case lvk::IndexFormat_UI8:
+    return VK_INDEX_TYPE_UINT8_EXT;
   case lvk::IndexFormat_UI16:
     return VK_INDEX_TYPE_UINT16;
   case lvk::IndexFormat_UI32:
@@ -5929,6 +5931,11 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   if (addExtRayTracingPipeline) {
     deviceExtensionNames.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
   }
+  if (hasExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME, allDeviceExtensions)) {
+    deviceExtensionNames.push_back(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME);
+  } else if (hasExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, allDeviceExtensions)) {
+    deviceExtensionNames.push_back(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME);
+  }
 
   VkPhysicalDeviceFeatures deviceFeatures10 = {
 #if !defined(__APPLE__)
@@ -6034,6 +6041,10 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
       .rayQuery = VK_TRUE,
   };
+  VkPhysicalDeviceIndexTypeUint8FeaturesKHR indexTypeUint8Features = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_KHR,
+      .indexTypeUint8 = VK_TRUE,
+  };
   if (addExtAccelerationStructure) {
     accelerationStructureFeatures.pNext = createInfoNext;
     createInfoNext = &accelerationStructureFeatures;
@@ -6045,6 +6056,11 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   if (addExtRayTracingPipeline) {
     rayTracingFeatures.pNext = createInfoNext;
     createInfoNext = &rayTracingFeatures;
+  }
+  if (hasExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME, allDeviceExtensions) ||
+      hasExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, allDeviceExtensions)) {
+    indexTypeUint8Features.pNext = createInfoNext;
+    createInfoNext = &indexTypeUint8Features;
   }
 
   const VkDeviceCreateInfo ci = {
