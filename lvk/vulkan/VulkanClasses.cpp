@@ -595,14 +595,6 @@ bool isHostVisibleSingleHeapMemory(VkPhysicalDevice physDev) {
   return false;
 }
 
-void getInstanceExtensionProps(std::vector<VkExtensionProperties>& props, const char* validationLayer = nullptr) {
-  uint32_t numExtensions = 0;
-  vkEnumerateInstanceExtensionProperties(validationLayer, &numExtensions, nullptr);
-  std::vector<VkExtensionProperties> p(numExtensions);
-  vkEnumerateInstanceExtensionProperties(validationLayer, &numExtensions, p.data());
-  props.insert(props.end(), p.begin(), p.end());
-}
-
 void getDeviceExtensionProps(VkPhysicalDevice dev, std::vector<VkExtensionProperties>& props, const char* validationLayer = nullptr) {
   uint32_t numExtensions = 0;
   vkEnumerateDeviceExtensionProperties(dev, validationLayer, &numExtensions, nullptr);
