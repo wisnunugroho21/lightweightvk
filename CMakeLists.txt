@@ -267,12 +267,14 @@ if(LVK_WITH_SAMPLES)
   lvk_set_cxxstd(bc7enc 17)
   add_subdirectory(third-party/deps/src/meshoptimizer)
   add_subdirectory(third-party/deps/src/tinyobjloader)
+  add_subdirectory(third-party/deps/src/fast_obj)
   add_subdirectory(samples)
   # cmake-format: off
   lvk_set_folder(bc7enc        "third-party")
   lvk_set_folder(meshoptimizer "third-party")
   lvk_set_folder(tinyobjloader "third-party/tinyobjloader")
   lvk_set_folder(uninstall     "third-party/tinyobjloader")
+  lvk_set_folder(fast_obj_lib  "third-party")
   # cmake-format: on
 endif()
 

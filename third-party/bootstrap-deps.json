@@ -36,6 +36,18 @@
     }
 },
 {
+    "name": "fast_obj",
+    "source": {
+        "type": "git",
+        "url": "https://github.com/thisistherk/fast_obj.git",
+        "revision": "42629f744269e004907a6fb4f16c6c7f69acc586"
+    },
+    "postprocess": {
+       "type": "script",
+       "file": "fast_obj.py"
+    }
+},
+{
     "name": "glfw",
     "source": {
         "type": "git",
