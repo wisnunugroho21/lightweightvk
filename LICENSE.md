@@ -49,6 +49,9 @@ https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/2.0/DamagedHelmet
 EGL
 https://github.com/McNopper/EGL/blob/master/EGL/LICENCE.txt
 
+fast_obj
+https://github.com/thisistherk/fast_obj/blob/master/LICENSE
+
 fmt
 https://github.com/fmtlib/fmt/blob/master/LICENSE.rst
 
@@ -57,9 +60,6 @@ https://github.com/nigels-com/glew/blob/master/LICENSE.txt
 
 glfw
 https://github.com/glfw/glfw/blob/master/LICENSE.md
-
-gli
-https://github.com/g-truc/gli#readme
 
 glm
 https://github.com/g-truc/glm
@@ -96,9 +96,6 @@ https://github.com/nothings/stb/blob/master/LICENSE
 
 taskflow
 https://github.com/taskflow/taskflow/blob/master/LICENSE
-
-tinyobjloader
-https://github.com/tinyobjloader/tinyobjloader/blob/release/LICENSE
 
 tracy
 https://github.com/wolfpld/tracy/blob/master/LICENSE
