@@ -26,7 +26,6 @@ macro(ADD_DEMO app)
     target_link_libraries(${app} PRIVATE LVKLibrary)
     target_link_libraries(${app} PRIVATE bc7enc)
     target_link_libraries(${app} PRIVATE meshoptimizer)
-    target_link_libraries(${app} PRIVATE tinyobjloader)
     target_link_libraries(${app} PRIVATE fast_obj_lib)
     if(UNIX AND NOT APPLE)
       target_link_libraries(${app} PRIVATE EGL)
@@ -100,8 +99,8 @@ macro(ADD_DEMO app)
       lvk_set_cxxstd(lvk_android_native_${app} 20)
       target_include_directories(lvk_android_native_${app} PRIVATE
                                  "${NDK_PATH}/sources/android/native_app_glue")
-      target_link_libraries(lvk_android_native_${app} PRIVATE 
-                            LVKLibrary LVKstb bc7enc meshoptimizer tinyobjloader fast_obj_lib android log)
+      target_link_libraries(lvk_android_native_${app} PRIVATE
+                            LVKLibrary LVKstb bc7enc meshoptimizer fast_obj_lib android log)
     endif()
   endif()
 endmacro()
