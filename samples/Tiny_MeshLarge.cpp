@@ -45,7 +45,7 @@
 #include <stb/stb_image.h>
 #include <stb/stb_image_resize2.h>
 #include <taskflow/taskflow.hpp>
-#include <tiny_obj_loader.h>
+#include <fast_obj.h>
 
 #include <lvk/LVK.h>
 #include <lvk/HelpersImGui.h>
@@ -819,10 +819,15 @@ void destroy() {
   loaderPool_ = nullptr;
 }
 
-void normalizeName(std::string& name) {
+std::string normalizeTextureName(const char* n) {
+  if (!n)
+    return std::string();
+  LVK_ASSERT(strlen(n) < MAX_MATERIAL_NAME);
+  std::string name(n);
 #if defined(__linux__) || defined(__APPLE__) || defined(ANDROID)
   std::replace(name.begin(), name.end(), '\\', '/');
 #endif
+  return name;
 }
 
 bool loadAndCache(const char* cacheFileName) {
@@ -831,64 +836,41 @@ bool loadAndCache(const char* cacheFileName) {
   // load 3D model and cache it
   LLOGL("Loading `exterior.obj`... It can take a while in debug builds...\n");
 
-  tinyobj::attrib_t attrib;
-  std::vector<tinyobj::shape_t> shapes;
-  std::vector<tinyobj::material_t> materials;
+  fastObjMesh* mesh = fast_obj_read((folderContentRoot + "src/bistro/Exterior/exterior.obj").c_str());
+  SCOPE_EXIT {
+    if (mesh)
+      fast_obj_destroy(mesh);
+  };
 
-  std::string warn;
-  std::string err;
-
-  const bool ret = tinyobj::LoadObj(&attrib,
-                                    &shapes,
-                                    &materials,
-                                    &warn,
-                                    &err,
-                                    (folderContentRoot + "src/bistro/Exterior/exterior.obj").c_str(),
-                                    (folderContentRoot + "src/bistro/Exterior/").c_str());
-
-  if (!LVK_VERIFY(ret)) {
-    LVK_ASSERT_MSG(ret, "Did you read the tutorial at the top of this file?");
+  if (!LVK_VERIFY(mesh)) {
+    LVK_ASSERT_MSG(false, "Did you read the tutorial at the top of this file?");
     return false;
   }
 
-  // loop over shapes as described in https://github.com/tinyobjloader/tinyobjloader
-  for (size_t s = 0; s < shapes.size(); s++) {
-    size_t index_offset = 0;
-    for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
-      LVK_ASSERT(shapes[s].mesh.num_face_vertices[f] == 3);
+  uint32_t vertexCount = 0;
 
-      for (size_t v = 0; v < 3; v++) {
-        tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
+  for (uint32_t i = 0; i < mesh->face_count; ++i)
+    vertexCount += mesh->face_vertices[i];
 
-        const vec3 pos(attrib.vertices[3 * size_t(idx.vertex_index) + 0],
-                       attrib.vertices[3 * size_t(idx.vertex_index) + 1],
-                       attrib.vertices[3 * size_t(idx.vertex_index) + 2]);
+  vertexData_.reserve(vertexCount);
 
-        const bool hasNormal = (idx.normal_index >= 0);
+  uint32_t vertexIndex = 0;
 
-        const vec3 normal = hasNormal ? vec3(attrib.normals[3 * size_t(idx.normal_index) + 0],
-                                             attrib.normals[3 * size_t(idx.normal_index) + 1],
-                                             attrib.normals[3 * size_t(idx.normal_index) + 2])
-                                      : vec3(0, 0, 1);
+  for (uint32_t face = 0; face < mesh->face_count; face++) {
+    for (uint32_t v = 0; v < mesh->face_vertices[face]; v++) {
+      LVK_ASSERT(v < 3);
+      const fastObjIndex gi = mesh->indices[vertexIndex++];
 
-        const bool hasUV = (idx.texcoord_index >= 0);
+      const float* p = &mesh->positions[gi.p * 3];
+      const float* n = &mesh->normals[gi.n * 3];
+      const float* t = &mesh->texcoords[gi.t * 2];
 
-        const vec2 uv =
-            hasUV ? vec2(attrib.texcoords[2 * size_t(idx.texcoord_index) + 0], attrib.texcoords[2 * size_t(idx.texcoord_index) + 1])
-                  : vec2(0);
-
-        const int mtlIndex = shapes[s].mesh.material_ids[f];
-
-        LVK_ASSERT(mtlIndex >= 0 && mtlIndex < materials.size());
-
-        vertexData_.push_back({
-            .position = pos,
-            .uv = glm::packHalf2x16(uv),
-            .normal = packOctahedral16(normal),
-            .mtlIndex = (uint16_t)mtlIndex,
-        });
-      }
-      index_offset += 3;
+      vertexData_.push_back({
+          .position = vec3(p[0], p[1], p[2]),
+          .uv = glm::packHalf2x16(vec2(t[0], t[1])),
+          .normal = packOctahedral16(vec3(n[0], n[1], n[2])),
+          .mtlIndex = (uint16_t)mesh->face_materials[face],
+      });
     }
   }
 
@@ -914,21 +896,16 @@ bool loadAndCache(const char* cacheFileName) {
   }
 
   // loop over materials
-  for (auto& m : materials) {
+  for (uint32_t mtlIdx = 0; mtlIdx != mesh->material_count; mtlIdx++) {
+    const fastObjMaterial& m = mesh->materials[mtlIdx];
     CachedMaterial mtl;
-    mtl.ambient = vec3(m.ambient[0], m.ambient[1], m.ambient[2]);
-    mtl.diffuse = vec3(m.diffuse[0], m.diffuse[1], m.diffuse[2]);
-    LVK_ASSERT(m.name.length() < MAX_MATERIAL_NAME);
-    LVK_ASSERT(m.ambient_texname.length() < MAX_MATERIAL_NAME);
-    LVK_ASSERT(m.diffuse_texname.length() < MAX_MATERIAL_NAME);
-    LVK_ASSERT(m.alpha_texname.length() < MAX_MATERIAL_NAME);
-    strcat(mtl.name, m.name.c_str());
-    normalizeName(m.ambient_texname);
-    normalizeName(m.diffuse_texname);
-    normalizeName(m.alpha_texname);
-    strcat(mtl.ambient_texname, m.ambient_texname.c_str());
-    strcat(mtl.diffuse_texname, m.diffuse_texname.c_str());
-    strcat(mtl.alpha_texname, m.alpha_texname.c_str());
+    mtl.ambient = vec3(m.Ka[0], m.Ka[1], m.Ka[2]);
+    mtl.diffuse = vec3(m.Kd[0], m.Kd[1], m.Kd[2]);
+    LVK_ASSERT(strlen(m.name) < MAX_MATERIAL_NAME);
+    strcat(mtl.name, m.name);
+    strcat(mtl.ambient_texname, normalizeTextureName(mesh->textures[m.map_Ka].name).c_str());
+    strcat(mtl.diffuse_texname, normalizeTextureName(mesh->textures[m.map_Kd].name).c_str());
+    strcat(mtl.alpha_texname, normalizeTextureName(mesh->textures[m.map_d].name).c_str());
     cachedMaterials_.push_back(mtl);
   }
 
