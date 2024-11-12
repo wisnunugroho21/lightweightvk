@@ -1110,11 +1110,21 @@ struct ContextConfig {
 
 [[nodiscard]] bool isDepthOrStencilFormat(lvk::Format format);
 [[nodiscard]] uint32_t getNumImagePlanes(lvk::Format format);
-[[nodiscard]] uint32_t calcNumMipLevels(uint32_t width, uint32_t height);
 [[nodiscard]] uint32_t getTextureBytesPerLayer(uint32_t width, uint32_t height, lvk::Format format, uint32_t level);
 [[nodiscard]] uint32_t getTextureBytesPerPlane(uint32_t width, uint32_t height, lvk::Format format, uint32_t plane);
 [[nodiscard]] uint32_t getVertexFormatSize(lvk::VertexFormat format);
 void logShaderSource(const char* text);
+
+constexpr uint32_t calcNumMipLevels(uint32_t width, uint32_t height) {
+  assert(width && height);
+
+  uint32_t levels = 1;
+
+  while ((width | height) >> levels)
+    levels++;
+
+  return levels;
+}
 
 #if LVK_WITH_GLFW
 /*

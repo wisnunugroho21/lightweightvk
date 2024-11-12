@@ -209,19 +209,6 @@ uint32_t lvk::getTextureBytesPerPlane(uint32_t width, uint32_t height, lvk::Form
   return getTextureBytesPerLayer(width, height, format, 0);
 }
 
-uint32_t lvk::calcNumMipLevels(uint32_t width, uint32_t height) {
-  assert(width > 0);
-  assert(height > 0);
-
-  uint32_t levels = 1;
-
-  while ((width | height) >> levels) {
-    levels++;
-  }
-
-  return levels;
-}
-
 bool lvk::Assert(bool cond, const char* file, int line, const char* format, ...) {
   if (!cond) {
     va_list ap;
@@ -453,4 +440,4 @@ std::unique_ptr<lvk::IContext> lvk::createVulkanContextWithSwapchain(ANativeWind
   }
   return std::move(ctx);
 }
-#endif
+#endif // ANDROID
