@@ -299,7 +299,16 @@ struct Dimensions {
   uint32_t width = 1;
   uint32_t height = 1;
   uint32_t depth = 1;
-  bool operator==(const Dimensions& other) const {
+  inline Dimensions divide1D(uint32_t v) const {
+    return {.width = width / v, .height = height, .depth = depth};
+  }
+  inline Dimensions divide2D(uint32_t v) const {
+    return {.width = width / v, .height = height / v, .depth = depth};
+  }
+  inline Dimensions divide3D(uint32_t v) const {
+    return {.width = width / v, .height = height / v, .depth = depth / v};
+  }
+  inline bool operator==(const Dimensions& other) const {
     return width == other.width && height == other.height && depth == other.depth;
   }
 };
