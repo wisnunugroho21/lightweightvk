@@ -1116,8 +1116,6 @@ struct ContextConfig {
 void logShaderSource(const char* text);
 
 constexpr uint32_t calcNumMipLevels(uint32_t width, uint32_t height) {
-  assert(width && height);
-
   uint32_t levels = 1;
 
   while ((width | height) >> levels)
