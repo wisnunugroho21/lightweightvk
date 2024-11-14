@@ -3648,6 +3648,9 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   if (desc.usage & lvk::TextureUsageBits_Attachment) {
     usageFlags |= lvk::isDepthOrStencilFormat(desc.format) ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
                                                            : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    if (desc.storage == lvk::StorageType_Memoryless) {
+      usageFlags |= VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+    }
   }
 
   // For now, always set this flag so we can read it back
