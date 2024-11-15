@@ -1596,7 +1596,7 @@ lvk::VulkanPipelineBuilder::VulkanPipelineBuilder() :
       .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
       .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
       .sampleShadingEnable = VK_FALSE,
-      .minSampleShading = 1.0f,
+      .minSampleShading = 0.0f,
       .pSampleMask = nullptr,
       .alphaToCoverageEnable = VK_FALSE,
       .alphaToOneEnable = VK_FALSE,
@@ -1645,8 +1645,10 @@ lvk::VulkanPipelineBuilder& lvk::VulkanPipelineBuilder::primitiveTopology(VkPrim
   return *this;
 }
 
-lvk::VulkanPipelineBuilder& lvk::VulkanPipelineBuilder::rasterizationSamples(VkSampleCountFlagBits samples) {
+lvk::VulkanPipelineBuilder& lvk::VulkanPipelineBuilder::rasterizationSamples(VkSampleCountFlagBits samples, float minSampleShading) {
   multisampleState_.rasterizationSamples = samples;
+  multisampleState_.sampleShadingEnable = minSampleShading > 0 ? VK_TRUE : VK_FALSE;
+  multisampleState_.minSampleShading = minSampleShading;
   return *this;
 }
 
@@ -4446,7 +4448,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
       // from Vulkan 1.3 or VK_EXT_extended_dynamic_state2
       .dynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE)
       .primitiveTopology(topologyToVkPrimitiveTopology(desc.topology))
-      .rasterizationSamples(getVulkanSampleCountFlags(desc.samplesCount))
+      .rasterizationSamples(getVulkanSampleCountFlags(desc.samplesCount), desc.minSampleShading)
       .polygonMode(polygonModeToVkPolygonMode(desc.polygonMode))
       .stencilStateOps(VK_STENCIL_FACE_FRONT_BIT,
                        stencilOpToVkStencilOp(desc.frontFaceStencil.stencilFailureOp),
