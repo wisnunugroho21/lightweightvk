@@ -2604,7 +2604,7 @@ void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
                           VK_PIPELINE_STAGE_TRANSFER_BIT,
                           rangeDst);
 
-  const VkImageCopy region = {
+  const VkImageCopy regionCopy = {
       .srcSubresource =
           {
               .aspectMask = imgSrc->getImageAspectFlags(),
@@ -2623,14 +2623,36 @@ void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
       .dstOffset = {.x = dstOffset.x, .y = dstOffset.y, .z = dstOffset.z},
       .extent = {.width = extent.width, .height = extent.height, .depth = extent.depth},
   };
+  const VkImageBlit regionBlit = {
+      .srcSubresource = regionCopy.srcSubresource,
+      .srcOffsets = {{},
+                     {.x = int32_t(srcOffset.x + imgSrc->vkExtent_.width),
+                      .y = int32_t(srcOffset.y + imgSrc->vkExtent_.height),
+                      .z = int32_t(srcOffset.z + imgSrc->vkExtent_.depth)}},
+      .dstSubresource = regionCopy.dstSubresource,
+      .dstOffsets = {{},
+                     {.x = int32_t(dstOffset.x + imgDst->vkExtent_.width),
+                      .y = int32_t(dstOffset.y + imgDst->vkExtent_.height),
+                      .z = int32_t(dstOffset.z + imgDst->vkExtent_.depth)}},
+  };
 
-  vkCmdCopyImage(wrapper_->cmdBuf_,
-                 imgSrc->vkImage_,
-                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                 imgDst->vkImage_,
-                 VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                 1,
-                 &region);
+  const bool isCompatible = getBytesPerPixel(imgSrc->vkImageFormat_) == getBytesPerPixel(imgDst->vkImageFormat_);
+
+  isCompatible ? vkCmdCopyImage(wrapper_->cmdBuf_,
+                                imgSrc->vkImage_,
+                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                imgDst->vkImage_,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                1,
+                                &regionCopy)
+               : vkCmdBlitImage(wrapper_->cmdBuf_,
+                                imgSrc->vkImage_,
+                                VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                imgDst->vkImage_,
+                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                1,
+                                &regionBlit,
+                                VK_FILTER_LINEAR);
 
   lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
                           imgSrc->vkImage_,
