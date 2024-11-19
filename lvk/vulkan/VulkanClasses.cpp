@@ -3703,7 +3703,7 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
   case TextureType_2D:
     vkImageViewType = numLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
     vkImageType = VK_IMAGE_TYPE_2D;
-    vkSamples = lvk::getVulkanSampleCountFlags(desc.numSamples);
+    vkSamples = lvk::getVulkanSampleCountFlags(desc.numSamples, getFramebufferMSAABitMask());
     break;
   case TextureType_3D:
     vkImageViewType = VK_IMAGE_VIEW_TYPE_3D;
@@ -4479,7 +4479,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
       // from Vulkan 1.3 or VK_EXT_extended_dynamic_state2
       .dynamicState(VK_DYNAMIC_STATE_DEPTH_BIAS_ENABLE)
       .primitiveTopology(topologyToVkPrimitiveTopology(desc.topology))
-      .rasterizationSamples(getVulkanSampleCountFlags(desc.samplesCount), desc.minSampleShading)
+      .rasterizationSamples(getVulkanSampleCountFlags(desc.samplesCount, getFramebufferMSAABitMask()), desc.minSampleShading)
       .polygonMode(polygonModeToVkPolygonMode(desc.polygonMode))
       .stencilStateOps(VK_STENCIL_FACE_FRONT_BIT,
                        stencilOpToVkStencilOp(desc.frontFaceStencil.stencilFailureOp),
@@ -5531,7 +5531,7 @@ void lvk::VulkanContext::recreateSwapchain(int newWidth, int newHeight) {
 
 uint32_t lvk::VulkanContext::getFramebufferMSAABitMask() const {
   const VkPhysicalDeviceLimits& limits = getVkPhysicalDeviceProperties().limits;
-  return limits.framebufferColorSampleCounts;
+  return limits.framebufferColorSampleCounts & limits.framebufferDepthSampleCounts;
 }
 
 double lvk::VulkanContext::getTimestampPeriodToMs() const {

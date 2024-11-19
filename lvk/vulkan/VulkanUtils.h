@@ -105,7 +105,7 @@ void imageMemoryBarrier(VkCommandBuffer buffer,
                         VkPipelineStageFlags dstStageMask,
                         VkImageSubresourceRange subresourceRange);
 
-VkSampleCountFlagBits getVulkanSampleCountFlags(uint32_t numSamples);
+VkSampleCountFlagBits getVulkanSampleCountFlags(uint32_t numSamples, VkSampleCountFlags maxSamplesMask);
 
 void setResultFrom(Result* outResult, VkResult result);
 Result getResultFromVkResult(VkResult result);

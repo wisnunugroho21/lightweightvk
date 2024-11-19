@@ -845,23 +845,23 @@ void lvk::imageMemoryBarrier(VkCommandBuffer buffer,
   vkCmdPipelineBarrier(buffer, srcStageMask, dstStageMask, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 }
 
-VkSampleCountFlagBits lvk::getVulkanSampleCountFlags(uint32_t numSamples) {
-  if (numSamples <= 1) {
+VkSampleCountFlagBits lvk::getVulkanSampleCountFlags(uint32_t numSamples, VkSampleCountFlags maxSamplesMask) {
+  if (numSamples <= 1 || VK_SAMPLE_COUNT_2_BIT > maxSamplesMask) {
     return VK_SAMPLE_COUNT_1_BIT;
   }
-  if (numSamples <= 2) {
+  if (numSamples <= 2 || VK_SAMPLE_COUNT_4_BIT > maxSamplesMask) {
     return VK_SAMPLE_COUNT_2_BIT;
   }
-  if (numSamples <= 4) {
+  if (numSamples <= 4 || VK_SAMPLE_COUNT_8_BIT > maxSamplesMask) {
     return VK_SAMPLE_COUNT_4_BIT;
   }
-  if (numSamples <= 8) {
+  if (numSamples <= 8 || VK_SAMPLE_COUNT_16_BIT > maxSamplesMask) {
     return VK_SAMPLE_COUNT_8_BIT;
   }
-  if (numSamples <= 16) {
+  if (numSamples <= 16 || VK_SAMPLE_COUNT_32_BIT > maxSamplesMask) {
     return VK_SAMPLE_COUNT_16_BIT;
   }
-  if (numSamples <= 32) {
+  if (numSamples <= 32 || VK_SAMPLE_COUNT_64_BIT > maxSamplesMask) {
     return VK_SAMPLE_COUNT_32_BIT;
   }
   return VK_SAMPLE_COUNT_64_BIT;
