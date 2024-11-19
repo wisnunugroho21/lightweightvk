@@ -5953,7 +5953,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 #endif // !defined(__APPLE__)
 #if !defined(ANDROID)
     .storageBuffer8BitAccess = VK_TRUE,
-    .uniformAndStorageBuffer8BitAccess = VK_TRUE,
+    .uniformAndStorageBuffer8BitAccess = vkFeatures12_.uniformAndStorageBuffer8BitAccess, // enable if supported
 #endif // !defined(ANDROID)
     .descriptorIndexing = VK_TRUE,
     .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
