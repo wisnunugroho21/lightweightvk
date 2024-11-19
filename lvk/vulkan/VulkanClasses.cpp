@@ -3984,8 +3984,17 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTextureView(lvk::Textu
   if (image.vkUsageFlags_ & VK_IMAGE_USAGE_STORAGE_BIT) {
     if (!desc.swizzle.identity()) {
       // use identity swizzle for storage images
-      image.imageViewStorage_ = image.createImageView(
-          vkDevice_, vkImageViewType, image.vkImageFormat_, aspect, 0, VK_REMAINING_MIP_LEVELS, 0, desc.numLayers, {}, nullptr, debugName);
+      image.imageViewStorage_ = image.createImageView(vkDevice_,
+                                                      vkImageViewType,
+                                                      image.vkImageFormat_,
+                                                      aspect,
+                                                      desc.mipLevel,
+                                                      desc.numMipLevels,
+                                                      desc.layer,
+                                                      desc.numLayers,
+                                                      {},
+                                                      nullptr,
+                                                      debugName);
       LVK_ASSERT(image.imageViewStorage_ != VK_NULL_HANDLE);
     }
   }
