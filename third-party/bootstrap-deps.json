@@ -32,11 +32,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/thisistherk/fast_obj.git",
-        "revision": "42629f744269e004907a6fb4f16c6c7f69acc586"
-    },
-    "postprocess": {
-       "type": "script",
-       "file": "fast_obj.py"
+        "revision": "8145eb0a942784e5491a2e6b50008ce0fe3aa203"
     }
 },
 {
