@@ -37,7 +37,6 @@
 #include <ldrutils/lmath/Colors.h>
 #include <ldrutils/lutils/ScopeExit.h>
 
-#include <Compress.h>
 #include <meshoptimizer.h>
 #include <shared/Camera.h>
 #include <shared/UtilsCubemap.h>
@@ -1471,14 +1470,14 @@ void generateCompressedTexture(LoadedImage img) {
 
   printf("...compressing texture to %s\n", img.compressedFileName.c_str());
 
-  const auto mipmapLevelCount = lvk::calcNumMipLevels(img.w, img.h);
+  const uint32_t mipmapLevelCount = lvk::calcNumMipLevels(img.w, img.h);
 
-  // Go over all generated mipmap and create a compressed texture
-  ktxTextureCreateInfo createInfo = {
-      .glInternalformat = GL_COMPRESSED_RGBA_BPTC_UNORM,
-      .vkFormat = VK_FORMAT_BC7_UNORM_BLOCK,
-      .baseWidth = static_cast<uint32_t>(img.w),
-      .baseHeight = static_cast<uint32_t>(img.h),
+  // create a KTX2 texture for RGBA data
+  ktxTextureCreateInfo createInfoKTX2 = {
+      .glInternalformat = GL_RGBA8,
+      .vkFormat = VK_FORMAT_R8G8B8A8_UNORM,
+      .baseWidth = img.w,
+      .baseHeight = img.h,
       .baseDepth = 1u,
       .numDimensions = 2u,
       .numLevels = mipmapLevelCount,
@@ -1486,48 +1485,76 @@ void generateCompressedTexture(LoadedImage img) {
       .numFaces = 1u,
       .generateMipmaps = KTX_FALSE,
   };
-
-  // Create KTX texture
-  // hard coded and support only BC7 format
-  ktxTexture1* texture = nullptr;
-  (void)LVK_VERIFY(ktxTexture1_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &texture) == KTX_SUCCESS);
+  ktxTexture2* textureKTX2 = nullptr;
+  (void)LVK_VERIFY(ktxTexture2_Create(&createInfoKTX2, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &textureKTX2) == KTX_SUCCESS);
 
   SCOPE_EXIT {
-    ktxTexture_Destroy(ktxTexture(texture));
+    ktxTexture_Destroy(ktxTexture(textureKTX2));
   };
 
   uint32_t w = img.w;
   uint32_t h = img.h;
 
-  std::vector<uint8_t> destPixels;
+  // generate custom mip-pyramid
+  for (uint32_t i = 0; i != mipmapLevelCount; ++i) {
+    size_t offset = 0;
+    ktxTexture_GetImageOffset(ktxTexture(textureKTX2), i, 0, 0, &offset);
 
-  for (uint32_t i = 0; i < mipmapLevelCount; ++i) {
-    destPixels.resize(w * h * img.channels);
-
-    // resize
     stbir_resize_uint8_linear((const unsigned char*)img.pixels,
                               (int)img.w,
                               (int)img.h,
                               0,
-                              (unsigned char*)destPixels.data(),
+                              ktxTexture_GetData(ktxTexture(textureKTX2)) + offset,
                               w,
                               h,
                               0,
-                              (stbir_pixel_layout)img.channels);
-    // compress
-    const block16_vec packedImage16 = Compress::getCompressedImage(destPixels.data(), w, h, img.channels, false, &loaderShouldExit_);
-    ktxTexture_SetImageFromMemory(
-        ktxTexture(texture), i, 0, 0, reinterpret_cast<const uint8_t*>(packedImage16.data()), sizeof(block16) * packedImage16.size());
+                              STBIR_RGBA);
 
     h = h > 1 ? h >> 1 : 1;
     w = w > 1 ? w >> 1 : 1;
-
-    if (loaderShouldExit_.load(std::memory_order_acquire)) {
-      return;
-    }
   }
 
-  ktxTexture_WriteToNamedFile(ktxTexture(texture), img.compressedFileName.c_str());
+  if (loaderShouldExit_.load(std::memory_order_acquire)) {
+    return;
+  }
+
+  // compress to Basis and transcode to BC7
+  ktxBasisParams params = {
+      .structSize = sizeof(params),
+      .threadCount = 8,
+      .compressionLevel = KTX_ETC1S_DEFAULT_COMPRESSION_LEVEL,
+      .qualityLevel = 255,
+  };
+  (void)LVK_VERIFY(ktxTexture2_CompressBasisEx(textureKTX2, &params) == KTX_SUCCESS);
+  (void)LVK_VERIFY(ktxTexture2_TranscodeBasis(textureKTX2, KTX_TTF_BC7_RGBA, 0) == KTX_SUCCESS);
+
+  // convert to KTX1
+  ktxTextureCreateInfo createInfoKTX1 = {
+      .glInternalformat = GL_COMPRESSED_RGBA_BPTC_UNORM,
+      .vkFormat = VK_FORMAT_BC7_UNORM_BLOCK,
+      .baseWidth = img.w,
+      .baseHeight = img.h,
+      .baseDepth = 1u,
+      .numDimensions = 2u,
+      .numLevels = mipmapLevelCount,
+      .numLayers = 1u,
+      .numFaces = 1u,
+      .generateMipmaps = KTX_FALSE,
+  };
+  ktxTexture1* textureKTX1 = nullptr;
+  (void)LVK_VERIFY(ktxTexture1_Create(&createInfoKTX1, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &textureKTX1) == KTX_SUCCESS);
+
+  for (uint32_t i = 0; i != mipmapLevelCount; ++i) {
+    size_t offset1 = 0;
+    (void)LVK_VERIFY(ktxTexture_GetImageOffset(ktxTexture(textureKTX1), i, 0, 0, &offset1) == KTX_SUCCESS);
+    size_t offset2 = 0;
+    (void)LVK_VERIFY(ktxTexture_GetImageOffset(ktxTexture(textureKTX2), i, 0, 0, &offset2) == KTX_SUCCESS);
+    memcpy(ktxTexture_GetData(ktxTexture(textureKTX1)) + offset1,
+           ktxTexture_GetData(ktxTexture(textureKTX2)) + offset2,
+           ktxTexture_GetImageSize(ktxTexture(textureKTX1), i));
+  }
+
+  ktxTexture_WriteToNamedFile(ktxTexture(textureKTX1), img.compressedFileName.c_str());
 }
 
 LoadedImage loadImage(const char* fileName, int channels) {
@@ -2137,6 +2164,7 @@ int main(int argc, char* argv[]) {
   glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int, int action, int mods) {
     const bool pressed = action != GLFW_RELEASE;
     if (key == GLFW_KEY_ESCAPE && pressed) {
+      loaderShouldExit_.store(true, std::memory_order_release);
       glfwSetWindowShouldClose(window, GLFW_TRUE);
     }
     if (key == GLFW_KEY_N && pressed) {
