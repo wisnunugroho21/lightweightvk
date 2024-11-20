@@ -116,18 +116,6 @@
     }
 },
 {
-    "name": "bc7enc",
-    "source": {
-        "type": "git",
-        "url": "https://github.com/richgel999/bc7enc.git",
-        "revision": "f66c2e489b07138f2673a2fb3d27c1aa1d565c48"
-     },
-     "postprocess": {
-        "type": "script",
-        "file": "bc7enc.py"
-     }
-},
-{
     "name": "openxr-sdk",
     "source": {
         "type": "git",
