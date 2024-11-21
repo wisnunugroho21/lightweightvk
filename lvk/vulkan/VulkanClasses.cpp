@@ -2160,7 +2160,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
     if (descDepth.storeOp == StoreOp_MsaaResolve) {
       LVK_ASSERT(depthTexture.vkSamples_ == samples);
       const lvk::Framebuffer::AttachmentDesc& attachment = fb.depthStencil;
-      LVK_ASSERT_MSG(!attachment.resolveTexture.empty(), "Framebuffer attachment should contain a resolve texture");
+      LVK_ASSERT_MSG(!attachment.resolveTexture.empty(), "Framebuffer depth attachment should contain a resolve texture");
       lvk::VulkanImage& depthResolveTexture = *ctx_->texturesPool_.get(attachment.resolveTexture);
       depthAttachment.resolveImageView = depthResolveTexture.getOrCreateVkImageViewForFramebuffer(*ctx_, descDepth.level, descDepth.layer);
       depthAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
