@@ -4750,6 +4750,8 @@ VkPipeline lvk::VulkanContext::getVkPipeline(ComputePipelineHandle handle) {
     return VK_NULL_HANDLE;
   }
 
+  checkAndUpdateDescriptorSets();
+
   if (cps->lastVkDescriptorSetLayout_ != vkDSL_) {
     deferredTask(
         std::packaged_task<void()>([device = vkDevice_, pipeline = cps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
