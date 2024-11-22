@@ -5163,6 +5163,30 @@ lvk::Result lvk::VulkanContext::upload(lvk::BufferHandle handle, const void* dat
   return lvk::Result();
 }
 
+lvk::Result lvk::VulkanContext::download(lvk::BufferHandle handle, void* data, size_t size, size_t offset) {
+  LVK_PROFILER_FUNCTION();
+
+  if (!LVK_VERIFY(data)) {
+    return lvk::Result();
+  }
+
+  LVK_ASSERT_MSG(size, "Data size should be non-zero");
+
+  lvk::VulkanBuffer* buf = buffersPool_.get(handle);
+
+  if (!LVK_VERIFY(buf)) {
+    return lvk::Result();
+  }
+
+  if (!LVK_VERIFY(offset + size <= buf->bufferSize_)) {
+    return lvk::Result(Result::Code::ArgumentOutOfRange, "Out of range");
+  }
+
+  buf->getBufferSubData(*this, offset, size, data);
+
+  return lvk::Result();
+}
+
 uint8_t* lvk::VulkanContext::getMappedPtr(BufferHandle handle) const {
   const lvk::VulkanBuffer* buf = buffersPool_.get(handle);
 

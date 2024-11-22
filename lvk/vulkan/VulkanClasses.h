@@ -515,6 +515,7 @@ class VulkanContext final : public IContext {
   uint64_t gpuAddress(AccelStructHandle handle) const override;
 
   Result upload(BufferHandle handle, const void* data, size_t size, size_t offset) override;
+  Result download(BufferHandle handle, void* data, size_t size, size_t offset) override;
   uint8_t* getMappedPtr(BufferHandle handle) const override;
   uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) const override;
   void flushMappedMemory(BufferHandle handle, size_t offset, size_t size) const override;
