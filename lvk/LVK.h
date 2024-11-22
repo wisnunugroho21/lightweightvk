@@ -1010,7 +1010,9 @@ class IContext {
   virtual SubmitHandle submit(ICommandBuffer& commandBuffer, TextureHandle present = {}) = 0;
   virtual void wait(SubmitHandle handle) = 0; // waiting on an empty handle results in vkDeviceWaitIdle()
 
-  [[nodiscard]] virtual Holder<BufferHandle> createBuffer(const BufferDesc& desc, Result* outResult = nullptr) = 0;
+  [[nodiscard]] virtual Holder<BufferHandle> createBuffer(const BufferDesc& desc,
+                                                          const char* debugName = nullptr,
+                                                          Result* outResult = nullptr) = 0;
   [[nodiscard]] virtual Holder<SamplerHandle> createSampler(const SamplerStateDesc& desc, Result* outResult = nullptr) = 0;
   [[nodiscard]] virtual Holder<TextureHandle> createTexture(const TextureDesc& desc,
                                                             const char* debugName = nullptr,

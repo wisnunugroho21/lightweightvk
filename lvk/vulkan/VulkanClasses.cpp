@@ -2733,12 +2733,15 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
                                           &as->buildRangeInfo.primitiveCount,
                                           &accelerationStructureBuildSizesInfo);
 
-  lvk::Holder<lvk::BufferHandle> scratchBuffer = ctx_->createBuffer(lvk::BufferDesc{
-      .usage = lvk::BufferUsageBits_Storage,
-      .storage = lvk::StorageType_Device,
-      .size = accelerationStructureBuildSizesInfo.buildScratchSize,
-      .debugName = "scratchBuffer",
-  }, nullptr);
+  lvk::Holder<lvk::BufferHandle> scratchBuffer = ctx_->createBuffer(
+      lvk::BufferDesc{
+          .usage = lvk::BufferUsageBits_Storage,
+          .storage = lvk::StorageType_Device,
+          .size = accelerationStructureBuildSizesInfo.buildScratchSize,
+          .debugName = "scratchBuffer",
+      },
+      nullptr,
+      nullptr);
 
   const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = {
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
@@ -3455,8 +3458,13 @@ void lvk::VulkanContext::wait(SubmitHandle handle) {
   immediate_->wait(handle);
 }
 
-lvk::Holder<lvk::BufferHandle> lvk::VulkanContext::createBuffer(const BufferDesc& requestedDesc, Result* outResult) {
+lvk::Holder<lvk::BufferHandle> lvk::VulkanContext::createBuffer(const BufferDesc& requestedDesc,
+                                                                const char* debugName,
+                                                                Result* outResult) {
   BufferDesc desc = requestedDesc;
+
+  if (debugName && *debugName)
+    desc.debugName = debugName;
 
   if (!useStaging_ && (desc.storage == StorageType_Device)) {
     desc.storage = StorageType_HostVisible;
@@ -4084,6 +4092,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
               .size = accelerationStructureBuildSizesInfo.accelerationStructureSize,
               .debugName = debugNameBuffer,
           },
+          nullptr,
           outResult),
   };
   const VkAccelerationStructureCreateInfoKHR ciAccelerationStructure = {
@@ -4101,6 +4110,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
           .size = accelerationStructureBuildSizesInfo.buildScratchSize,
           .debugName = "Buffer: BLAS scratch",
       },
+      nullptr,
       outResult);
 
   const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo{
@@ -4190,6 +4200,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
               .size = accelerationStructureBuildSizesInfo.accelerationStructureSize,
               .debugName = debugNameBuffer,
           },
+          nullptr,
           outResult),
   };
 
@@ -4208,6 +4219,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
           .size = accelerationStructureBuildSizesInfo.buildScratchSize,
           .debugName = "Buffer: TLAS scratch",
       },
+      nullptr,
       outResult);
 
   const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = {
@@ -4717,6 +4729,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
           .data = sbtStorage.data(),
           .debugName = "Buffer: SBT",
       },
+      nullptr,
       nullptr);
   // generate SBT entries
   rtps->sbtEntryRayGen = {

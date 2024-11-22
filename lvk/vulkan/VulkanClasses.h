@@ -484,7 +484,7 @@ class VulkanContext final : public IContext {
   SubmitHandle submit(lvk::ICommandBuffer& commandBuffer, TextureHandle present) override;
   void wait(SubmitHandle handle) override;
 
-  Holder<BufferHandle> createBuffer(const BufferDesc& desc, Result* outResult) override;
+  Holder<BufferHandle> createBuffer(const BufferDesc& desc, const char* debugName, Result* outResult) override;
   Holder<SamplerHandle> createSampler(const SamplerStateDesc& desc, Result* outResult) override;
   Holder<TextureHandle> createTexture(const TextureDesc& desc, const char* debugName, Result* outResult) override;
   Holder<TextureHandle> createTextureView(TextureHandle texture,
