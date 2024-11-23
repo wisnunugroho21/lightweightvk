@@ -3685,8 +3685,10 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
     }
   }
 
-  // For now, always set this flag so we can read it back
-  usageFlags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  if (desc.storage != lvk::StorageType_Memoryless) {
+    // For now, always set this flag so we can read it back
+    usageFlags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  }
 
   LVK_ASSERT_MSG(usageFlags != 0, "Invalid usage flags");
 
