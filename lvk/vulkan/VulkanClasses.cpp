@@ -2534,9 +2534,12 @@ void lvk::CommandBuffer::cmdSetBlendColor(const float color[4]) {
   vkCmdSetBlendConstants(wrapper_->cmdBuf_, color);
 }
 
-void lvk::CommandBuffer::cmdSetDepthBias(float depthBias, float slopeScale, float clamp) {
-  vkCmdSetDepthBias(wrapper_->cmdBuf_, depthBias, clamp, slopeScale);
-  vkCmdSetDepthBiasEnable(wrapper_->cmdBuf_, depthBias != 0);
+void lvk::CommandBuffer::cmdSetDepthBias(float constantFactor, float slopeFactor, float clamp) {
+  vkCmdSetDepthBias(wrapper_->cmdBuf_, constantFactor, clamp, slopeFactor);
+}
+
+void lvk::CommandBuffer::cmdSetDepthBiasEnable(bool enable) {
+  vkCmdSetDepthBiasEnable(wrapper_->cmdBuf_, enable ? VK_TRUE : VK_FALSE);
 }
 
 void lvk::CommandBuffer::cmdResetQueryPool(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) {

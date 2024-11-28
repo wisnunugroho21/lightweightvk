@@ -385,7 +385,8 @@ class CommandBuffer final : public ICommandBuffer {
   void cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth, const Dependencies& deps) override;
 
   void cmdSetBlendColor(const float color[4]) override;
-  void cmdSetDepthBias(float depthBias, float slopeScale, float clamp) override;
+  void cmdSetDepthBias(float constantFactor, float slopeFactor, float clamp) override;
+  void cmdSetDepthBiasEnable(bool enable) override;
 
   void cmdResetQueryPool(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
   void cmdWriteTimestamp(QueryPoolHandle pool, uint32_t query) override;
