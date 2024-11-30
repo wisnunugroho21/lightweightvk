@@ -24,9 +24,14 @@
 #include <unistd.h>
 #endif
 
+// clang-format off
 #if defined(LVK_WITH_TRACY_GPU)
-#include "tracy/TracyVulkan.hpp"
-#endif
+  #include "tracy/TracyVulkan.hpp"
+  #define LVK_PROFILER_GPU_ZONE(name, ctx, cmdBuffer, color) TracyVkZoneC(ctx->pimpl_->tracyVkCtx_, cmdBuffer, name, color);
+#else
+  #define LVK_PROFILER_GPU_ZONE(name, ctx, cmdBuffer, color)
+#endif // LVK_WITH_TRACY_GPU
+// clang-format on
 
 #if !defined(__APPLE__)
 #include <malloc.h>
@@ -1927,7 +1932,7 @@ void lvk::CommandBuffer::cmdBindComputePipeline(lvk::ComputePipelineHandle handl
 
 void lvk::CommandBuffer::cmdDispatchThreadGroups(const Dimensions& threadgroupCount, const Dependencies& deps) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDispatchThreadGroups()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DISPATCH);
+  LVK_PROFILER_GPU_ZONE("cmdDispatchThreadGroups()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DISPATCH);
 
   LVK_ASSERT(!isRendering_);
 
@@ -2401,7 +2406,7 @@ void lvk::CommandBuffer::cmdUpdateBuffer(BufferHandle buffer, size_t bufferOffse
 
 void lvk::CommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t baseInstance) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDraw()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
+  LVK_PROFILER_GPU_ZONE("cmdDraw()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
 
   if (vertexCount == 0) {
     return;
@@ -2416,7 +2421,7 @@ void lvk::CommandBuffer::cmdDrawIndexed(uint32_t indexCount,
                                         int32_t vertexOffset,
                                         uint32_t baseInstance) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDrawIndexed()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
+  LVK_PROFILER_GPU_ZONE("cmdDrawIndexed()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
 
   if (indexCount == 0) {
     return;
@@ -2427,7 +2432,7 @@ void lvk::CommandBuffer::cmdDrawIndexed(uint32_t indexCount,
 
 void lvk::CommandBuffer::cmdDrawIndirect(BufferHandle indirectBuffer, size_t indirectBufferOffset, uint32_t drawCount, uint32_t stride) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDrawIndirect()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
+  LVK_PROFILER_GPU_ZONE("cmdDrawIndirect()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
 
   lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
 
@@ -2442,7 +2447,7 @@ void lvk::CommandBuffer::cmdDrawIndexedIndirect(BufferHandle indirectBuffer,
                                                 uint32_t drawCount,
                                                 uint32_t stride) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDrawIndexedIndirect()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
+  LVK_PROFILER_GPU_ZONE("cmdDrawIndexedIndirect()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
 
   lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
 
@@ -2459,7 +2464,7 @@ void lvk::CommandBuffer::cmdDrawIndexedIndirectCount(BufferHandle indirectBuffer
                                                      uint32_t maxDrawCount,
                                                      uint32_t stride) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDrawIndexedIndirectCount()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
+  LVK_PROFILER_GPU_ZONE("cmdDrawIndexedIndirectCount()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
 
   lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
   lvk::VulkanBuffer* bufCount = ctx_->buffersPool_.get(countBuffer);
@@ -2478,7 +2483,7 @@ void lvk::CommandBuffer::cmdDrawIndexedIndirectCount(BufferHandle indirectBuffer
 
 void lvk::CommandBuffer::cmdDrawMeshTasks(const Dimensions& threadgroupCount) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDrawMeshTasks()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
+  LVK_PROFILER_GPU_ZONE("cmdDrawMeshTasks()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
 
   vkCmdDrawMeshTasksEXT(wrapper_->cmdBuf_, threadgroupCount.width, threadgroupCount.height, threadgroupCount.depth);
 }
@@ -2488,7 +2493,7 @@ void lvk::CommandBuffer::cmdDrawMeshTasksIndirect(BufferHandle indirectBuffer,
                                                   uint32_t drawCount,
                                                   uint32_t stride) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDrawMeshTasksIndirect()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
+  LVK_PROFILER_GPU_ZONE("cmdDrawMeshTasksIndirect()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
 
   lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
 
@@ -2508,7 +2513,7 @@ void lvk::CommandBuffer::cmdDrawMeshTasksIndirectCount(BufferHandle indirectBuff
                                                        uint32_t maxDrawCount,
                                                        uint32_t stride) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdDrawMeshTasksIndirectCount()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
+  LVK_PROFILER_GPU_ZONE("cmdDrawMeshTasksIndirectCount()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DRAW);
 
   lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
   lvk::VulkanBuffer* bufCount = ctx_->buffersPool_.get(countBuffer);
@@ -2527,7 +2532,7 @@ void lvk::CommandBuffer::cmdDrawMeshTasksIndirectCount(BufferHandle indirectBuff
 
 void lvk::CommandBuffer::cmdTraceRays(uint32_t width, uint32_t height, uint32_t depth, const Dependencies& deps) {
   LVK_PROFILER_FUNCTION();
-  LVK_PROFILER_GPU_ZONE("cmdTraceRays()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_RTX);
+  LVK_PROFILER_GPU_ZONE("cmdTraceRays()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_RTX);
 
   lvk::RayTracingPipelineState* rtps = ctx_->rayTracingPipelinesPool_.get(currentPipelineRayTracing_);
 
@@ -2581,7 +2586,7 @@ void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
                                       const Offset3D& dstOffset,
                                       const TextureLayers& srcLayers,
                                       const TextureLayers& dstLayers) {
-  LVK_PROFILER_GPU_ZONE("cmdCopyImage()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_COPY);
+  LVK_PROFILER_GPU_ZONE("cmdCopyImage()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_COPY);
 
   lvk::VulkanImage* imgSrc = ctx_->texturesPool_.get(src);
   lvk::VulkanImage* imgDst = ctx_->texturesPool_.get(dst);
@@ -2721,7 +2726,7 @@ void lvk::CommandBuffer::cmdGenerateMipmap(TextureHandle handle) {
 }
 
 void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle instancesBuffer) {
-  LVK_PROFILER_GPU_ZONE("cmdUpdateTLAS()", ctx_->pimpl_->tracyVkCtx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_RTX);
+  LVK_PROFILER_GPU_ZONE("cmdUpdateTLAS()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_RTX);
 
   if (handle.empty()) {
     return;

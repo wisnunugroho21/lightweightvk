@@ -43,12 +43,6 @@
   #define LVK_PROFILER_ZONE_END() }
   #define LVK_PROFILER_THREAD(name) tracy::SetThreadName(name)
   #define LVK_PROFILER_FRAME(name) FrameMarkNamed(name)
-  // GPU profiling macros
-  #if defined(LVK_WITH_TRACY_GPU)
-    #define LVK_PROFILER_GPU_ZONE(name, profilingContext, cmdBuffer, color) TracyVkZoneC(profilingContext, cmdBuffer, name, color);
-  #else // LVK_WITH_TRACY_GPU
-    #define LVK_PROFILER_GPU_ZONE(name, profilingContext, cmdBuffer, color)
-  #endif // LVK_WITH_TRACY_GPU
 #else
   #define LVK_PROFILER_FUNCTION()
   #define LVK_PROFILER_FUNCTION_COLOR(color)
