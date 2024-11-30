@@ -29,6 +29,10 @@
   #define LVK_PROFILER_COLOR_CREATE 0xff6600
   #define LVK_PROFILER_COLOR_DESTROY 0xffa500
   #define LVK_PROFILER_COLOR_BARRIER 0xffffff
+  #define LVK_PROFILER_COLOR_CMD_DRAW 0x8b0000
+  #define LVK_PROFILER_COLOR_CMD_COPY 0x8b0a50
+  #define LVK_PROFILER_COLOR_CMD_RTX 0x8b0000
+  #define LVK_PROFILER_COLOR_CMD_DISPATCH 0x8b0000
   //
   #define LVK_PROFILER_FUNCTION() ZoneScoped
   #define LVK_PROFILER_FUNCTION_COLOR(color) ZoneScopedC(color)
@@ -39,6 +43,12 @@
   #define LVK_PROFILER_ZONE_END() }
   #define LVK_PROFILER_THREAD(name) tracy::SetThreadName(name)
   #define LVK_PROFILER_FRAME(name) FrameMarkNamed(name)
+  // GPU profiling macros
+  #if defined(LVK_WITH_TRACY_GPU)
+    #define LVK_PROFILER_GPU_ZONE(name, profilingContext, cmdBuffer, color) TracyVkZoneC(profilingContext, cmdBuffer, name, color);
+  #else // LVK_WITH_TRACY_GPU
+    #define LVK_PROFILER_GPU_ZONE(name, profilingContext, cmdBuffer, color)
+  #endif // LVK_WITH_TRACY_GPU
 #else
   #define LVK_PROFILER_FUNCTION()
   #define LVK_PROFILER_FUNCTION_COLOR(color)
