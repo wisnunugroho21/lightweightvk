@@ -185,7 +185,7 @@ target_include_directories(LVKLibrary PUBLIC ${LVK_ROOT_DIR}/src)
 
 if(LVK_WITH_TRACY)
   target_compile_definitions(LVKLibrary PUBLIC "LVK_WITH_TRACY=1")
-  if(LVK_WITH_TRACY)
+  if(LVK_WITH_TRACY_GPU)
     target_compile_definitions(LVKLibrary PUBLIC "LVK_WITH_TRACY_GPU=1")
   endif()
 endif()

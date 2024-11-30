@@ -6422,10 +6422,10 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
 #if defined(LVK_WITH_TRACY_GPU)
   uint32_t numTimeDomains = 0;
-  vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, nullptr);
+  VK_ASSERT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, nullptr));
 
   std::vector<VkTimeDomainEXT> timeDomains(numTimeDomains);
-  vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, timeDomains.data());
+  VK_ASSERT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, timeDomains.data()));
 
   const bool hasHostQuery = vkFeatures12_.hostQueryReset && [&timeDomains]()->bool {
     for (VkTimeDomainEXT domain : timeDomains)
