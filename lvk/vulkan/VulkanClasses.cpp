@@ -24,6 +24,10 @@
 #include <unistd.h>
 #endif
 
+#if defined(LVK_WITH_TRACY_GPU)
+#include "tracy/TracyVulkan.hpp"
+#endif
+
 #if !defined(__APPLE__)
 #include <malloc.h>
 #endif
@@ -724,6 +728,12 @@ struct VulkanContextImpl final {
   };
   YcbcrConversionData ycbcrConversionData_[256]; // indexed by lvk::Format
   uint32_t numYcbcrSamplers_ = 0;
+
+#if defined(LVK_WITH_TRACY_GPU)
+  TracyVkCtx tracyVkCtx_ = nullptr;
+  VkCommandPool tracyCommandPool_ = VK_NULL_HANDLE;
+  VkCommandBuffer tracyCommandBuffer_ = VK_NULL_HANDLE;
+#endif // LVK_WITH_TRACY_GPU
 };
 
 } // namespace lvk
@@ -3339,6 +3349,13 @@ lvk::VulkanContext::~VulkanContext() {
 
   VK_ASSERT(vkDeviceWaitIdle(vkDevice_));
 
+#if defined(LVK_WITH_TRACY_GPU)
+  TracyVkDestroy(pimpl_->tracyVkCtx_);
+  if (pimpl_->tracyCommandPool_) {
+    vkDestroyCommandPool(vkDevice_, pimpl_->tracyCommandPool_, nullptr);
+  }
+#endif // LVK_WITH_TRACY_GPU
+
   stagingDevice_.reset(nullptr);
   swapchain_.reset(nullptr); // swapchain has to be destroyed prior to Surface
 
@@ -3422,6 +3439,10 @@ lvk::SubmitHandle lvk::VulkanContext::submit(lvk::ICommandBuffer& commandBuffer,
   LVK_ASSERT(vkCmdBuffer);
   LVK_ASSERT(vkCmdBuffer->ctx_);
   LVK_ASSERT(vkCmdBuffer->wrapper_);
+
+#if defined(LVK_WITH_TRACY_GPU)
+  TracyVkCollect(pimpl_->tracyVkCtx_, vkCmdBuffer->wrapper_->cmdBuf_);
+#endif // LVK_WITH_TRACY_GPU
 
   if (present) {
     const lvk::VulkanImage& tex = *texturesPool_.get(present);
@@ -6009,6 +6030,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     .runtimeDescriptorArray = VK_TRUE,
     .scalarBlockLayout = VK_TRUE,
     .uniformBufferStandardLayout = VK_TRUE,
+    .hostQueryReset = vkFeatures12_.hostQueryReset, // enable if supported
     .timelineSemaphore = VK_TRUE,
     .bufferDeviceAddress = VK_TRUE,
   };
@@ -6383,6 +6405,49 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   growDescriptorPool(currentMaxTextures_, currentMaxSamplers_, currentMaxAccelStructs_);
 
   querySurfaceCapabilities();
+
+#if defined(LVK_WITH_TRACY_GPU)
+  uint32_t numTimeDomains = 0;
+  vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, nullptr);
+
+  std::vector<VkTimeDomainEXT> timeDomains(numTimeDomains);
+  vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, timeDomains.data());
+
+  const bool hasHostQuery = vkFeatures12_.hostQueryReset && [&timeDomains]()->bool {
+    for (VkTimeDomainEXT domain : timeDomains)
+      if (domain == VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT || domain == VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_EXT)
+        return true;
+    return false;
+  }();
+
+  if (hasHostQuery) {
+    pimpl_->tracyVkCtx_ = TracyVkContextHostCalibrated(
+        vkPhysicalDevice_, vkDevice_, vkResetQueryPool, vkGetPhysicalDeviceCalibrateableTimeDomainsEXT, vkGetCalibratedTimestampsEXT);
+  } else {
+    const VkCommandPoolCreateInfo ciCommandPool = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT | VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        .queueFamilyIndex = deviceQueues_.graphicsQueueFamilyIndex,
+    };
+    VK_ASSERT(vkCreateCommandPool(vkDevice_, &ciCommandPool, nullptr, &pimpl_->tracyCommandPool_));
+    lvk::setDebugObjectName(
+        vkDevice_, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)pimpl_->tracyCommandPool_, "Command Pool: VulkanContextImpl::tracyCommandPool_");
+    const VkCommandBufferAllocateInfo aiCommandBuffer = {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = pimpl_->tracyCommandPool_,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    VK_ASSERT(vkAllocateCommandBuffers(vkDevice_, &aiCommandBuffer, &pimpl_->tracyCommandBuffer_));
+    pimpl_->tracyVkCtx_ = TracyVkContextCalibrated(vkPhysicalDevice_,
+                                                   vkDevice_,
+                                                   deviceQueues_.graphicsQueue,
+                                                   pimpl_->tracyCommandBuffer_,
+                                                   vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,
+                                                   vkGetCalibratedTimestampsEXT);
+  }
+  LVK_ASSERT(pimpl_->tracyVkCtx_);
+#endif // IGL_WITH_TRACY_GPU
 
   return Result();
 }
