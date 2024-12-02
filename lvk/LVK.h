@@ -934,6 +934,7 @@ class ICommandBuffer {
     this->cmdPushConstants(&data, sizeof(Struct), offset);
   }
 
+  virtual void cmdFillBuffer(BufferHandle buffer, size_t bufferOffset, size_t size, uint32_t data) = 0;
   virtual void cmdUpdateBuffer(BufferHandle buffer, size_t bufferOffset, size_t size, const void* data) = 0;
   template<typename Struct>
   void cmdUpdateBuffer(BufferHandle buffer, const Struct& data, size_t bufferOffset = 0) {
