@@ -543,6 +543,12 @@ enum ShaderStage : uint8_t {
   Stage_Callable,
 };
 
+union ClearColorValue {
+  float float32[4];
+  int32_t int32[4];
+  uint32_t uint32[4];
+};
+
 struct VertexInput final {
   enum { LVK_VERTEX_ATTRIBUTES_MAX = 16 };
   enum { LVK_VERTEX_BUFFER_MAX = 16 };
@@ -978,6 +984,7 @@ class ICommandBuffer {
   virtual void cmdResetQueryPool(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) = 0;
   virtual void cmdWriteTimestamp(QueryPoolHandle pool, uint32_t query) = 0;
 
+  virtual void cmdClearColorImage(TextureHandle tex, const ClearColorValue& value, const TextureLayers& layers = {}) = 0;
   virtual void cmdCopyImage(TextureHandle src,
                             TextureHandle dst,
                             const Dimensions& extent,

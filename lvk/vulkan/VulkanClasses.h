@@ -392,6 +392,7 @@ class CommandBuffer final : public ICommandBuffer {
   void cmdResetQueryPool(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount) override;
   void cmdWriteTimestamp(QueryPoolHandle pool, uint32_t query) override;
 
+  void cmdClearColorImage(TextureHandle tex, const ClearColorValue& value, const TextureLayers& layers) override;
   void cmdCopyImage(TextureHandle src,
                     TextureHandle dst,
                     const Dimensions& extent,

@@ -2604,6 +2604,57 @@ void lvk::CommandBuffer::cmdWriteTimestamp(QueryPoolHandle pool, uint32_t query)
   vkCmdWriteTimestamp(wrapper_->cmdBuf_, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, vkPool, query);
 }
 
+void lvk::CommandBuffer::cmdClearColorImage(TextureHandle tex, const ClearColorValue& value, const TextureLayers& layers) {
+  LVK_PROFILER_GPU_ZONE("cmdClearColorImage()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_COPY);
+
+  static_assert(sizeof(ClearColorValue) == sizeof(VkClearColorValue));
+
+  lvk::VulkanImage* img = ctx_->texturesPool_.get(tex);
+
+  if (!LVK_VERIFY(img)) {
+    return;
+  }
+
+  const VkImageSubresourceRange range = {
+      .aspectMask = img->getImageAspectFlags(),
+      .baseMipLevel = layers.mipLevel,
+      .levelCount = VK_REMAINING_MIP_LEVELS,
+      .baseArrayLayer = layers.layer,
+      .layerCount = layers.numLayers,
+  };
+
+  lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
+                          img->vkImage_,
+                          VK_ACCESS_TRANSFER_WRITE_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+                          VK_ACCESS_TRANSFER_READ_BIT,
+                          img->vkImageLayout_,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                          range);
+
+  vkCmdClearColorImage(wrapper_->cmdBuf_,
+                       img->vkImage_,
+                       VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                       reinterpret_cast<const VkClearColorValue*>(&value),
+                       1,
+                       &range);
+
+  const VkImageLayout newLayout = img->vkImageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                                                                   : img->vkImageLayout_;
+
+  lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
+                          img->vkImage_,
+                          VK_ACCESS_TRANSFER_WRITE_BIT,
+                          0,
+                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                          newLayout,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT,
+                          VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                          range);
+  img->vkImageLayout_ = newLayout;
+}
+
 void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
                                       TextureHandle dst,
                                       const Dimensions& extent,
