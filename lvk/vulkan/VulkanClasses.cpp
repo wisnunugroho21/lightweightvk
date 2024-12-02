@@ -6123,6 +6123,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     .storageBuffer8BitAccess = VK_TRUE,
     .uniformAndStorageBuffer8BitAccess = vkFeatures12_.uniformAndStorageBuffer8BitAccess, // enable if supported
 #endif // !defined(ANDROID)
+    .shaderFloat16 = vkFeatures12_.shaderFloat16, // enable if supported
     .descriptorIndexing = VK_TRUE,
     .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
     .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
