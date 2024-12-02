@@ -136,6 +136,8 @@ VkFormat lvk::formatToVkFormat(lvk::Format format) {
     return VK_FORMAT_R16_SFLOAT;
   case lvk::Format_R_UI16:
     return VK_FORMAT_R16_UINT;
+  case lvk::Format_R_UI32:
+    return VK_FORMAT_R32_UINT;
   case lvk::Format_RG_UN8:
     return VK_FORMAT_R8G8_UNORM;
   case lvk::Format_RG_UN16:
@@ -881,11 +883,13 @@ uint32_t lvk::getBytesPerPixel(VkFormat format) {
   case VK_FORMAT_R8G8B8A8_SRGB:
   case VK_FORMAT_R16G16_SFLOAT:
   case VK_FORMAT_R32_SFLOAT:
+  case VK_FORMAT_R32_UINT:
     return 4;
   case VK_FORMAT_R16G16B16_SFLOAT:
     return 6;
   case VK_FORMAT_R16G16B16A16_SFLOAT:
   case VK_FORMAT_R32G32_SFLOAT:
+  case VK_FORMAT_R32G32_UINT:
     return 8;
   case VK_FORMAT_R32G32B32_SFLOAT:
     return 12;
