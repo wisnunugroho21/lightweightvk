@@ -2640,8 +2640,12 @@ void lvk::CommandBuffer::cmdClearColorImage(TextureHandle tex, const ClearColorV
                        1,
                        &range);
 
-  const VkImageLayout newLayout = img->vkImageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                                                                   : img->vkImageLayout_;
+  // a ternary cascade...
+  const VkImageLayout newLayout = img->vkImageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED
+                                      ? (img->isAttachment()     ? VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL
+                                         : img->isSampledImage() ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                                                 : VK_IMAGE_LAYOUT_GENERAL)
+                                      : img->vkImageLayout_;
 
   lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
                           img->vkImage_,
@@ -2770,8 +2774,12 @@ void lvk::CommandBuffer::cmdCopyImage(TextureHandle src,
                           VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
                           rangeSrc);
 
-  const VkImageLayout newLayout = imgDst->vkImageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED ? VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL
-                                                                                      : imgDst->vkImageLayout_;
+  // a ternary cascade...
+  const VkImageLayout newLayout = imgDst->vkImageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED
+                                      ? (imgDst->isAttachment()     ? VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL
+                                         : imgDst->isSampledImage() ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                                                                    : VK_IMAGE_LAYOUT_GENERAL)
+                                      : imgDst->vkImageLayout_;
 
   lvk::imageMemoryBarrier(wrapper_->cmdBuf_,
                           imgDst->vkImage_,
