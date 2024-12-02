@@ -1870,7 +1870,7 @@ void lvk::CommandBuffer::transitionToShaderReadOnly(TextureHandle handle) const 
     }
     // set the result of the previous render pass
     img.transitionLayout(wrapper_->cmdBuf_,
-                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                         img.isSampledImage() ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_GENERAL,
                          srcStage,
                          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, // wait for subsequent
                                                                                                        // fragment/compute shaders
