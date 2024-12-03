@@ -680,6 +680,7 @@ public:
   bool hasRayQuery_ = false;
   bool hasRayTracingPipeline_ = false;
   bool has8BitIndices_ = false;
+  bool hasCalibratedTimestamps_ = false;
 
   TextureHandle dummyTexture_;
 

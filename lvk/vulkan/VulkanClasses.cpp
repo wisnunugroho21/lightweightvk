@@ -6049,9 +6049,6 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   std::vector<const char*> deviceExtensionNames = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-#if defined(LVK_WITH_TRACY)
-    VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME,
-#endif
 #if defined(__APPLE__)
     // All supported Vulkan 1.3 extensions
     // https://github.com/KhronosGroup/MoltenVK/issues/1930
@@ -6222,6 +6219,9 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     }
   };
 
+ #if defined(LVK_WITH_TRACY)
+  addOptionalExtension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME, hasCalibratedTimestamps_, nullptr);
+ #endif
   addOptionalExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
                         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
                         hasAccelerationStructure_,
@@ -6511,11 +6511,14 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   querySurfaceCapabilities();
 
 #if defined(LVK_WITH_TRACY_GPU)
-  uint32_t numTimeDomains = 0;
-  VK_ASSERT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, nullptr));
+  std::vector<VkTimeDomainEXT> timeDomains;
 
-  std::vector<VkTimeDomainEXT> timeDomains(numTimeDomains);
-  VK_ASSERT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, timeDomains.data()));
+  if (hasCalibratedTimestamps_) {
+    uint32_t numTimeDomains = 0;
+    VK_ASSERT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, nullptr));
+    timeDomains.resize(numTimeDomains);
+    VK_ASSERT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, timeDomains.data()));
+  }
 
   const bool hasHostQuery = vkFeatures12_.hostQueryReset && [&timeDomains]()->bool {
     for (VkTimeDomainEXT domain : timeDomains)
@@ -6543,12 +6546,16 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
         .commandBufferCount = 1,
     };
     VK_ASSERT(vkAllocateCommandBuffers(vkDevice_, &aiCommandBuffer, &pimpl_->tracyCommandBuffer_));
-    pimpl_->tracyVkCtx_ = TracyVkContextCalibrated(vkPhysicalDevice_,
-                                                   vkDevice_,
-                                                   deviceQueues_.graphicsQueue,
-                                                   pimpl_->tracyCommandBuffer_,
-                                                   vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,
-                                                   vkGetCalibratedTimestampsEXT);
+    if (hasCalibratedTimestamps_) {
+      pimpl_->tracyVkCtx_ = TracyVkContextCalibrated(vkPhysicalDevice_,
+                                                     vkDevice_,
+                                                     deviceQueues_.graphicsQueue,
+                                                     pimpl_->tracyCommandBuffer_,
+                                                     vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,
+                                                     vkGetCalibratedTimestampsEXT);
+    } else {
+      pimpl_->tracyVkCtx_ = TracyVkContext(vkPhysicalDevice_, vkDevice_, deviceQueues_.graphicsQueue, pimpl_->tracyCommandBuffer_);
+    };
   }
   LVK_ASSERT(pimpl_->tracyVkCtx_);
 #endif // IGL_WITH_TRACY_GPU
