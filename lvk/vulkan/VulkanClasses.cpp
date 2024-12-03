@@ -946,8 +946,8 @@ void lvk::VulkanImage::generateMipmap(VkCommandBuffer commandBuffer) const {
 
     const bool hardwareDownscalingSupported = (vkFormatProperties_.optimalTilingFeatures & formatFeatureMask) == formatFeatureMask;
 
-    if (!LVK_VERIFY(hardwareDownscalingSupported)) {
-      LVK_ASSERT_MSG(false, "Doesn't support hardware downscaling of this image format: {}");
+    if (!hardwareDownscalingSupported) {
+      LLOGW("Doesn't support hardware downscaling of this image format: %p", vkImageFormat_);
       return;
     }
   }
