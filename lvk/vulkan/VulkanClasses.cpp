@@ -1115,7 +1115,7 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
   };
 
   auto chooseSwapPresentMode = [](const std::vector<VkPresentModeKHR>& modes) -> VkPresentModeKHR {
-#if defined(__linux__)
+#if defined(__linux__) || defined(_M_ARM64)
     if (std::find(modes.cbegin(), modes.cend(), VK_PRESENT_MODE_IMMEDIATE_KHR) != modes.cend()) {
       return VK_PRESENT_MODE_IMMEDIATE_KHR;
     }
