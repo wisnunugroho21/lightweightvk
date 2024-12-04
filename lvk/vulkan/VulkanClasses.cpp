@@ -1363,7 +1363,12 @@ lvk::VulkanImmediateCommands::~VulkanImmediateCommands() {
 void lvk::VulkanImmediateCommands::purge() {
   LVK_PROFILER_FUNCTION();
 
-  for (CommandBufferWrapper& buf : buffers_) {
+  const uint32_t numBuffers = static_cast<uint32_t>(LVK_ARRAY_NUM_ELEMENTS(buffers_));
+
+  for (uint32_t i = 0; i != numBuffers; i++) {
+    // always start checking with the oldest submitted buffer, then wrap around
+    CommandBufferWrapper& buf = buffers_[(i + lastSubmitHandle_.bufferIndex_ + 1) % numBuffers];
+
     if (buf.cmdBuf_ == VK_NULL_HANDLE || buf.isEncoding_) {
       continue;
     }
