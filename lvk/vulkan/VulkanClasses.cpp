@@ -3534,6 +3534,10 @@ lvk::ICommandBuffer& lvk::VulkanContext::acquireCommandBuffer() {
 
   LVK_ASSERT_MSG(!pimpl_->currentCommandBuffer_.ctx_, "Cannot acquire more than 1 command buffer simultaneously");
 
+#if defined(_M_ARM64)
+  vkDeviceWaitIdle(vkDevice_); // a temporary workaround for Windows on Snapdragon
+#endif
+
   pimpl_->currentCommandBuffer_ = CommandBuffer(this);
 
   return pimpl_->currentCommandBuffer_;
