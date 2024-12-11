@@ -71,7 +71,7 @@ layout(push_constant) uniform PushConstants {
 } pc;
 
 void main() {
-  vec4 c = in_color * texture(sampler2D(kTextures2D[pc.textureId], kSamplers[pc.samplerId]), in_uv);
+  vec4 c = in_color * texture(nonuniformEXT(sampler2D(kTextures2D[pc.textureId], kSamplers[pc.samplerId])), in_uv);
   // Render UI in linear color space to sRGB framebuffer.
   out_color = kNonLinearColorSpace ? vec4(pow(c.rgb, vec3(2.2)), c.a) : c;
 })";
