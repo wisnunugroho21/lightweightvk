@@ -140,6 +140,10 @@ VkFormat lvk::formatToVkFormat(lvk::Format format) {
     return VK_FORMAT_R32_UINT;
   case lvk::Format_RG_UN8:
     return VK_FORMAT_R8G8_UNORM;
+  case lvk::Format_RG_UI16:
+    return VK_FORMAT_R16G16_UINT;
+  case lvk::Format_RG_UI32:
+    return VK_FORMAT_R32G32_UINT;
   case lvk::Format_RG_UN16:
     return VK_FORMAT_R16G16_UNORM;
   case lvk::Format_BGRA_UN8:
@@ -154,8 +158,6 @@ VkFormat lvk::formatToVkFormat(lvk::Format format) {
     return VK_FORMAT_R16G16_SFLOAT;
   case lvk::Format_RG_F32:
     return VK_FORMAT_R32G32_SFLOAT;
-  case lvk::Format_RG_UI16:
-    return VK_FORMAT_R16G16_UINT;
   case lvk::Format_R_F32:
     return VK_FORMAT_R32_SFLOAT;
   case lvk::Format_RGBA_F16:
