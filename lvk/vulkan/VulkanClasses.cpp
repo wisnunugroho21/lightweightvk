@@ -6090,45 +6090,33 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   }
 
   VkPhysicalDeviceFeatures deviceFeatures10 = {
-#if !defined(__APPLE__)
-    .geometryShader = VK_TRUE,
-    .tessellationShader = VK_TRUE,
-#endif // !defined(__APPLE__)
+    .geometryShader = vkFeatures10_.features.geometryShader, // enable if supported
+    .tessellationShader = vkFeatures10_.features.tessellationShader, // enable if supported
     .sampleRateShading = VK_TRUE,
     .multiDrawIndirect = VK_TRUE,
     .drawIndirectFirstInstance = VK_TRUE,
     .depthBiasClamp = VK_TRUE,
-#if !defined(ANDROID)
-    .fillModeNonSolid = VK_TRUE,
-#endif
+    .fillModeNonSolid = vkFeatures10_.features.fillModeNonSolid, // enable if supported
     .samplerAnisotropy = VK_TRUE,
-#if !defined(ANDROID)
-    .textureCompressionBC = VK_TRUE,
-    .vertexPipelineStoresAndAtomics = VK_TRUE,
-#endif // !defined(ANDROID)
+    .textureCompressionBC = vkFeatures10_.features.textureCompressionBC, // enable if supported
+    .vertexPipelineStoresAndAtomics = vkFeatures10_.features.vertexPipelineStoresAndAtomics, // enable if supported
     .fragmentStoresAndAtomics = VK_TRUE,
     .shaderImageGatherExtended = VK_TRUE,
-#if !defined(ANDROID) && !defined(__APPLE__)
-    .shaderInt64 = VK_TRUE,
-#endif // !defined(ANDROID)
+    .shaderInt64 = vkFeatures10_.features.shaderInt64, // enable if supported
   };
   VkPhysicalDeviceVulkan11Features deviceFeatures11 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
       .pNext = config_.extensionsDeviceFeatures,
       .storageBuffer16BitAccess = VK_TRUE,
-      .samplerYcbcrConversion = VK_TRUE,
+      .samplerYcbcrConversion = vkFeatures11_.samplerYcbcrConversion, // enable if supported
       .shaderDrawParameters = VK_TRUE,
   };
   VkPhysicalDeviceVulkan12Features deviceFeatures12 = {
     .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
     .pNext = &deviceFeatures11,
-#if !defined(__APPLE__)
-    .drawIndirectCount = VK_TRUE,
-#endif // !defined(__APPLE__)
-#if !defined(ANDROID)
-    .storageBuffer8BitAccess = VK_TRUE,
+    .drawIndirectCount = vkFeatures12_.drawIndirectCount, // enable if supported
+    .storageBuffer8BitAccess = vkFeatures12_.storageBuffer8BitAccess, // enable if supported
     .uniformAndStorageBuffer8BitAccess = vkFeatures12_.uniformAndStorageBuffer8BitAccess, // enable if supported
-#endif // !defined(ANDROID)
     .shaderFloat16 = vkFeatures12_.shaderFloat16, // enable if supported
     .descriptorIndexing = VK_TRUE,
     .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
