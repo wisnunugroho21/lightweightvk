@@ -47,7 +47,7 @@ class ImGuiRenderer {
     uint32_t numAllocatedVerteices_ = 0;
   };
 
-  DrawableData drawables_[18] = {};
+  DrawableData drawables_[3] = {};
 };
 
 } // namespace lvk
