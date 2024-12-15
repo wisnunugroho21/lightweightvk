@@ -5799,6 +5799,7 @@ void lvk::VulkanContext::createInstance() {
 #endif
   };
 
+#if defined(VK_EXT_layer_settings) && VK_EXT_layer_settings
   // https://github.com/KhronosGroup/MoltenVK/blob/main/Docs/MoltenVK_Configuration_Parameters.md
   const int useMetalArgumentBuffers = 1;
   const VkBool32 gpuav_descriptor_checks = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8688
@@ -5820,6 +5821,7 @@ void lvk::VulkanContext::createInstance() {
       .settingCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(settings),
       .pSettings = settings,
   };
+#endif // defined(VK_EXT_layer_settings) && VK_EXT_layer_settings
 
   const VkApplicationInfo appInfo = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -5837,7 +5839,11 @@ void lvk::VulkanContext::createInstance() {
 #endif
   const VkInstanceCreateInfo ci = {
     .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+#if defined(VK_EXT_layer_settings) && VK_EXT_layer_settings
     .pNext = &layerSettingsCreateInfo,
+#else
+    .pNext = config_.enableValidation ? &features : nullptr,
+#endif // defined(VK_EXT_layer_settings) && VK_EXT_layer_settings
     .flags = flags,
     .pApplicationInfo = &appInfo,
     .enabledLayerCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(kDefaultValidationLayers) : 0u,
