@@ -5799,20 +5799,10 @@ void lvk::VulkanContext::createInstance() {
 #endif
   };
 
-#if defined(__APPLE__)
   // https://github.com/KhronosGroup/MoltenVK/blob/main/Docs/MoltenVK_Configuration_Parameters.md
   const int useMetalArgumentBuffers = 1;
-  const VkLayerSettingEXT settings[] = {
-      {"MoltenVK", "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", VK_LAYER_SETTING_TYPE_INT32_EXT, 1, &useMetalArgumentBuffers}};
-  const VkLayerSettingsCreateInfoEXT layerSettingsCreateInfo = {
-      .sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
-      .pNext = config_.enableValidation ? &features : nullptr,
-      .settingCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(settings),
-      .pSettings = settings,
-  };
-#else
-  VkBool32 gpuav_descriptor_checks = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8688
-  VkBool32 gpuav_indirect_draws_buffers = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8579
+  const VkBool32 gpuav_descriptor_checks = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8688
+  const VkBool32 gpuav_indirect_draws_buffers = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8579
 #define LAYER_SETTINGS_BOOL32(name, var)                                                                                        \
   VkLayerSettingEXT {                                                                                                           \
     .pLayerName = kDefaultValidationLayers[0], .pSettingName = name, .type = VK_LAYER_SETTING_TYPE_BOOL32_EXT, .valueCount = 1, \
@@ -5821,15 +5811,15 @@ void lvk::VulkanContext::createInstance() {
   const VkLayerSettingEXT settings[] = {
       LAYER_SETTINGS_BOOL32("gpuav_descriptor_checks", &gpuav_descriptor_checks),
       LAYER_SETTINGS_BOOL32("gpuav_indirect_draws_buffers", &gpuav_indirect_draws_buffers),
+      {"MoltenVK", "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", VK_LAYER_SETTING_TYPE_INT32_EXT, 1, &useMetalArgumentBuffers},
   };
 #undef LAYER_SETTINGS_BOOL32
   const VkLayerSettingsCreateInfoEXT layerSettingsCreateInfo = {
       .sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
-      .pNext = &features,
+      .pNext = config_.enableValidation ? &features : nullptr,
       .settingCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(settings),
       .pSettings = settings,
   };
-#endif // __APPLE__
 
   const VkApplicationInfo appInfo = {
       .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -5847,11 +5837,7 @@ void lvk::VulkanContext::createInstance() {
 #endif
   const VkInstanceCreateInfo ci = {
     .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-#if defined(__APPLE__)
     .pNext = &layerSettingsCreateInfo,
-#else
-    .pNext = config_.enableValidation ? &layerSettingsCreateInfo : nullptr,
-#endif
     .flags = flags,
     .pApplicationInfo = &appInfo,
     .enabledLayerCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(kDefaultValidationLayers) : 0u,
