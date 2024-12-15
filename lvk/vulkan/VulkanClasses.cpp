@@ -5810,6 +5810,25 @@ void lvk::VulkanContext::createInstance() {
       .settingCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(settings),
       .pSettings = settings,
   };
+#else
+  VkBool32 gpuav_descriptor_checks = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8688
+  VkBool32 gpuav_indirect_draws_buffers = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8579
+#define LAYER_SETTINGS_BOOL32(name, var)                                                                                        \
+  VkLayerSettingEXT {                                                                                                           \
+    .pLayerName = kDefaultValidationLayers[0], .pSettingName = name, .type = VK_LAYER_SETTING_TYPE_BOOL32_EXT, .valueCount = 1, \
+    .pValues = var,                                                                                                             \
+  }
+  const VkLayerSettingEXT settings[] = {
+      LAYER_SETTINGS_BOOL32("gpuav_descriptor_checks", &gpuav_descriptor_checks),
+      LAYER_SETTINGS_BOOL32("gpuav_indirect_draws_buffers", &gpuav_indirect_draws_buffers),
+  };
+#undef LAYER_SETTINGS_BOOL32
+  const VkLayerSettingsCreateInfoEXT layerSettingsCreateInfo = {
+      .sType = VK_STRUCTURE_TYPE_LAYER_SETTINGS_CREATE_INFO_EXT,
+      .pNext = &features,
+      .settingCount = (uint32_t)LVK_ARRAY_NUM_ELEMENTS(settings),
+      .pSettings = settings,
+  };
 #endif // __APPLE__
 
   const VkApplicationInfo appInfo = {
@@ -5831,7 +5850,7 @@ void lvk::VulkanContext::createInstance() {
 #if defined(__APPLE__)
     .pNext = &layerSettingsCreateInfo,
 #else
-    .pNext = config_.enableValidation ? &features : nullptr,
+    .pNext = config_.enableValidation ? &layerSettingsCreateInfo : nullptr,
 #endif
     .flags = flags,
     .pApplicationInfo = &appInfo,
