@@ -5732,6 +5732,24 @@ bool lvk::VulkanContext::getQueryPoolResults(QueryPoolHandle pool,
 void lvk::VulkanContext::createInstance() {
   vkInstance_ = VK_NULL_HANDLE;
 
+  // check if we have validation layers in the system
+  {
+    uint32_t numLayerProperties = 0;
+    vkEnumerateInstanceLayerProperties(&numLayerProperties, nullptr);
+    std::vector<VkLayerProperties> layerProperties(numLayerProperties);
+    vkEnumerateInstanceLayerProperties(&numLayerProperties, layerProperties.data());
+
+    [this, &layerProperties]() -> void {
+      for (const VkLayerProperties& props : layerProperties) {
+        for (const char* layer : kDefaultValidationLayers) {
+          if (!strcmp(props.layerName, layer))
+            return;
+        }
+      }
+      config_.enableValidation = false; // no validation layers available
+    }();
+  }
+
   std::vector<const char*> instanceExtensionNames = {
     VK_KHR_SURFACE_EXTENSION_NAME,
     VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
