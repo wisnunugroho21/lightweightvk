@@ -709,6 +709,11 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
   return formats[0];
 }
 
+VkDeviceSize bufferSize(lvk::VulkanContext& ctx, const lvk::Holder<lvk::BufferHandle>& handle) {
+  lvk::VulkanBuffer* buffer = ctx.buffersPool_.get(handle);
+  return buffer ? buffer->bufferSize_ : 0;
+}
+
 } // namespace
 
 namespace lvk {
@@ -2853,16 +2858,19 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
                                           &accelerationStructureBuildGeometryInfo,
                                           &as->buildRangeInfo.primitiveCount,
                                           &accelerationStructureBuildSizesInfo);
-
-  lvk::Holder<lvk::BufferHandle> scratchBuffer = ctx_->createBuffer(
-      lvk::BufferDesc{
-          .usage = lvk::BufferUsageBits_Storage,
-          .storage = lvk::StorageType_Device,
-          .size = accelerationStructureBuildSizesInfo.buildScratchSize,
-          .debugName = "scratchBuffer",
-      },
-      nullptr,
-      nullptr);
+  
+  if (!as->scratchBuffer.valid() || bufferSize(*ctx_, as->scratchBuffer) < accelerationStructureBuildSizesInfo.buildScratchSize) {
+    LLOGD("Recreating scratch buffer for TLAS update");
+    as->scratchBuffer = ctx_->createBuffer(
+        lvk::BufferDesc{
+            .usage = lvk::BufferUsageBits_Storage,
+            .storage = lvk::StorageType_Device,
+            .size = accelerationStructureBuildSizesInfo.buildScratchSize,
+            .debugName = "scratchBuffer",
+        },
+        nullptr,
+        nullptr);
+  }
 
   const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = {
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
@@ -2873,7 +2881,7 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
       .dstAccelerationStructure = as->vkHandle,
       .geometryCount = 1,
       .pGeometries = &accelerationStructureGeometry,
-      .scratchData = {.deviceAddress = ctx_->gpuAddress(scratchBuffer)},
+      .scratchData = {.deviceAddress = ctx_->gpuAddress(as->scratchBuffer)},
   };
 
   const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&as->buildRangeInfo};
@@ -4359,7 +4367,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
       },
       nullptr,
       outResult);
-
+ 
   const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = {
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
       .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
@@ -4370,6 +4378,10 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
       .pGeometries = &accelerationStructureGeometry,
       .scratchData = {.deviceAddress = gpuAddress(scratchBuffer)},
   };
+  if (desc.buildFlags & lvk::AccelStructBuildFlagBits_AllowUpdate) {
+    // Store scratch buffer for future updates
+    accelStruct.scratchBuffer = std::move(scratchBuffer);
+  }
 
   const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&accelStruct.buildRangeInfo};
 

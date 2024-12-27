@@ -321,6 +321,7 @@ struct AccelerationStructure {
   VkAccelerationStructureKHR vkHandle = VK_NULL_HANDLE;
   uint64_t deviceAddress = 0;
   lvk::Holder<lvk::BufferHandle> buffer;
+  lvk::Holder<lvk::BufferHandle> scratchBuffer; // Store only for TLAS
 };
 
 class CommandBuffer final : public ICommandBuffer {
