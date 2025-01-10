@@ -115,6 +115,9 @@ python3 deploy_content_android.py
 
 Check out [https://github.com/corporateshark/lightweightvk/samples](https://github.com/corporateshark/lightweightvk/tree/master/samples).
 
+A comprehensive set of examples can be found in this repository [3D Graphics Rendering Cookbook: 2nd edition](https://github.com/PacktPublishing/3D-Graphics-Rendering-Cookbook-Second-Edition) and in the book
+[Vulkan 3D Graphics Rendering Cookbook - 2nd Edition](https://www.amazon.com/Vulkan-Graphics-Rendering-Cookbook-High-Performance/dp/1803248114).
+
 ![image](.github/screenshot01.jpg)
 ![image](.github/samples/007_RayTracingAO.jpg)
 
