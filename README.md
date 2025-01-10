@@ -15,7 +15,7 @@ There are no plans to keep this fork in sync with the upstream.
 ## Supported rendering backends
 
  * Vulkan 1.3 (Windows, Linux, Android)
-   * optional **VK_KHR_acceleration_structure** (Windows, Linux, Android)   
+   * optional **VK_KHR_acceleration_structure** (Windows, Linux, Android)
    * optional **VK_KHR_ray_tracing_pipeline** (Windows, Linux, Android)
    * optional **VK_KHR_ray_query** (Windows, Linux, Android)
    * optional **VK_EXT_mesh_shader** (Windows, Linux)
