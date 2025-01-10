@@ -2,7 +2,7 @@
 
 MIT License
 
-Copyright (c) Sergey Kosarevsky, 2023
+Copyright (c) Sergey Kosarevsky, 2023-2025
 
 ## Based on https://github.com/facebook/igl/
 
