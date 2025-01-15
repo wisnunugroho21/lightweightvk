@@ -1309,6 +1309,7 @@ lvk::Result lvk::VulkanSwapchain::present(VkSemaphore waitSemaphore) {
 
   // Ready to call acquireNextImage() on the next getCurrentVulkanTexture();
   getNextImage_ = true;
+  currentFrameIndex_++;
 
   LVK_PROFILER_FRAME(nullptr);
 

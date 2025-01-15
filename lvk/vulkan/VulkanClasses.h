@@ -133,14 +133,15 @@ class VulkanSwapchain final {
   const VkSurfaceFormatKHR& getSurfaceFormat() const;
   uint32_t getNumSwapchainImages() const;
 
- private:
+ public:
   VulkanContext& ctx_;
   VkDevice device_ = VK_NULL_HANDLE;
   VkQueue graphicsQueue_ = VK_NULL_HANDLE;
   uint32_t width_ = 0;
   uint32_t height_ = 0;
   uint32_t numSwapchainImages_ = 0;
-  uint32_t currentImageIndex_ = 0;
+  uint32_t currentImageIndex_ = 0; // [0...numSwapchainImages_)
+  uint64_t currentFrameIndex_ = 0; // [0...+inf)
   bool getNextImage_ = true;
   VkSwapchainKHR swapchain_ = VK_NULL_HANDLE;
   VkSurfaceFormatKHR surfaceFormat_ = {.format = VK_FORMAT_UNDEFINED};
