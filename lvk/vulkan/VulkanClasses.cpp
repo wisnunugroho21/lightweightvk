@@ -1101,8 +1101,6 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
   ctx_(ctx), device_(ctx.vkDevice_), graphicsQueue_(ctx.deviceQueues_.graphicsQueue), width_(width), height_(height) {
   surfaceFormat_ = chooseSwapSurfaceFormat(ctx.deviceSurfaceFormats_, ctx.config_.swapChainColorSpace);
 
-  acquireSemaphore_ = lvk::createSemaphore(device_, "Semaphore: swapchain-acquire");
-
   LVK_ASSERT_MSG(ctx.vkSurface_ != VK_NULL_HANDLE,
                  "You are trying to create a swapchain but your OS surface is empty. Did you want to "
                  "create an offscreen rendering context? If so, set 'width' and 'height' to 0 when you "
@@ -1191,6 +1189,8 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
 
   // create images, image views and framebuffers
   for (uint32_t i = 0; i < numSwapchainImages_; i++) {
+    acquireSemaphore_[i] = lvk::createSemaphore(device_, "Semaphore: swapchain-acquire");
+
     snprintf(debugNameImage, sizeof(debugNameImage) - 1, "Image: swapchain %u", i);
     snprintf(debugNameImageView, sizeof(debugNameImageView) - 1, "Image View: swapchain %u", i);
     VulkanImage image = {
@@ -1227,12 +1227,10 @@ lvk::VulkanSwapchain::~VulkanSwapchain() {
   for (TextureHandle handle : swapchainTextures_) {
     ctx_.destroy(handle);
   }
-  if (acquireFence_ != VK_NULL_HANDLE) {
-    vkWaitForFences(device_, 1, &acquireFence_, VK_TRUE, UINT64_MAX);
-    vkDestroyFence(device_, acquireFence_, nullptr);
-  }
   vkDestroySwapchainKHR(device_, swapchain_, nullptr);
-  vkDestroySemaphore(device_, acquireSemaphore_, nullptr);
+  for (VkSemaphore sem : acquireSemaphore_) {
+    vkDestroySemaphore(device_, sem, nullptr);
+  }
 }
 
 VkImage lvk::VulkanSwapchain::getCurrentVkImage() const {
@@ -1255,23 +1253,21 @@ lvk::TextureHandle lvk::VulkanSwapchain::getCurrentTexture() {
   LVK_PROFILER_FUNCTION();
 
   if (getNextImage_) {
-    // Our first submit handle can be still waiting on the previous `acquireSemaphore`.
-    //   vkAcquireNextImageKHR():  Semaphore must not have any pending operations. The Vulkan spec states:
-    //   If semaphore is not VK_NULL_HANDLE it must not have any uncompleted signal or wait operations pending
-    //   (https://vulkan.lunarg.com/doc/view/1.3.275.0/windows/1.3-extensions/vkspec.html#VUID-vkAcquireNextImageKHR-semaphore-01779)
-    if (acquireFence_ == VK_NULL_HANDLE) {
-      acquireFence_ = lvk::createFence(device_, "Fence: swapchain-acquire");
-    } else {
-      vkWaitForFences(device_, 1, &acquireFence_, VK_TRUE, UINT64_MAX);
-      vkResetFences(device_, 1, &acquireFence_);
-    }
+    const VkSemaphoreWaitInfo waitInfo = {
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
+        .semaphoreCount = 1,
+        .pSemaphores = &ctx_.timelineSemaphore_,
+        .pValues = &timelineWaitValues_[currentImageIndex_],
+    };
+    VK_ASSERT(vkWaitSemaphores(device_, &waitInfo, UINT64_MAX));
     // when timeout is set to UINT64_MAX, we wait until the next image has been acquired
-    VkResult r = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, acquireSemaphore_, acquireFence_, &currentImageIndex_);
+    VkSemaphore acquireSemaphore = acquireSemaphore_[currentImageIndex_];
+    VkResult r = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX, acquireSemaphore, VK_NULL_HANDLE, &currentImageIndex_);
     if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR && r != VK_ERROR_OUT_OF_DATE_KHR) {
       VK_ASSERT(r);
     }
     getNextImage_ = false;
-    ctx_.immediate_->waitSemaphore(acquireSemaphore_);
+    ctx_.immediate_->waitSemaphore(acquireSemaphore);
   }
 
   if (LVK_VERIFY(currentImageIndex_ < numSwapchainImages_)) {
@@ -3497,6 +3493,8 @@ lvk::VulkanContext::~VulkanContext() {
   stagingDevice_.reset(nullptr);
   swapchain_.reset(nullptr); // swapchain has to be destroyed prior to Surface
 
+  vkDestroySemaphore(vkDevice_, timelineSemaphore_, nullptr);
+
   destroy(dummyTexture_);
 
   for (auto& data : pimpl_->ycbcrConversionData_) {
@@ -3603,6 +3601,14 @@ lvk::SubmitHandle lvk::VulkanContext::submit(lvk::ICommandBuffer& commandBuffer,
   }
 
   const bool shouldPresent = hasSwapchain() && present;
+
+  if (shouldPresent) {
+    // if we a presenting a swapchain image, signal our timeline semaphore
+    const uint64_t signalValue = swapchain_->currentFrameIndex_ + swapchain_->getNumSwapchainImages();
+    // we wait for this value next time we want to acquire this swapchain image
+    swapchain_->timelineWaitValues_[swapchain_->currentImageIndex_] = signalValue;
+    immediate_->signalSemaphore(timelineSemaphore_, signalValue);
+  }
 
   vkCmdBuffer->lastSubmitHandle_ = immediate_->submit(*vkCmdBuffer->wrapper_);
 
@@ -6631,6 +6637,7 @@ lvk::Result lvk::VulkanContext::initSwapchain(uint32_t width, uint32_t height) {
     // destroy the old swapchain first
     VK_ASSERT(vkDeviceWaitIdle(vkDevice_));
     swapchain_ = nullptr;
+    vkDestroySemaphore(vkDevice_, timelineSemaphore_, nullptr);
   }
 
   if (!width || !height) {
@@ -6638,6 +6645,8 @@ lvk::Result lvk::VulkanContext::initSwapchain(uint32_t width, uint32_t height) {
   }
 
   swapchain_ = std::make_unique<lvk::VulkanSwapchain>(*this, width, height);
+
+  timelineSemaphore_ = lvk::createSemaphoreTimeline(vkDevice_, swapchain_->getNumSwapchainImages() - 1, "Semaphore: timelineSemaphore_");
 
   return swapchain_ ? Result() : Result(Result::Code::RuntimeError, "Failed to create swapchain");
 }
