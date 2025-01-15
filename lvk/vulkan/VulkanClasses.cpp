@@ -1515,36 +1515,43 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::submit(const CommandBufferWrappe
   LVK_ASSERT(wrapper.isEncoding_);
   VK_ASSERT(vkEndCommandBuffer(wrapper.cmdBuf_));
 
-  const VkPipelineStageFlags waitStageMasks[] = {VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
-  VkSemaphore waitSemaphores[] = {VK_NULL_HANDLE, VK_NULL_HANDLE};
+  VkSemaphoreSubmitInfo waitSemaphores[] = {{}, {}};
   uint32_t numWaitSemaphores = 0;
-  if (waitSemaphore_) {
+  if (waitSemaphore_.semaphore) {
     waitSemaphores[numWaitSemaphores++] = waitSemaphore_;
   }
-  if (lastSubmitSemaphore_) {
+  if (lastSubmitSemaphore_.semaphore) {
     waitSemaphores[numWaitSemaphores++] = lastSubmitSemaphore_;
   }
-
-  LVK_PROFILER_ZONE("vkQueueSubmit()", LVK_PROFILER_COLOR_SUBMIT);
-#if LVK_VULKAN_PRINT_COMMANDS
-  LLOGL("%p vkQueueSubmit()\n\n", wrapper.cmdBuf_);
-#endif // LVK_VULKAN_PRINT_COMMANDS
-  const VkSubmitInfo si = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .waitSemaphoreCount = numWaitSemaphores,
-      .pWaitSemaphores = numWaitSemaphores ? waitSemaphores : nullptr,
-      .pWaitDstStageMask = waitStageMasks,
-      .commandBufferCount = 1u,
-      .pCommandBuffers = &wrapper.cmdBuf_,
-      .signalSemaphoreCount = 1u,
-      .pSignalSemaphores = &wrapper.semaphore_,
+  VkSemaphoreSubmitInfo signalSemaphores[] = {
+      VkSemaphoreSubmitInfo{.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                            .semaphore = wrapper.semaphore_,
+                            .stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT},
   };
-  VK_ASSERT(vkQueueSubmit(queue_, 1u, &si, wrapper.fence_));
+
+  LVK_PROFILER_ZONE("vkQueueSubmit2()", LVK_PROFILER_COLOR_SUBMIT);
+#if LVK_VULKAN_PRINT_COMMANDS
+  LLOGL("%p vkQueueSubmit2()\n\n", wrapper.cmdBuf_);
+#endif // LVK_VULKAN_PRINT_COMMANDS
+  const VkCommandBufferSubmitInfo bufferSI = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+      .commandBuffer = wrapper.cmdBuf_,
+  };
+  const VkSubmitInfo2 si = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+      .waitSemaphoreInfoCount = numWaitSemaphores,
+      .pWaitSemaphoreInfos = waitSemaphores,
+      .commandBufferInfoCount = 1u,
+      .pCommandBufferInfos = &bufferSI,
+      .signalSemaphoreInfoCount = 1u,
+      .pSignalSemaphoreInfos = signalSemaphores,
+  };
+  VK_ASSERT(vkQueueSubmit2(queue_, 1u, &si,wrapper.fence_));
   LVK_PROFILER_ZONE_END();
 
-  lastSubmitSemaphore_ = wrapper.semaphore_;
+  lastSubmitSemaphore_.semaphore = wrapper.semaphore_;
   lastSubmitHandle_ = wrapper.handle_;
-  waitSemaphore_ = VK_NULL_HANDLE;
+  waitSemaphore_.semaphore = VK_NULL_HANDLE;
 
   // reset
   const_cast<CommandBufferWrapper&>(wrapper).isEncoding_ = false;
@@ -1559,13 +1566,13 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::submit(const CommandBufferWrappe
 }
 
 void lvk::VulkanImmediateCommands::waitSemaphore(VkSemaphore semaphore) {
-  LVK_ASSERT(waitSemaphore_ == VK_NULL_HANDLE);
+  LVK_ASSERT(waitSemaphore_.semaphore == VK_NULL_HANDLE);
 
-  waitSemaphore_ = semaphore;
+  waitSemaphore_.semaphore = semaphore;
 }
 
 VkSemaphore lvk::VulkanImmediateCommands::acquireLastSubmitSemaphore() {
-  return std::exchange(lastSubmitSemaphore_, VK_NULL_HANDLE);
+  return std::exchange(lastSubmitSemaphore_.semaphore, VK_NULL_HANDLE);
 }
 
 VkFence lvk::VulkanImmediateCommands::getVkFence(lvk::SubmitHandle handle) const {

@@ -193,8 +193,10 @@ class VulkanImmediateCommands final {
   CommandBufferWrapper buffers_[kMaxCommandBuffers];
   SubmitHandle lastSubmitHandle_ = SubmitHandle();
   SubmitHandle nextSubmitHandle_ = SubmitHandle();
-  VkSemaphore lastSubmitSemaphore_ = VK_NULL_HANDLE;
-  VkSemaphore waitSemaphore_ = VK_NULL_HANDLE;
+  VkSemaphoreSubmitInfo lastSubmitSemaphore_ = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                                                .stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
+  VkSemaphoreSubmitInfo waitSemaphore_ = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                                          .stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT}; // extra "wait" semaphore
   uint32_t numAvailableCommandBuffers_ = kMaxCommandBuffers;
   uint32_t submitCounter_ = 1;
 };
