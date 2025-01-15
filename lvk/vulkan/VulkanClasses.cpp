@@ -5858,6 +5858,7 @@ void lvk::VulkanContext::createInstance() {
   const int useMetalArgumentBuffers = 1;
   const VkBool32 gpuav_descriptor_checks = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8688
   const VkBool32 gpuav_indirect_draws_buffers = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/8579
+  const VkBool32 gpuav_post_process_descriptor_indexing = VK_FALSE; // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9222
 #define LAYER_SETTINGS_BOOL32(name, var)                                                                                        \
   VkLayerSettingEXT {                                                                                                           \
     .pLayerName = kDefaultValidationLayers[0], .pSettingName = name, .type = VK_LAYER_SETTING_TYPE_BOOL32_EXT, .valueCount = 1, \
@@ -5866,6 +5867,7 @@ void lvk::VulkanContext::createInstance() {
   const VkLayerSettingEXT settings[] = {
       LAYER_SETTINGS_BOOL32("gpuav_descriptor_checks", &gpuav_descriptor_checks),
       LAYER_SETTINGS_BOOL32("gpuav_indirect_draws_buffers", &gpuav_indirect_draws_buffers),
+      LAYER_SETTINGS_BOOL32("gpuav_post_process_descriptor_indexing", &gpuav_post_process_descriptor_indexing),
       {"MoltenVK", "MVK_CONFIG_USE_METAL_ARGUMENT_BUFFERS", VK_LAYER_SETTING_TYPE_INT32_EXT, 1, &useMetalArgumentBuffers},
   };
 #undef LAYER_SETTINGS_BOOL32
