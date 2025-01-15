@@ -173,6 +173,7 @@ class VulkanImmediateCommands final {
   const CommandBufferWrapper& acquire();
   SubmitHandle submit(const CommandBufferWrapper& wrapper);
   void waitSemaphore(VkSemaphore semaphore);
+  void signalSemaphore(VkSemaphore semaphore, uint64_t signalValue);
   VkSemaphore acquireLastSubmitSemaphore();
   VkFence getVkFence(SubmitHandle handle) const;
   SubmitHandle getLastSubmitHandle() const;
@@ -197,6 +198,8 @@ class VulkanImmediateCommands final {
                                                 .stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT};
   VkSemaphoreSubmitInfo waitSemaphore_ = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
                                           .stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT}; // extra "wait" semaphore
+  VkSemaphoreSubmitInfo signalSemaphore_ = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+                                            .stageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT}; // extra "signal" semaphore
   uint32_t numAvailableCommandBuffers_ = kMaxCommandBuffers;
   uint32_t submitCounter_ = 1;
 };
