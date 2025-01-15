@@ -1551,7 +1551,7 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::submit(const CommandBufferWrappe
       .signalSemaphoreInfoCount = numSignalSemaphores,
       .pSignalSemaphoreInfos = signalSemaphores,
   };
-  VK_ASSERT(vkQueueSubmit2(queue_, 1u, &si,wrapper.fence_));
+  VK_ASSERT(vkQueueSubmit2(queue_, 1u, &si, wrapper.fence_));
   LVK_PROFILER_ZONE_END();
 
   lastSubmitSemaphore_.semaphore = wrapper.semaphore_;
@@ -1971,7 +1971,8 @@ void lvk::CommandBuffer::cmdDispatchThreadGroups(const Dimensions& threadgroupCo
   }
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
     const lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(deps.buffers[i]);
-    LVK_ASSERT_MSG(buf->vkUsageFlags_ & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, "Did you forget to specify BufferUsageBits_Storage on your buffer?");
+    LVK_ASSERT_MSG(buf->vkUsageFlags_ & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                   "Did you forget to specify BufferUsageBits_Storage on your buffer?");
     bufferBarrier(
         deps.buffers[i], VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
   }
@@ -2878,7 +2879,7 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
                                           &accelerationStructureBuildGeometryInfo,
                                           &as->buildRangeInfo.primitiveCount,
                                           &accelerationStructureBuildSizesInfo);
-  
+
   if (!as->scratchBuffer.valid() || bufferSize(*ctx_, as->scratchBuffer) < accelerationStructureBuildSizesInfo.buildScratchSize) {
     LLOGD("Recreating scratch buffer for TLAS update");
     as->scratchBuffer = ctx_->createBuffer(
@@ -3622,9 +3623,7 @@ void lvk::VulkanContext::wait(SubmitHandle handle) {
   immediate_->wait(handle);
 }
 
-lvk::Holder<lvk::BufferHandle> lvk::VulkanContext::createBuffer(const BufferDesc& requestedDesc,
-                                                                const char* debugName,
-                                                                Result* outResult) {
+lvk::Holder<lvk::BufferHandle> lvk::VulkanContext::createBuffer(const BufferDesc& requestedDesc, const char* debugName, Result* outResult) {
   BufferDesc desc = requestedDesc;
 
   if (debugName && *debugName)
@@ -4180,7 +4179,6 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTextureView(lvk::Textu
   return {this, handle};
 }
 
-
 lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& desc, Result* outResult) {
   LVK_ASSERT(desc.type == AccelStructType_BLAS);
   LVK_ASSERT(desc.geometryType == AccelStructGeomType_Triangles);
@@ -4387,7 +4385,7 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
       },
       nullptr,
       outResult);
- 
+
   const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo = {
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
       .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
@@ -4675,9 +4673,9 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
                        compareOpToVkCompareOp(desc.backFaceStencil.stencilCompareOp))
       .stencilMasks(VK_STENCIL_FACE_FRONT_BIT, 0xFF, desc.frontFaceStencil.writeMask, desc.frontFaceStencil.readMask)
       .stencilMasks(VK_STENCIL_FACE_BACK_BIT, 0xFF, desc.backFaceStencil.writeMask, desc.backFaceStencil.readMask)
-      .shaderStage(taskModule ? lvk::getPipelineShaderStageCreateInfo(
-                                    VK_SHADER_STAGE_TASK_BIT_EXT, taskModule->sm, desc.entryPointTask, &si)
-                              : VkPipelineShaderStageCreateInfo{.module = VK_NULL_HANDLE})
+      .shaderStage(taskModule
+                       ? lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_TASK_BIT_EXT, taskModule->sm, desc.entryPointTask, &si)
+                       : VkPipelineShaderStageCreateInfo{.module = VK_NULL_HANDLE})
       .shaderStage(meshModule
                        ? lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_MESH_BIT_EXT, meshModule->sm, desc.entryPointMesh, &si)
                        : lvk::getPipelineShaderStageCreateInfo(VK_SHADER_STAGE_VERTEX_BIT, vertModule->sm, desc.entryPointVert, &si))
@@ -5101,7 +5099,6 @@ lvk::Holder<lvk::RenderPipelineHandle> lvk::VulkanContext::createRenderPipeline(
 
   return {this, renderPipelinesPool_.create(std::move(rps))};
 }
-
 
 void lvk::VulkanContext::destroy(lvk::RayTracingPipelineHandle handle) {
   lvk::RayTracingPipelineState* rtps = rayTracingPipelinesPool_.get(handle);
@@ -6151,19 +6148,19 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   }
 
   VkPhysicalDeviceFeatures deviceFeatures10 = {
-    .geometryShader = vkFeatures10_.features.geometryShader, // enable if supported
-    .tessellationShader = vkFeatures10_.features.tessellationShader, // enable if supported
-    .sampleRateShading = VK_TRUE,
-    .multiDrawIndirect = VK_TRUE,
-    .drawIndirectFirstInstance = VK_TRUE,
-    .depthBiasClamp = VK_TRUE,
-    .fillModeNonSolid = vkFeatures10_.features.fillModeNonSolid, // enable if supported
-    .samplerAnisotropy = VK_TRUE,
-    .textureCompressionBC = vkFeatures10_.features.textureCompressionBC, // enable if supported
-    .vertexPipelineStoresAndAtomics = vkFeatures10_.features.vertexPipelineStoresAndAtomics, // enable if supported
-    .fragmentStoresAndAtomics = VK_TRUE,
-    .shaderImageGatherExtended = VK_TRUE,
-    .shaderInt64 = vkFeatures10_.features.shaderInt64, // enable if supported
+      .geometryShader = vkFeatures10_.features.geometryShader, // enable if supported
+      .tessellationShader = vkFeatures10_.features.tessellationShader, // enable if supported
+      .sampleRateShading = VK_TRUE,
+      .multiDrawIndirect = VK_TRUE,
+      .drawIndirectFirstInstance = VK_TRUE,
+      .depthBiasClamp = VK_TRUE,
+      .fillModeNonSolid = vkFeatures10_.features.fillModeNonSolid, // enable if supported
+      .samplerAnisotropy = VK_TRUE,
+      .textureCompressionBC = vkFeatures10_.features.textureCompressionBC, // enable if supported
+      .vertexPipelineStoresAndAtomics = vkFeatures10_.features.vertexPipelineStoresAndAtomics, // enable if supported
+      .fragmentStoresAndAtomics = VK_TRUE,
+      .shaderImageGatherExtended = VK_TRUE,
+      .shaderInt64 = vkFeatures10_.features.shaderInt64, // enable if supported
   };
   VkPhysicalDeviceVulkan11Features deviceFeatures11 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
@@ -6173,25 +6170,27 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .shaderDrawParameters = VK_TRUE,
   };
   VkPhysicalDeviceVulkan12Features deviceFeatures12 = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-    .pNext = &deviceFeatures11,
-    .drawIndirectCount = vkFeatures12_.drawIndirectCount, // enable if supported
-    .storageBuffer8BitAccess = vkFeatures12_.storageBuffer8BitAccess, // enable if supported
-    .uniformAndStorageBuffer8BitAccess = vkFeatures12_.uniformAndStorageBuffer8BitAccess, // enable if supported
-    .shaderFloat16 = vkFeatures12_.shaderFloat16, // enable if supported
-    .descriptorIndexing = VK_TRUE,
-    .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
-    .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
-    .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
-    .descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
-    .descriptorBindingPartiallyBound = VK_TRUE,
-    .descriptorBindingVariableDescriptorCount = VK_TRUE,
-    .runtimeDescriptorArray = VK_TRUE,
-    .scalarBlockLayout = VK_TRUE,
-    .uniformBufferStandardLayout = VK_TRUE,
-    .hostQueryReset = vkFeatures12_.hostQueryReset, // enable if supported
-    .timelineSemaphore = VK_TRUE,
-    .bufferDeviceAddress = VK_TRUE,
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .pNext = &deviceFeatures11,
+      .drawIndirectCount = vkFeatures12_.drawIndirectCount, // enable if supported
+      .storageBuffer8BitAccess = vkFeatures12_.storageBuffer8BitAccess, // enable if supported
+      .uniformAndStorageBuffer8BitAccess = vkFeatures12_.uniformAndStorageBuffer8BitAccess, // enable if supported
+      .shaderFloat16 = vkFeatures12_.shaderFloat16, // enable if supported
+      .descriptorIndexing = VK_TRUE,
+      .shaderSampledImageArrayNonUniformIndexing = VK_TRUE,
+      .descriptorBindingSampledImageUpdateAfterBind = VK_TRUE,
+      .descriptorBindingStorageImageUpdateAfterBind = VK_TRUE,
+      .descriptorBindingUpdateUnusedWhilePending = VK_TRUE,
+      .descriptorBindingPartiallyBound = VK_TRUE,
+      .descriptorBindingVariableDescriptorCount = VK_TRUE,
+      .runtimeDescriptorArray = VK_TRUE,
+      .scalarBlockLayout = VK_TRUE,
+      .uniformBufferStandardLayout = VK_TRUE,
+      .hostQueryReset = vkFeatures12_.hostQueryReset, // enable if supported
+      .timelineSemaphore = VK_TRUE,
+      .bufferDeviceAddress = VK_TRUE,
+      .vulkanMemoryModel = vkFeatures12_.vulkanMemoryModel, // enable if supported
+      .vulkanMemoryModelDeviceScope = vkFeatures12_.vulkanMemoryModelDeviceScope, // enable if supported
   };
   VkPhysicalDeviceVulkan13Features deviceFeatures13 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
@@ -6277,9 +6276,9 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     }
   };
 
- #if defined(LVK_WITH_TRACY)
+#if defined(LVK_WITH_TRACY)
   addOptionalExtension(VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME, hasCalibratedTimestamps_, nullptr);
- #endif
+#endif
   addOptionalExtensions(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME,
                         VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME,
                         hasAccelerationStructure_,
@@ -6578,7 +6577,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     VK_ASSERT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, timeDomains.data()));
   }
 
-  const bool hasHostQuery = vkFeatures12_.hostQueryReset && [&timeDomains]()->bool {
+  const bool hasHostQuery = vkFeatures12_.hostQueryReset && [&timeDomains]() -> bool {
     for (VkTimeDomainEXT domain : timeDomains)
       if (domain == VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT || domain == VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_EXT)
         return true;
