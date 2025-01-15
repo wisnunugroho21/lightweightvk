@@ -61,6 +61,7 @@ typedef struct glslang_resource_s glslang_resource_t;
 namespace lvk {
 
 VkSemaphore createSemaphore(VkDevice device, const char* debugName);
+VkSemaphore createSemaphoreTimeline(VkDevice device, uint64_t initialValue, const char* debugName);
 VkFence createFence(VkDevice device, const char* debugName);
 VmaAllocator createVmaAllocator(VkPhysicalDevice physDev, VkDevice device, VkInstance instance, uint32_t apiVersion);
 uint32_t findQueueFamilyIndex(VkPhysicalDevice physDev, VkQueueFlags flags);

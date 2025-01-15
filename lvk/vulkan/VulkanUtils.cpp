@@ -268,6 +268,23 @@ VkSemaphore lvk::createSemaphore(VkDevice device, const char* debugName) {
   return semaphore;
 }
 
+VkSemaphore lvk::createSemaphoreTimeline(VkDevice device, uint64_t initialValue, const char* debugName) {
+  const VkSemaphoreTypeCreateInfo semaphoreTypeCreateInfo = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+      .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+      .initialValue = initialValue,
+  };
+  const VkSemaphoreCreateInfo ci = {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      .pNext = &semaphoreTypeCreateInfo,
+      .flags = 0,
+  };
+  VkSemaphore semaphore = VK_NULL_HANDLE;
+  VK_ASSERT(vkCreateSemaphore(device, &ci, nullptr, &semaphore));
+  VK_ASSERT(lvk::setDebugObjectName(device, VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)semaphore, debugName));
+  return semaphore;
+}
+
 VkFence lvk::createFence(VkDevice device, const char* debugName) {
   const VkFenceCreateInfo ci = {
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
