@@ -1151,19 +1151,19 @@ constexpr uint32_t calcNumMipLevels(uint32_t width, uint32_t height) {
  *   The actual values in pixels are returned in parameters.
  */
 GLFWwindow* initWindow(const char* windowTitle, int& outWidth, int& outHeight, bool resizable = false);
-std::unique_ptr<lvk::IContext> createVulkanContextWithSwapchain(GLFWwindow* window,
-                                                                uint32_t width,
-                                                                uint32_t height,
-                                                                const lvk::ContextConfig& cfg,
-                                                                lvk::HWDeviceType preferredDeviceType = lvk::HWDeviceType_Discrete);
-#endif
+#endif // LVK_WITH_GLFW
 
+#if LVK_WITH_GLFW || defined(ANDROID)
 #if defined(ANDROID)
-std::unique_ptr<lvk::IContext> createVulkanContextWithSwapchain(ANativeWindow* window,
+using LVKwindow = ANativeWindow;
+#else
+using LVKwindow = GLFWwindow;
+#endif
+std::unique_ptr<lvk::IContext> createVulkanContextWithSwapchain(LVKwindow* window,
                                                                 uint32_t width,
                                                                 uint32_t height,
                                                                 const lvk::ContextConfig& cfg,
                                                                 lvk::HWDeviceType preferredDeviceType = lvk::HWDeviceType_Discrete);
-#endif
+#endif // LVK_WITH_GLFW || defined(ANDROID)
 
 } // namespace lvk

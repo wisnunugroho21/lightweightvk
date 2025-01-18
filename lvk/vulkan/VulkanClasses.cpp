@@ -5996,7 +5996,7 @@ uint32_t lvk::VulkanContext::queryDevices(HWDeviceType deviceType, HWDeviceDesc*
   std::vector<VkPhysicalDevice> vkDevices(deviceCount);
   VK_ASSERT(vkEnumeratePhysicalDevices(vkInstance_, &deviceCount, vkDevices.data()));
 
-  auto convertVulkanDeviceTypeToIGL = [](VkPhysicalDeviceType vkDeviceType) -> HWDeviceType {
+  auto convertVulkanDeviceTypeToLVK = [](VkPhysicalDeviceType vkDeviceType) -> HWDeviceType {
     switch (vkDeviceType) {
     case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
       return HWDeviceType_Integrated;
@@ -6020,7 +6020,7 @@ uint32_t lvk::VulkanContext::queryDevices(HWDeviceType deviceType, HWDeviceDesc*
     VkPhysicalDeviceProperties deviceProperties;
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
 
-    const HWDeviceType deviceType = convertVulkanDeviceTypeToIGL(deviceProperties.deviceType);
+    const HWDeviceType deviceType = convertVulkanDeviceTypeToLVK(deviceProperties.deviceType);
 
     // filter non-suitable hardware devices
     if (desiredDeviceType != HWDeviceType_Software && desiredDeviceType != deviceType) {
@@ -6301,16 +6301,6 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     addOptionalExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, has8BitIndices_, &indexTypeUint8Features);
   }
 
-  const VkDeviceCreateInfo ci = {
-      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
-      .pNext = createInfoNext,
-      .queueCreateInfoCount = numQueues,
-      .pQueueCreateInfos = ciQueue,
-      .enabledExtensionCount = (uint32_t)deviceExtensionNames.size(),
-      .ppEnabledExtensionNames = deviceExtensionNames.data(),
-      .pEnabledFeatures = &deviceFeatures10,
-  };
-
   // check extensions
   {
     std::string missingExtensions;
@@ -6485,6 +6475,15 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     }
   }
 
+  const VkDeviceCreateInfo ci = {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .pNext = createInfoNext,
+      .queueCreateInfoCount = numQueues,
+      .pQueueCreateInfos = ciQueue,
+      .enabledExtensionCount = (uint32_t)deviceExtensionNames.size(),
+      .ppEnabledExtensionNames = deviceExtensionNames.data(),
+      .pEnabledFeatures = &deviceFeatures10,
+  };
   VK_ASSERT_RETURN(vkCreateDevice(vkPhysicalDevice_, &ci, nullptr, &vkDevice_));
 
   volkLoadDevice(vkDevice_);
@@ -6624,7 +6623,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     };
   }
   LVK_ASSERT(pimpl_->tracyVkCtx_);
-#endif // IGL_WITH_TRACY_GPU
+#endif // LVK_WITH_TRACY_GPU
 
   return Result();
 }
