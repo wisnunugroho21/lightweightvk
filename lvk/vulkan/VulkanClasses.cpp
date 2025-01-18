@@ -571,9 +571,9 @@ lvk::Result validateRange(const VkExtent3D& ext, uint32_t numLevels, const lvk::
     return lvk::Result{lvk::Result::Code::ArgumentOutOfRange, "range.mipLevel exceeds texture mip-levels"};
   }
 
-  const auto texWidth = std::max(ext.width >> range.mipLevel, 1u);
-  const auto texHeight = std::max(ext.height >> range.mipLevel, 1u);
-  const auto texDepth = std::max(ext.depth >> range.mipLevel, 1u);
+  const uint32_t texWidth = std::max(ext.width >> range.mipLevel, 1u);
+  const uint32_t texHeight = std::max(ext.height >> range.mipLevel, 1u);
+  const uint32_t texDepth = std::max(ext.depth >> range.mipLevel, 1u);
 
   if (range.dimensions.width > texWidth || range.dimensions.height > texHeight || range.dimensions.depth > texDepth) {
     return lvk::Result{lvk::Result::Code::ArgumentOutOfRange, "range dimensions exceed texture dimensions"};
@@ -1858,7 +1858,7 @@ VkResult lvk::VulkanPipelineBuilder::build(VkDevice device,
       .basePipelineIndex = -1,
   };
 
-  const auto result = vkCreateGraphicsPipelines(device, pipelineCache, 1, &ci, nullptr, outPipeline);
+  const VkResult result = vkCreateGraphicsPipelines(device, pipelineCache, 1, &ci, nullptr, outPipeline);
 
   if (!LVK_VERIFY(result == VK_SUCCESS)) {
     return result;
@@ -2107,7 +2107,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
 
   // transition all the color attachments
   for (uint32_t i = 0; i != numFbColorAttachments; i++) {
-    if (const auto handle = fb.color[i].texture) {
+    if (TextureHandle handle = fb.color[i].texture) {
       lvk::VulkanImage* colorTex = ctx_->texturesPool_.get(handle);
       transitionToColorAttachment(wrapper_->cmdBuf_, colorTex);
     }
@@ -3102,7 +3102,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
   // https://registry.khronos.org/KTX/specs/1.0/ktxspec.v1.html
   for (uint32_t mipLevel = 0; mipLevel < numMipLevels; ++mipLevel) {
     for (uint32_t layer = 0; layer != numLayers; layer++) {
-      const auto currentMipLevel = baseMipLevel + mipLevel;
+      const uint32_t currentMipLevel = baseMipLevel + mipLevel;
 
       LVK_ASSERT(currentMipLevel < image.numLevels_);
       LVK_ASSERT(mipLevel < image.numLevels_);
@@ -7153,12 +7153,12 @@ VkFormat lvk::VulkanContext::getClosestDepthStencilFormat(lvk::Format desiredFor
 
   // Generate a set of device supported formats
   std::set<VkFormat> availableFormats;
-  for (auto format : deviceDepthFormats_) {
+  for (VkFormat format : deviceDepthFormats_) {
     availableFormats.insert(format);
   }
 
   // check if any of the format in compatible list is supported
-  for (auto depthStencilFormat : compatibleDepthStencilFormatList) {
+  for (VkFormat depthStencilFormat : compatibleDepthStencilFormatList) {
     if (availableFormats.count(depthStencilFormat) != 0) {
       return depthStencilFormat;
     }
