@@ -1353,7 +1353,7 @@ lvk::VulkanImmediateCommands::~VulkanImmediateCommands() {
 
   waitAll();
 
-  for (auto& buf : buffers_) {
+  for (CommandBufferWrapper& buf : buffers_) {
     // lifetimes of all VkFence objects are managed explicitly we do not use deferredTask() for them
     vkDestroyFence(device_, buf.fence_, nullptr);
     vkDestroySemaphore(device_, buf.semaphore_, nullptr);
@@ -1407,7 +1407,7 @@ const lvk::VulkanImmediateCommands::CommandBufferWrapper& lvk::VulkanImmediateCo
   VulkanImmediateCommands::CommandBufferWrapper* current = nullptr;
 
   // we are ok with any available buffer
-  for (auto& buf : buffers_) {
+  for (CommandBufferWrapper& buf : buffers_) {
     if (buf.cmdBuf_ == VK_NULL_HANDLE) {
       current = &buf;
       break;
