@@ -660,7 +660,7 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
   LVK_ASSERT(!formats.empty());
 
   auto isNativeSwapChainBGR = [](const std::vector<VkSurfaceFormatKHR>& formats) -> bool {
-    for (auto& fmt : formats) {
+    for (const VkSurfaceFormatKHR& fmt : formats) {
       // The preferred format should be the one which is closer to the beginning of the formats
       // container. If BGR is encountered earlier, it should be picked as the format of choice. If RGB
       // happens to be earlier, take it.
@@ -1334,7 +1334,7 @@ lvk::VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device, uint32_t 
   };
 
   for (uint32_t i = 0; i != kMaxCommandBuffers; i++) {
-    auto& buf = buffers_[i];
+    CommandBufferWrapper& buf = buffers_[i];
     char fenceName[256] = {0};
     char semaphoreName[256] = {0};
     if (debugName) {
@@ -1466,7 +1466,7 @@ void lvk::VulkanImmediateCommands::waitAll() {
 
   uint32_t numFences = 0;
 
-  for (const auto& buf : buffers_) {
+  for (const CommandBufferWrapper& buf : buffers_) {
     if (buf.cmdBuf_ != VK_NULL_HANDLE && !buf.isEncoding_) {
       fences[numFences++] = buf.fence_;
     }
@@ -2143,7 +2143,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
     LVK_ASSERT(!attachment.texture.empty());
 
     lvk::VulkanImage& colorTexture = *ctx_->texturesPool_.get(attachment.texture);
-    const auto& descColor = renderPass.color[i];
+    const lvk::RenderPass::AttachmentDesc& descColor = renderPass.color[i];
     if (mipLevel && descColor.level) {
       LVK_ASSERT_MSG(descColor.level == mipLevel, "All color attachments should have the same mip-level");
     }
@@ -2185,7 +2185,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
   VkRenderingAttachmentInfo depthAttachment = {};
 
   if (fb.depthStencil.texture) {
-    auto& depthTexture = *ctx_->texturesPool_.get(fb.depthStencil.texture);
+    lvk::VulkanImage& depthTexture = *ctx_->texturesPool_.get(fb.depthStencil.texture);
     const RenderPass::AttachmentDesc& descDepth = renderPass.depth;
     LVK_ASSERT_MSG(descDepth.level == mipLevel, "Depth attachment should have the same mip-level as color attachments");
     depthAttachment = {
@@ -2267,7 +2267,7 @@ void lvk::CommandBuffer::cmdEndRendering() {
 
   // set image layouts after the render pass
   for (uint32_t i = 0; i != numFbColorAttachments; i++) {
-    const auto& attachment = framebuffer_.color[i];
+    const lvk::Framebuffer::AttachmentDesc& attachment = framebuffer_.color[i];
     const VulkanImage& tex = *ctx_->texturesPool_.get(attachment.texture);
     // this must match the final layout of the render pass
     tex.vkImageLayout_ = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -2953,7 +2953,7 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
 lvk::VulkanStagingDevice::VulkanStagingDevice(VulkanContext& ctx) : ctx_(ctx) {
   LVK_PROFILER_FUNCTION();
 
-  const auto& limits = ctx_.getVkPhysicalDeviceProperties().limits;
+  const VkPhysicalDeviceLimits& limits = ctx_.getVkPhysicalDeviceProperties().limits;
 
   // use default value of 128Mb clamped to the max limits
   maxBufferSize_ = std::min(limits.maxStorageBufferRange, 128u * 1024u * 1024u);
@@ -2988,7 +2988,7 @@ void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOff
         .size = chunkSize,
     };
 
-    auto& wrapper = ctx_.immediate_->acquire();
+    const lvk::VulkanImmediateCommands::CommandBufferWrapper& wrapper = ctx_.immediate_->acquire();
     vkCmdCopyBuffer(wrapper.cmdBuf_, stagingBuffer->vkBuffer_, buffer.vkBuffer_, 1, &copy);
     VkBufferMemoryBarrier barrier = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
@@ -3072,7 +3072,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
   }
   LVK_ASSERT(desc.size_ >= storageSize);
 
-  auto& wrapper = ctx_.immediate_->acquire();
+  const lvk::VulkanImmediateCommands::CommandBufferWrapper& wrapper = ctx_.immediate_->acquire();
 
   lvk::VulkanBuffer* stagingBuffer = ctx_.buffersPool_.get(stagingBuffer_);
 
@@ -3201,7 +3201,7 @@ void lvk::VulkanStagingDevice::imageData3D(VulkanImage& image,
   // 1. Copy the pixel data into the host visible staging buffer
   stagingBuffer->bufferSubData(ctx_, desc.offset_, storageSize, data);
 
-  auto& wrapper = ctx_.immediate_->acquire();
+  const lvk::VulkanImmediateCommands::CommandBufferWrapper& wrapper = ctx_.immediate_->acquire();
 
   // 1. Transition initial image layout into TRANSFER_DST_OPTIMAL
   lvk::imageMemoryBarrier(wrapper.cmdBuf_,
@@ -3271,7 +3271,7 @@ void lvk::VulkanStagingDevice::getImageData(VulkanImage& image,
 
   lvk::VulkanBuffer* stagingBuffer = ctx_.buffersPool_.get(stagingBuffer_);
 
-  auto& wrapper1 = ctx_.immediate_->acquire();
+  const lvk::VulkanImmediateCommands::CommandBufferWrapper& wrapper1 = ctx_.immediate_->acquire();
 
   // 1. Transition to VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL
   lvk::imageMemoryBarrier(wrapper1.cmdBuf_,
@@ -3314,7 +3314,7 @@ void lvk::VulkanStagingDevice::getImageData(VulkanImage& image,
   memcpy(outData, stagingBuffer->getMappedPtr() + desc.offset_, storageSize);
 
   // 4. Transition back to the initial image layout
-  auto& wrapper2 = ctx_.immediate_->acquire();
+  const lvk::VulkanImmediateCommands::CommandBufferWrapper& wrapper2 = ctx_.immediate_->acquire();
 
   lvk::imageMemoryBarrier(wrapper2.cmdBuf_,
                           image.vkImage_,
@@ -3446,7 +3446,7 @@ lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFree
 void lvk::VulkanStagingDevice::waitAndReset() {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_WAIT);
 
-  for (const auto& r : regions_) {
+  for (const MemoryRegionDesc& r : regions_) {
     ctx_.immediate_->wait(r.handle_);
   };
 
@@ -3497,7 +3497,7 @@ lvk::VulkanContext::~VulkanContext() {
 
   destroy(dummyTexture_);
 
-  for (auto& data : pimpl_->ycbcrConversionData_) {
+  for (VulkanContextImpl::YcbcrConversionData& data : pimpl_->ycbcrConversionData_) {
     if (data.info.conversion != VK_NULL_HANDLE) {
       vkDestroySamplerYcbcrConversion(vkDevice_, data.info.conversion, nullptr);
       data.sampler.reset();
@@ -4548,7 +4548,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
   VkFormat colorAttachmentFormats[LVK_MAX_COLOR_ATTACHMENTS] = {};
 
   for (uint32_t i = 0; i != numColorAttachments; i++) {
-    const auto& attachment = desc.color[i];
+    const lvk::ColorAttachment& attachment = desc.color[i];
     LVK_ASSERT(attachment.format != Format_Invalid);
     colorAttachmentFormats[i] = formatToVkFormat(attachment.format);
     if (!attachment.blendEnabled) {
@@ -4877,7 +4877,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   VK_ASSERT(vkCreateRayTracingPipelinesKHR(vkDevice_, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &ciRayTracingPipeline, nullptr, &rtps->pipeline_));
 
   // shader binding table
-  const auto& props = rayTracingPipelineProperties_;
+  const VkPhysicalDeviceRayTracingPipelinePropertiesKHR& props = rayTracingPipelineProperties_;
   const uint32_t handleSize = props.shaderGroupHandleSize;
   const uint32_t handleSizeAligned = getAlignedSize(props.shaderGroupHandleSize, props.shaderGroupHandleAlignment);
   const uint32_t sbtSize = numShaderGroups * handleSizeAligned;
@@ -5085,7 +5085,7 @@ lvk::Holder<lvk::RenderPipelineHandle> lvk::VulkanContext::createRenderPipeline(
   rps.numAttributes_ = vstate.getNumAttributes();
 
   for (uint32_t i = 0; i != rps.numAttributes_; i++) {
-    const auto& attr = vstate.attributes[i];
+    const VertexInput::VertexAttribute& attr = vstate.attributes[i];
 
     rps.vkAttributes_[i] = {
         .location = attr.location, .binding = attr.binding, .format = vertexFormatToVkFormat(attr.format), .offset = (uint32_t)attr.offset};
@@ -5523,7 +5523,7 @@ void lvk::VulkanContext::generateMipmap(TextureHandle handle) const {
   }
 
   LVK_ASSERT(tex->vkImageLayout_ != VK_IMAGE_LAYOUT_UNDEFINED);
-  const auto& wrapper = immediate_->acquire();
+  const lvk::VulkanImmediateCommands::CommandBufferWrapper& wrapper = immediate_->acquire();
   tex->generateMipmap(wrapper.cmdBuf_);
   immediate_->submit(wrapper);
 }
@@ -5935,7 +5935,7 @@ void lvk::VulkanContext::createInstance() {
   // log available instance extensions
   LLOGL("\nVulkan instance extensions:\n");
 
-  for (const auto& extension : allInstanceExtensions) {
+  for (const VkExtensionProperties& extension : allInstanceExtensions) {
     LLOGL("  %s\n", extension.extensionName);
   }
 }
@@ -6088,7 +6088,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   LLOGL("Vulkan physical device extensions:\n");
 
   // log available physical device extensions
-  for (const auto& ext : allDeviceExtensions) {
+  for (const VkExtensionProperties& ext : allDeviceExtensions) {
     LLOGL("  %s\n", ext.extensionName);
   }
 
@@ -7114,7 +7114,7 @@ void lvk::VulkanContext::querySurfaceCapabilities() {
   // enumerate only the formats we are using
   const VkFormat depthFormats[] = {
       VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT, VK_FORMAT_D16_UNORM_S8_UINT, VK_FORMAT_D32_SFLOAT, VK_FORMAT_D16_UNORM};
-  for (const auto& depthFormat : depthFormats) {
+  for (const VkFormat& depthFormat : depthFormats) {
     VkFormatProperties formatProps;
     vkGetPhysicalDeviceFormatProperties(vkPhysicalDevice_, depthFormat, &formatProps);
 
