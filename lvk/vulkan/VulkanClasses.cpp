@@ -6979,7 +6979,11 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   infoSamplers.reserve(samplersPool_.objects_.size());
 
   for (const auto& sampler : samplersPool_.objects_) {
-    infoSamplers.push_back({sampler.obj_ ? sampler.obj_ : samplersPool_.objects_[0].obj_, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_UNDEFINED});
+    infoSamplers.push_back({
+        .sampler = sampler.obj_ ? sampler.obj_ : samplersPool_.objects_[0].obj_,
+        .imageView = VK_NULL_HANDLE,
+        .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    });
   }
 
   // 3. Acceleration structures
