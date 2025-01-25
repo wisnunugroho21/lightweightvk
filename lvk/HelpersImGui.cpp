@@ -185,8 +185,8 @@ void ImGuiRenderer::endFrame(lvk::ICommandBuffer& cmdBuffer) {
 
   ImDrawData* dd = ImGui::GetDrawData();
 
-  int fb_width = (int)(dd->DisplaySize.x * dd->FramebufferScale.x);
-  int fb_height = (int)(dd->DisplaySize.y * dd->FramebufferScale.y);
+  const float fb_width = dd->DisplaySize.x * dd->FramebufferScale.x;
+  const float fb_height = dd->DisplaySize.y * dd->FramebufferScale.y;
   if (fb_width <= 0 || fb_height <= 0 || dd->CmdListsCount == 0) {
     return;
   }
@@ -196,8 +196,8 @@ void ImGuiRenderer::endFrame(lvk::ICommandBuffer& cmdBuffer) {
   cmdBuffer.cmdBindViewport({
       .x = 0.0f,
       .y = 0.0f,
-      .width = (dd->DisplaySize.x * dd->FramebufferScale.x),
-      .height = (dd->DisplaySize.y * dd->FramebufferScale.y),
+      .width = fb_width,
+      .height = fb_height,
   });
 
   const float L = dd->DisplayPos.x;
@@ -263,8 +263,8 @@ void ImGuiRenderer::endFrame(lvk::ICommandBuffer& cmdBuffer) {
       // clang-format off
       if (clipMin.x < 0.0f) clipMin.x = 0.0f;
       if (clipMin.y < 0.0f) clipMin.y = 0.0f;
-      if (clipMax.x > fb_width ) clipMax.x = (float)fb_width;
-      if (clipMax.y > fb_height) clipMax.y = (float)fb_height;
+      if (clipMax.x > fb_width ) clipMax.x = fb_width;
+      if (clipMax.y > fb_height) clipMax.y = fb_height;
       if (clipMax.x <= clipMin.x || clipMax.y <= clipMin.y)
          continue;
       // clang-format on
