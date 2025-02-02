@@ -6518,7 +6518,8 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   }
 
   if (LVK_VULKAN_USE_VMA) {
-    pimpl_->vma_ = lvk::createVmaAllocator(vkPhysicalDevice_, vkDevice_, vkInstance_, apiVersion);
+    pimpl_->vma_ = lvk::createVmaAllocator(
+        vkPhysicalDevice_, vkDevice_, vkInstance_, apiVersion > VK_API_VERSION_1_3 ? VK_API_VERSION_1_3 : apiVersion);
     LVK_ASSERT(pimpl_->vma_ != VK_NULL_HANDLE);
   }
 
