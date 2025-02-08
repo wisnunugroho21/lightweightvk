@@ -3556,9 +3556,10 @@ lvk::VulkanContext::~VulkanContext() {
   // Device has to be destroyed prior to Instance
   vkDestroyDevice(vkDevice_, nullptr);
 
-  if (vkDebugUtilsMessenger_ != VK_NULL_HANDLE) {
+  if (vkDebugUtilsMessenger_) {
     vkDestroyDebugUtilsMessengerEXT(vkInstance_, vkDebugUtilsMessenger_, nullptr);
   }
+
   vkDestroyInstance(vkInstance_, nullptr);
 
   glslang_finalize_process();
@@ -5795,26 +5796,26 @@ void lvk::VulkanContext::createInstance() {
     }();
   }
 
-  uint32_t count = 0;
-  VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr));
-
-  std::vector<VkExtensionProperties> allInstanceExtensions(count);
-  VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &count, allInstanceExtensions.data()));
-  if (config_.enableValidation) {
-    for (const char *layer: kDefaultValidationLayers) {
-      uint32_t extCount = 0;
-      VK_ASSERT(vkEnumerateInstanceExtensionProperties(layer, &extCount, nullptr));
-      if (extCount > 0) {
-        const auto sz = allInstanceExtensions.size();
-        allInstanceExtensions.resize(sz + extCount);
-        VK_ASSERT(vkEnumerateInstanceExtensionProperties(layer, &extCount,
-                                                         allInstanceExtensions.data() + sz));
+  std::vector<VkExtensionProperties> allInstanceExtensions;
+  {
+    uint32_t count = 0;
+    VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr));
+    allInstanceExtensions.resize(count);
+    VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &count, allInstanceExtensions.data()));
+  }
+  // collect instance extensions from all validation layers
+    if (config_.enableValidation) {
+      for (const char* layer : kDefaultValidationLayers) {
+        uint32_t count = 0;
+        VK_ASSERT(vkEnumerateInstanceExtensionProperties(layer, &count, nullptr));
+        if (count > 0) {
+          const size_t sz = allInstanceExtensions.size();
+          allInstanceExtensions.resize(sz + count);
+          VK_ASSERT(vkEnumerateInstanceExtensionProperties(layer, &count, allInstanceExtensions.data() + sz));
+        }
       }
     }
-  }
 
-  // check if we have debug utils extension
-  const bool debugUtilsAvailable = hasExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, allInstanceExtensions);
 
   std::vector<const char*> instanceExtensionNames = {
     VK_KHR_SURFACE_EXTENSION_NAME,
@@ -5837,7 +5838,10 @@ void lvk::VulkanContext::createInstance() {
 #endif
   };
 
-  if (debugUtilsAvailable) {
+  // check if we have the VK_EXT_debug_utils extension
+  const bool hasDebugUtils = hasExtension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME, allInstanceExtensions);
+
+  if (hasDebugUtils) {
     instanceExtensionNames.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
   }
 
@@ -5945,7 +5949,7 @@ void lvk::VulkanContext::createInstance() {
   volkLoadInstance(vkInstance_);
 
   // debug messenger
-  if (debugUtilsAvailable) {
+  if (hasDebugUtils) {
     const VkDebugUtilsMessengerCreateInfoEXT ci = {
         .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
         .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT |
