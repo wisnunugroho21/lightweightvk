@@ -5816,7 +5816,6 @@ void lvk::VulkanContext::createInstance() {
       }
     }
 
-
   std::vector<const char*> instanceExtensionNames = {
     VK_KHR_SURFACE_EXTENSION_NAME,
 #if defined(_WIN32)
