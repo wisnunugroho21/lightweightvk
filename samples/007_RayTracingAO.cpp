@@ -397,7 +397,17 @@ lvk::Holder<lvk::AccelStructHandle> BLAS;
 lvk::Holder<lvk::AccelStructHandle> TLAS;
 
 // scene navigation
+#define USE_SPONZA 0
+
+#if USE_SPONZA
+#define MODEL_PATH "src/Sponza/sponza.obj"
+CameraPositioner_FirstPerson positioner_(vec3(-25, 10, -1), vec3(10, 10, 0), vec3(0, 1, 0));
+vec3 lightDir_ = normalize(vec3(0.05f, 1.0f, 0.01f));
+#else
+#define MODEL_PATH "src/bistro/Exterior/exterior.obj"
 CameraPositioner_FirstPerson positioner_(vec3(-100, 40, -47), vec3(0, 35, 0), vec3(0, 1, 0));
+vec3 lightDir_ = normalize(vec3(0.032f, 0.835f, 0.549f));
+#endif
 Camera camera_(positioner_);
 glm::vec2 mousePos_ = glm::vec2(0.0f);
 bool mousePressed_ = false;
@@ -413,8 +423,6 @@ float aoPower_ = 1.0f;
 bool timeVaryingNoise = false;
 
 uint32_t frameId = 0;
-
-vec3 lightDir_ = normalize(vec3(0.032f, 0.835f, 0.549f));
 
 struct VertexData {
   vec3 position;
@@ -563,9 +571,9 @@ bool loadAndCache(const char* cacheFileName) {
   LVK_PROFILER_FUNCTION();
 
   // load 3D model and cache it
-  LLOGL("Loading `exterior.obj`... It can take a while in debug builds...\n");
+  LLOGL("Loading `%s`... It can take a while in debug builds...\n", MODEL_PATH);
 
-  fastObjMesh* mesh = fast_obj_read((folderContentRoot + "src/bistro/Exterior/exterior.obj").c_str());
+  fastObjMesh* mesh = fast_obj_read((folderContentRoot + MODEL_PATH).c_str());
   SCOPE_EXIT {
     if (mesh)
       fast_obj_destroy(mesh);
