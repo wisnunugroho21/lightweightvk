@@ -37,18 +37,20 @@
 #include <lvk/LVK.h>
 
 constexpr uint32_t kMeshCacheVersion = 0xC0DE000A;
+
+#if defined(ANDROID)
+constexpr int kNumSamplesMSAA = 1;
+constexpr int kFramebufferScalar = 2;
+#else
 constexpr int kNumSamplesMSAA = 4;
+constexpr int kFramebufferScalar = 1;
+#endif // ANDROID
+
 #if defined(NDEBUG)
 constexpr bool kEnableValidationLayers = false;
 #else
 constexpr bool kEnableValidationLayers = true;
 #endif // NDEBUG
-
-#if defined(ANDROID)
-constexpr int kFramebufferScalar = 2;
-#else
-constexpr int kFramebufferScalar = 1;
-#endif
 
 std::string folderThirdParty;
 std::string folderContentRoot;
@@ -403,8 +405,9 @@ bool mousePressed_ = false;
 bool enableShadows_ = true;
 bool enableAO_ = true;
 
-int aoSamples_ = 4;
-bool aoDistanceBased_ = false;
+int aoSamples_ = 2;
+bool aoDistanceBased_ = true;
+
 float aoRadius_ = 8.0f;
 float aoPower_ = 1.0f;
 bool timeVaryingNoise = false;
@@ -938,10 +941,12 @@ void render(double delta, uint32_t frameIndex) {
 
     const float indentSize = 16.0f;
     ImGui::Begin("Keyboard hints:", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+#if !defined(ANDROID)
     ImGui::Text("W/S/A/D - camera movement");
     ImGui::Text("1/2 - camera up/down");
     ImGui::Text("Shift - fast movement");
     ImGui::Separator();
+#endif
     ImGui::Checkbox("Time-varying noise", &timeVaryingNoise);
     ImGui::Checkbox("Ray traced shadows", &enableShadows_);
     ImGui::Indent(indentSize);
