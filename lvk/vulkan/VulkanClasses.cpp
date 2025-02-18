@@ -7258,3 +7258,8 @@ void lvk::VulkanContext::invokeShaderModuleErrorCallback(int line, int col, cons
     config_.shaderModuleErrorCallback(this, handle, line, col, debugName);
   }
 }
+
+uint32_t lvk::VulkanContext::getMaxStorageBufferSize() const {
+  const VkPhysicalDeviceLimits& limits = getVkPhysicalDeviceProperties().limits;
+  return limits.maxStorageBufferRange;
+}

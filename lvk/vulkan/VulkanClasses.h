@@ -605,6 +605,8 @@ class VulkanContext final : public IContext {
   // for shaders debugging
   void invokeShaderModuleErrorCallback(int line, int col, const char* debugName, VkShaderModule sm);
 
+  [[nodiscard]] uint32_t getMaxStorageBufferSize() const override;
+
  private:
   void createInstance();
   void createSurface(void* window, void* display);
