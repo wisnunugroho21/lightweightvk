@@ -4836,7 +4836,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
       {
           .usage = lvk::BufferUsageBits_ShaderBindingTable,
           .storage = lvk::StorageType_Device,
-          .size = sbtBufferSize,
+          .size = sbtBufferSize + props.shaderGroupBaseAlignment,
           .debugName = "Buffer: SBT",
       },
       nullptr,
