@@ -698,9 +698,7 @@ struct RayTracingPipelineDesc final {
 #define GET_SHADER_GROUP_SIZE(name, module) \
   [[nodiscard]] uint32_t getShaderGroupSize##name() const { \
     uint32_t n = 0; \
-    while (n < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE && module[n]) { \
-      n++; \
-    } \
+    while (n < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE && module[n]) n++; \
     return n; \
   }
 

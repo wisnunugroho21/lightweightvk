@@ -250,9 +250,9 @@ void init() {
   res.hit_ = ctx_->createShaderModule({codeClosestHit, lvk::Stage_ClosestHit, "Shader Module: main (closesthit)"});
 
   res.pipeline = ctx_->createRayTracingPipeline(lvk::RayTracingPipelineDesc{
-      .smRayGen = {res.raygen_},
-      .smClosestHit = {res.hit_},
-      .smMiss = {res.miss_},
+      .smRayGen = {lvk::ShaderModuleHandle(res.raygen_)},
+      .smClosestHit = {lvk::ShaderModuleHandle(res.hit_)},
+      .smMiss = {lvk::ShaderModuleHandle(res.miss_)},
   });
 }
 
