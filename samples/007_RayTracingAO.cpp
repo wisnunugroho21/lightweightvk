@@ -393,7 +393,7 @@ std::vector<lvk::Holder<lvk::BufferHandle>> ubPerFrame_, ubPerObject_;
 lvk::RenderPass renderPassOffscreen_;
 lvk::RenderPass renderPassZPrepass_;
 lvk::RenderPass renderPassMain_;
-lvk::Holder<lvk::AccelStructHandle> BLAS;
+std::vector<lvk::Holder<lvk::AccelStructHandle>> BLAS;
 lvk::Holder<lvk::AccelStructHandle> TLAS;
 
 // scene navigation
@@ -564,7 +564,7 @@ void destroy() {
   fbOffscreenDepth_ = nullptr;
   fbOffscreenResolve_ = nullptr;
   TLAS = nullptr;
-  BLAS = nullptr;
+  BLAS.clear();
   sbInstances_ = nullptr;
   ctx_ = nullptr;
 }
@@ -742,7 +742,8 @@ bool initModel() {
       .data = &transformMatrix,
   });
 
-  BLAS = ctx_->createAccelerationStructure({
+  const uint32_t totalPrimitiveCount = (uint32_t)indexData_.size() / 3;
+  lvk::AccelStructDesc blasDesc{
       .type = lvk::AccelStructType_BLAS,
       .geometryType = lvk::AccelStructGeomType_Triangles,
       .vertexFormat = lvk::VertexFormat::Float3,
@@ -752,30 +753,53 @@ bool initModel() {
       .indexFormat = lvk::IndexFormat_UI32,
       .indexBuffer = ib0_,
       .transformBuffer = transformBuffer,
-      .buildRange = {.primitiveCount = (uint32_t)indexData_.size() / 3},
+      .buildRange = {.primitiveCount = totalPrimitiveCount},
       .buildFlags = lvk::AccelStructBuildFlagBits_PreferFastTrace,
       .debugName = "BLAS",
-  });
+  };
+  const lvk::AccelStructSizes blasSizes = ctx_->getAccelStructSizes(blasDesc);
+  LLOGL("Full model BLAS sizes buildScratchSize = %llu bytes, accelerationStructureSize = %llu\n",
+        blasSizes.buildScratchSize, blasSizes.accelerationStructureSize);
+  const uint32_t maxStorageBufferSize = ctx_->getMaxStorageBufferSize();
+
+  // Calculate number of BLAS
+  const uint32_t requiredBlasCount = [&blasSizes, maxStorageBufferSize]() {
+    const uint32_t count1 = blasSizes.buildScratchSize / maxStorageBufferSize;
+    const uint32_t count2 = blasSizes.accelerationStructureSize / maxStorageBufferSize;
+    return 1 + (count1 > count2 ? count1 : count2);
+  }();
+  blasDesc.buildRange.primitiveCount = totalPrimitiveCount / requiredBlasCount;
+
+  LVK_ASSERT(requiredBlasCount > 0);
+  LLOGL("maxStorageBufferSize = %u bytes, number of BLAS = %u\n", maxStorageBufferSize, requiredBlasCount);
 
   const glm::mat3x4 transform(glm::scale(mat4(1.0f), vec3(0.05f)));
+  BLAS.reserve(requiredBlasCount);
 
-  const lvk::AccelStructInstance instance{
-      // clang-format off
-      .transform = (const lvk::mat3x4&)transform,
-      // clang-format on
-      .instanceCustomIndex = 0,
-      .mask = 0xff,
-      .instanceShaderBindingTableRecordOffset = 0,
-      .flags = lvk::AccelStructInstanceFlagBits_TriangleFacingCullDisable,
-      .accelerationStructureReference = ctx_->gpuAddress(BLAS),
-  };
+  std::vector<lvk::AccelStructInstance> instances;
+  instances.reserve(requiredBlasCount);
+  const uint32_t primitiveCount = blasDesc.buildRange.primitiveCount;
+  for (uint32_t i = 0; i < totalPrimitiveCount; i += primitiveCount) {
+    const int rest = (int)totalPrimitiveCount - i;
+    blasDesc.buildRange.primitiveOffset = i * 3 * sizeof(uint32_t);
+    blasDesc.buildRange.primitiveCount = (primitiveCount < rest) ? primitiveCount : rest;
+    BLAS.emplace_back(ctx_->createAccelerationStructure(blasDesc));
+    instances.emplace_back(lvk::AccelStructInstance{
+        .transform = (const lvk::mat3x4&)transform,
+        .instanceCustomIndex = 0,
+        .mask = 0xff,
+        .instanceShaderBindingTableRecordOffset = 0,
+        .flags = lvk::AccelStructInstanceFlagBits_TriangleFacingCullDisable,
+        .accelerationStructureReference = ctx_->gpuAddress(BLAS.back()),
+    });
+  }
 
   // Buffer for instance data
   sbInstances_ = ctx_->createBuffer(lvk::BufferDesc{
       .usage = lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
       .storage = lvk::StorageType_HostVisible,
-      .size = sizeof(lvk::AccelStructInstance),
-      .data = &instance,
+      .size = sizeof(lvk::AccelStructInstance) * instances.size(),
+      .data = instances.data(),
       .debugName = "sbInstances_",
   });
 
@@ -783,7 +807,7 @@ bool initModel() {
       .type = lvk::AccelStructType_TLAS,
       .geometryType = lvk::AccelStructGeomType_Instances,
       .instancesBuffer = sbInstances_,
-      .buildRange = {.primitiveCount = 1},
+      .buildRange = {.primitiveCount = (uint32_t)instances.size()},
       .buildFlags = lvk::AccelStructBuildFlagBits_PreferFastTrace,
   });
 
