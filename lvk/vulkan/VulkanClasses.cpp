@@ -4673,21 +4673,43 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   // build a new Vulkan ray tracing pipeline
   const RayTracingPipelineDesc& desc = rtps->desc_;
 
-  const lvk::ShaderModuleState* moduleRGen = shaderModulesPool_.get(desc.smRayGen);
-  const lvk::ShaderModuleState* moduleAHit = shaderModulesPool_.get(desc.smAnyHit);
-  const lvk::ShaderModuleState* moduleCHit = shaderModulesPool_.get(desc.smClosestHit);
-  const lvk::ShaderModuleState* moduleMiss = shaderModulesPool_.get(desc.smMiss);
-  const lvk::ShaderModuleState* moduleIntr = shaderModulesPool_.get(desc.smIntersection);
-  const lvk::ShaderModuleState* moduleCall = shaderModulesPool_.get(desc.smCallable);
+  const lvk::ShaderModuleState* moduleRGen[LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE] = {};
+  const lvk::ShaderModuleState* moduleAHit[LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE] = {};
+  const lvk::ShaderModuleState* moduleCHit[LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE] = {};
+  const lvk::ShaderModuleState* moduleMiss[LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE] = {};
+  const lvk::ShaderModuleState* moduleIntr[LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE] = {};
+  const lvk::ShaderModuleState* moduleCall[LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE] = {};
+  for (int i = 0; i < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE; ++i) {
+    if (desc.smRayGen[i]) {
+      moduleRGen[i] = shaderModulesPool_.get(desc.smRayGen[i]);
+    }
+    if (desc.smAnyHit[i]) {
+      moduleAHit[i] = shaderModulesPool_.get(desc.smAnyHit[i]);
+    }
+    if (desc.smClosestHit[i]) {
+      moduleCHit[i] = shaderModulesPool_.get(desc.smClosestHit[i]);
+    }
+    if (desc.smMiss[i]) {
+      moduleMiss[i] = shaderModulesPool_.get(desc.smMiss[i]);
+    }
+    if (desc.smIntersection[i]) {
+      moduleIntr[i] = shaderModulesPool_.get(desc.smIntersection[i]);
+    }
+    if (desc.smCallable[i]) {
+      moduleCall[i] = shaderModulesPool_.get(desc.smCallable[i]);
+    }
+  }
 
   LVK_ASSERT(moduleRGen);
 
   // create pipeline layout
   {
-#define UPDATE_PUSH_CONSTANT_SIZE(sm, bit)                                  \
-  if (sm && sm->pushConstantsSize) {                                        \
-    pushConstantsSize = std::max(pushConstantsSize, sm->pushConstantsSize); \
-    rtps->shaderStageFlags_ |= bit;                                         \
+#define UPDATE_PUSH_CONSTANT_SIZE(sm, bit)                                       \
+  for (int i = 0; i < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE; ++i) {              \
+    if (sm[i] && sm[i]->pushConstantsSize) {                                     \
+      pushConstantsSize = std::max(pushConstantsSize, sm[i]->pushConstantsSize); \
+      rtps->shaderStageFlags_ |= bit;                                            \
+    }                                                                            \
   }
     rtps->shaderStageFlags_ = 0;
     uint32_t pushConstantsSize = 0;
@@ -4732,12 +4754,14 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
 
   const VkSpecializationInfo siComp = lvk::getPipelineShaderStageSpecializationInfo(rtps->desc_.specInfo, entries);
 
-  const uint32_t kMaxRayTracingShaderStages = 6;
+  const uint32_t kMaxRayTracingShaderStages = 6 * LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE;
   VkPipelineShaderStageCreateInfo ciShaderStages[kMaxRayTracingShaderStages];
   uint32_t numShaderStages = 0;
-#define ADD_STAGE(shaderModule, vkStageFlag) \
-  if (shaderModule)                          \
-    ciShaderStages[numShaderStages++] = lvk::getPipelineShaderStageCreateInfo(vkStageFlag, shaderModule->sm, "main", &siComp);
+#define ADD_STAGE(shaderModule, vkStageFlag)                                                                                        \
+  for (int i = 0; i < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE; ++i) {                                                                 \
+    if (shaderModule[i])                                                                                                            \
+      ciShaderStages[numShaderStages++] = lvk::getPipelineShaderStageCreateInfo(vkStageFlag, shaderModule[i]->sm, "main", &siComp); \
+  }
   ADD_STAGE(moduleRGen, VK_SHADER_STAGE_RAYGEN_BIT_KHR);
   ADD_STAGE(moduleMiss, VK_SHADER_STAGE_MISS_BIT_KHR);
   ADD_STAGE(moduleCHit, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR);
@@ -4753,52 +4777,63 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
   uint32_t idxMiss = 0;
   uint32_t idxHit = 0;
   uint32_t idxCallable = 0;
-  if (moduleRGen) {
-    // ray generation group
-    shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
-        .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-        .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-        .generalShader = numShaders++,
-        .closestHitShader = VK_SHADER_UNUSED_KHR,
-        .anyHitShader = VK_SHADER_UNUSED_KHR,
-        .intersectionShader = VK_SHADER_UNUSED_KHR,
-    };
+  for (int i = 0; i < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE; ++i) {
+    if (moduleRGen[i]) {
+      // ray generation group
+      shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+          .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+          .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+          .generalShader = numShaders++,
+          .closestHitShader = VK_SHADER_UNUSED_KHR,
+          .anyHitShader = VK_SHADER_UNUSED_KHR,
+          .intersectionShader = VK_SHADER_UNUSED_KHR,
+      };
+    }
   }
-  if (moduleMiss) {
-    // miss group
-    idxMiss = numShaders;
-    shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
-        .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-        .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-        .generalShader = numShaders++,
-        .closestHitShader = VK_SHADER_UNUSED_KHR,
-        .anyHitShader = VK_SHADER_UNUSED_KHR,
-        .intersectionShader = VK_SHADER_UNUSED_KHR,
-    };
+  for (int i = 0; i < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE; ++i) {
+    if (moduleMiss[i]) {
+      // miss group
+      if (i == 0)
+        idxMiss = numShaders;
+      shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+          .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+          .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+          .generalShader = numShaders++,
+          .closestHitShader = VK_SHADER_UNUSED_KHR,
+          .anyHitShader = VK_SHADER_UNUSED_KHR,
+          .intersectionShader = VK_SHADER_UNUSED_KHR,
+      };
+    }
   }
   // hit group
-  if (moduleAHit || moduleCHit || moduleIntr) {
-    idxHit = numShaders;
-    shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
-        .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-        .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
-        .generalShader = VK_SHADER_UNUSED_KHR,
-        .closestHitShader = moduleCHit ? numShaders++ : VK_SHADER_UNUSED_KHR,
-        .anyHitShader = moduleAHit ? numShaders++ : VK_SHADER_UNUSED_KHR,
-        .intersectionShader = moduleIntr ? numShaders++ : VK_SHADER_UNUSED_KHR,
-    };
+  for (int i = 0; i < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE; ++i) {
+    if (moduleAHit[i] || moduleCHit[i] || moduleIntr[i]) {
+      if (i == 0)
+        idxHit = numShaders;
+      shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+          .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+          .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR,
+          .generalShader = VK_SHADER_UNUSED_KHR,
+          .closestHitShader = moduleCHit[i] ? numShaders++ : VK_SHADER_UNUSED_KHR,
+          .anyHitShader = moduleAHit[i] ? numShaders++ : VK_SHADER_UNUSED_KHR,
+          .intersectionShader = moduleIntr[i] ? numShaders++ : VK_SHADER_UNUSED_KHR,
+      };
+    }
   }
   // callable group
-  if (moduleCall) {
-    idxCallable = numShaders;
-    shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
-        .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
-        .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
-        .generalShader = numShaders++,
-        .closestHitShader = VK_SHADER_UNUSED_KHR,
-        .anyHitShader = VK_SHADER_UNUSED_KHR,
-        .intersectionShader = VK_SHADER_UNUSED_KHR,
-    };
+  for (int i = 0; i < LVK_MAX_RAY_TRACING_SHADER_GROUP_SIZE; ++i) {
+    if (moduleCall[i]) {
+      if (i == 0)
+        idxCallable = numShaders;
+      shaderGroups[numShaderGroups++] = VkRayTracingShaderGroupCreateInfoKHR{
+          .sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR,
+          .type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR,
+          .generalShader = numShaders++,
+          .closestHitShader = VK_SHADER_UNUSED_KHR,
+          .anyHitShader = VK_SHADER_UNUSED_KHR,
+          .intersectionShader = VK_SHADER_UNUSED_KHR,
+      };
+    }
   }
 
   const VkRayTracingPipelineCreateInfoKHR ciRayTracingPipeline = {
@@ -4807,7 +4842,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
       .pStages = ciShaderStages,
       .groupCount = numShaderGroups,
       .pGroups = shaderGroups,
-      .maxPipelineRayRecursionDepth = 1,
+      .maxPipelineRayRecursionDepth = rayTracingPipelineProperties_.maxRayRecursionDepth,
       .layout = rtps->pipelineLayout_,
   };
   VK_ASSERT(vkCreateRayTracingPipelinesKHR(vkDevice_, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &ciRayTracingPipeline, nullptr, &rtps->pipeline_));
@@ -6811,7 +6846,8 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
   VkShaderStageFlags stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
                                   VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT;
   if (hasRayTracingPipeline_) {
-    stageFlags |= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+    stageFlags |= (VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR | VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                   VK_SHADER_STAGE_MISS_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR);
   }
   const VkDescriptorSetLayoutBinding bindings[kBinding_NumBindings] = {
       lvk::getDSLBinding(kBinding_Textures, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures, stageFlags),
