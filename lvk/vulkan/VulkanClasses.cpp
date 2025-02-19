@@ -5687,7 +5687,7 @@ bool lvk::VulkanContext::getQueryPoolResults(QueryPoolHandle pool,
   return true;
 }
 
-lvk::AccelStructSizes lvk::VulkanContext::getAccelStructSizes(const AccelStructDesc& desc, Result* outResult) {
+lvk::AccelStructSizes lvk::VulkanContext::getAccelStructSizes(const AccelStructDesc& desc, Result* outResult) const {
   LVK_PROFILER_FUNCTION();
 
   if (!LVK_VERIFY(hasAccelerationStructure_)) {
@@ -6020,8 +6020,9 @@ void lvk::VulkanContext::addNextPhysicalDeviceProperties(void* properties) {
   vkPhysicalDeviceProperties2_.pNext = properties;
 }
 
-void lvk::VulkanContext::getBuildInfoBLAS(const AccelStructDesc& desc, VkAccelerationStructureGeometryKHR& geom,
-                                          VkAccelerationStructureBuildSizesInfoKHR& sizeInfo) {
+void lvk::VulkanContext::getBuildInfoBLAS(const AccelStructDesc& desc,
+                                          VkAccelerationStructureGeometryKHR& outGeometry,
+                                          VkAccelerationStructureBuildSizesInfoKHR& outSizesInfo) const {
   LVK_ASSERT(desc.type == AccelStructType_BLAS);
   LVK_ASSERT(desc.geometryType == AccelStructGeomType_Triangles);
   LVK_ASSERT(desc.numVertices);
@@ -6043,7 +6044,7 @@ void lvk::VulkanContext::getBuildInfoBLAS(const AccelStructDesc& desc, VkAcceler
     geometryFlags |= VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
   }
 
-  geom = VkAccelerationStructureGeometryKHR{
+  outGeometry = VkAccelerationStructureGeometryKHR{
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
       .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
       .geometry =
@@ -6068,19 +6069,20 @@ void lvk::VulkanContext::getBuildInfoBLAS(const AccelStructDesc& desc, VkAcceler
       .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
       .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
       .geometryCount = 1,
-      .pGeometries = &geom,
+      .pGeometries = &outGeometry,
   };
 
-  sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+  outSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
   vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
                                           VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
                                           &accelerationBuildGeometryInfo,
                                           &desc.buildRange.primitiveCount,
-                                          &sizeInfo);
+                                          &outSizesInfo);
 }
 
-void lvk::VulkanContext::getBuildInfoTLAS(const AccelStructDesc& desc, VkAccelerationStructureGeometryKHR& geom,
-                                          VkAccelerationStructureBuildSizesInfoKHR& sizeInfo) {
+void lvk::VulkanContext::getBuildInfoTLAS(const AccelStructDesc& desc,
+                                          VkAccelerationStructureGeometryKHR& outGeometry,
+                                          VkAccelerationStructureBuildSizesInfoKHR& outSizesInfo) const {
   LVK_ASSERT(desc.type == AccelStructType_TLAS);
   LVK_ASSERT(desc.geometryType == AccelStructGeomType_Instances);
   LVK_ASSERT(desc.numVertices == 0);
@@ -6088,7 +6090,7 @@ void lvk::VulkanContext::getBuildInfoTLAS(const AccelStructDesc& desc, VkAcceler
   LVK_ASSERT(desc.buildRange.primitiveCount);
   LVK_ASSERT(buffersPool_.get(desc.instancesBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
 
-  geom = VkAccelerationStructureGeometryKHR{
+  outGeometry = VkAccelerationStructureGeometryKHR{
       .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
       .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
       .geometry =
@@ -6108,15 +6110,15 @@ void lvk::VulkanContext::getBuildInfoTLAS(const AccelStructDesc& desc, VkAcceler
       .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
       .flags = buildFlagsToVkBuildAccelerationStructureFlags(desc.buildFlags),
       .geometryCount = 1,
-      .pGeometries = &geom,
+      .pGeometries = &outGeometry,
   };
 
-  sizeInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+  outSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
   vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
                                           VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
                                           &accelerationStructureBuildGeometryInfo,
                                           &desc.buildRange.primitiveCount,
-                                          &sizeInfo);
+                                          &outSizesInfo);
 }
 
 lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {

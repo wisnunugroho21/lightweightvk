@@ -1069,7 +1069,7 @@ class IContext {
   [[nodiscard]] virtual uint64_t gpuAddress(AccelStructHandle handle) const = 0;
 
 #pragma region Acceleration structure functions
-  [[nodiscard]] virtual AccelStructSizes getAccelStructSizes(const AccelStructDesc& desc, Result* outResult = nullptr) = 0;
+  [[nodiscard]] virtual AccelStructSizes getAccelStructSizes(const AccelStructDesc& desc, Result* outResult = nullptr) const = 0;
 #pragma endregion
 
 #pragma region Buffer functions
