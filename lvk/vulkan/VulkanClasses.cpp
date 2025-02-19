@@ -68,6 +68,11 @@ uint32_t getAlignedSize(uint32_t value, uint32_t alignment) {
   return (value + alignment - 1) & ~(alignment - 1);
 }
 
+uint64_t getAlignedAddress(uint64_t addr, uint32_t align) {
+  const uint64_t offs = addr % align;
+  return offs ? addr + (align - offs) : addr;
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL vulkanDebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT msgSeverity,
                                                    [[maybe_unused]] VkDebugUtilsMessageTypeFlagsEXT msgType,
                                                    const VkDebugUtilsMessengerCallbackDataEXT* cbData,
@@ -2884,6 +2889,11 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
                                           &as->buildRangeInfo.primitiveCount,
                                           &accelerationStructureBuildSizesInfo);
 
+  const uint32_t alignment = ctx_->accelerationStructureProperties_.minAccelerationStructureScratchOffsetAlignment;
+  accelerationStructureBuildSizesInfo.accelerationStructureSize += alignment;
+  accelerationStructureBuildSizesInfo.updateScratchSize += alignment;
+  accelerationStructureBuildSizesInfo.buildScratchSize += alignment;
+
   if (!as->scratchBuffer.valid() || bufferSize(*ctx_, as->scratchBuffer) < accelerationStructureBuildSizesInfo.updateScratchSize) {
     LLOGD("Recreating scratch buffer for TLAS update");
     as->scratchBuffer = ctx_->createBuffer(
@@ -2906,7 +2916,9 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
       .dstAccelerationStructure = as->vkHandle,
       .geometryCount = 1,
       .pGeometries = &accelerationStructureGeometry,
-      .scratchData = {.deviceAddress = ctx_->gpuAddress(as->scratchBuffer)},
+      .scratchData = {.deviceAddress =
+                          getAlignedAddress(ctx_->gpuAddress(as->scratchBuffer),
+                                            ctx_->accelerationStructureProperties_.minAccelerationStructureScratchOffsetAlignment)},
   };
 
   const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&as->buildRangeInfo};
@@ -4249,7 +4261,8 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
       .dstAccelerationStructure = accelStruct.vkHandle,
       .geometryCount = 1,
       .pGeometries = &accelerationStructureGeometry,
-      .scratchData = {.deviceAddress = gpuAddress(scratchBuffer)},
+      .scratchData = {.deviceAddress = getAlignedAddress(gpuAddress(scratchBuffer),
+                                                         accelerationStructureProperties_.minAccelerationStructureScratchOffsetAlignment)},
   };
 
   const VkAccelerationStructureBuildRangeInfoKHR* accelerationBuildStructureRangeInfos[] = {&accelStruct.buildRangeInfo};
@@ -4323,7 +4336,8 @@ lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& des
       .dstAccelerationStructure = accelStruct.vkHandle,
       .geometryCount = 1,
       .pGeometries = &accelerationStructureGeometry,
-      .scratchData = {.deviceAddress = gpuAddress(scratchBuffer)},
+      .scratchData = {.deviceAddress = getAlignedAddress(gpuAddress(scratchBuffer),
+                                                         accelerationStructureProperties_.minAccelerationStructureScratchOffsetAlignment)},
   };
   if (desc.buildFlags & lvk::AccelStructBuildFlagBits_AllowUpdate) {
     // Store scratch buffer for future updates
@@ -4822,30 +4836,32 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
       {
           .usage = lvk::BufferUsageBits_ShaderBindingTable,
           .storage = lvk::StorageType_Device,
-          .size = sbtBufferSize,
-          .data = sbtStorage.data(),
+          .size = sbtBufferSize + props.shaderGroupBaseAlignment,
           .debugName = "Buffer: SBT",
       },
       nullptr,
       nullptr);
+  const uint64_t baseAddress = getAlignedAddress(gpuAddress(rtps->sbt), props.shaderGroupBaseAlignment);
+  const uint64_t offset = baseAddress - gpuAddress(rtps->sbt);
+  upload(rtps->sbt, sbtStorage.data(), sbtBufferSize, offset);
   // generate SBT entries
   rtps->sbtEntryRayGen = {
-      .deviceAddress = gpuAddress(rtps->sbt),
+      .deviceAddress = baseAddress,
       .stride = handleSizeAligned,
       .size = handleSizeAligned,
   };
   rtps->sbtEntryMiss = {
-      .deviceAddress = idxMiss ? gpuAddress(rtps->sbt, idxMiss * sbtEntrySizeAligned) : 0,
+      .deviceAddress = idxMiss ? baseAddress + idxMiss * sbtEntrySizeAligned : 0,
       .stride = handleSizeAligned,
       .size = handleSizeAligned,
   };
   rtps->sbtEntryHit = {
-      .deviceAddress = idxHit ? gpuAddress(rtps->sbt, idxHit * sbtEntrySizeAligned) : 0,
+      .deviceAddress = idxHit ? baseAddress + idxHit * sbtEntrySizeAligned : 0,
       .stride = handleSizeAligned,
       .size = handleSizeAligned,
   };
   rtps->sbtEntryCallable = {
-      .deviceAddress = idxCallable ? gpuAddress(rtps->sbt, idxCallable * sbtEntrySizeAligned) : 0,
+      .deviceAddress = idxCallable ? baseAddress + idxCallable * sbtEntrySizeAligned : 0,
       .stride = handleSizeAligned,
       .size = handleSizeAligned,
   };
@@ -5699,23 +5715,24 @@ lvk::AccelStructSizes lvk::VulkanContext::getAccelStructSizes(const AccelStructD
   VkAccelerationStructureGeometryKHR accelerationStructureGeometry{};
   VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo{};
   switch (desc.type) {
-    case AccelStructType_BLAS:
-      getBuildInfoBLAS(desc, accelerationStructureGeometry, accelerationStructureBuildSizesInfo);
-      break;
-    case AccelStructType_TLAS:
-      getBuildInfoTLAS(desc, accelerationStructureGeometry, accelerationStructureBuildSizesInfo);
-      break;
-    default:
-      LVK_ASSERT_MSG(false, "Invalid acceleration structure type");
-      Result::setResult(outResult, Result(Result::Code::ArgumentOutOfRange, "Invalid acceleration structure type"));
-      return {};
+  case AccelStructType_BLAS:
+    getBuildInfoBLAS(desc, accelerationStructureGeometry, accelerationStructureBuildSizesInfo);
+    break;
+  case AccelStructType_TLAS:
+    getBuildInfoTLAS(desc, accelerationStructureGeometry, accelerationStructureBuildSizesInfo);
+    break;
+  default:
+    LVK_ASSERT_MSG(false, "Invalid acceleration structure type");
+    Result::setResult(outResult, Result(Result::Code::ArgumentOutOfRange, "Invalid acceleration structure type"));
+    return {};
   }
 
   Result::setResult(outResult, Result::Code::Ok);
+
   return lvk::AccelStructSizes{
-    .accelerationStructureSize = accelerationStructureBuildSizesInfo.accelerationStructureSize,
-    .updateScratchSize = accelerationStructureBuildSizesInfo.updateScratchSize,
-    .buildScratchSize = accelerationStructureBuildSizesInfo.buildScratchSize
+      .accelerationStructureSize = accelerationStructureBuildSizesInfo.accelerationStructureSize,
+      .updateScratchSize = accelerationStructureBuildSizesInfo.updateScratchSize,
+      .buildScratchSize = accelerationStructureBuildSizesInfo.buildScratchSize,
   };
 }
 
@@ -6078,6 +6095,10 @@ void lvk::VulkanContext::getBuildInfoBLAS(const AccelStructDesc& desc,
                                           &accelerationBuildGeometryInfo,
                                           &desc.buildRange.primitiveCount,
                                           &outSizesInfo);
+  const uint32_t alignment = accelerationStructureProperties_.minAccelerationStructureScratchOffsetAlignment;
+  outSizesInfo.accelerationStructureSize += alignment;
+  outSizesInfo.updateScratchSize += alignment;
+  outSizesInfo.buildScratchSize += alignment;
 }
 
 void lvk::VulkanContext::getBuildInfoTLAS(const AccelStructDesc& desc,
@@ -6119,6 +6140,10 @@ void lvk::VulkanContext::getBuildInfoTLAS(const AccelStructDesc& desc,
                                           &accelerationStructureBuildGeometryInfo,
                                           &desc.buildRange.primitiveCount,
                                           &outSizesInfo);
+  const uint32_t alignment = accelerationStructureProperties_.minAccelerationStructureScratchOffsetAlignment;
+  outSizesInfo.accelerationStructureSize += alignment;
+  outSizesInfo.updateScratchSize += alignment;
+  outSizesInfo.buildScratchSize += alignment;
 }
 
 lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
