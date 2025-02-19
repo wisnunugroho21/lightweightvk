@@ -4837,29 +4837,31 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
           .usage = lvk::BufferUsageBits_ShaderBindingTable,
           .storage = lvk::StorageType_Device,
           .size = sbtBufferSize,
-          .data = sbtStorage.data(),
           .debugName = "Buffer: SBT",
       },
       nullptr,
       nullptr);
+  const uint64_t baseAddress = getAlignedAddress(gpuAddress(rtps->sbt), props.shaderGroupBaseAlignment);
+  const uint64_t offset = baseAddress - gpuAddress(rtps->sbt);
+  upload(rtps->sbt, sbtStorage.data(), sbtBufferSize, offset);
   // generate SBT entries
   rtps->sbtEntryRayGen = {
-      .deviceAddress = gpuAddress(rtps->sbt),
+      .deviceAddress = baseAddress,
       .stride = handleSizeAligned,
       .size = handleSizeAligned,
   };
   rtps->sbtEntryMiss = {
-      .deviceAddress = idxMiss ? gpuAddress(rtps->sbt, idxMiss * sbtEntrySizeAligned) : 0,
+      .deviceAddress = idxMiss ? baseAddress + idxMiss * sbtEntrySizeAligned : 0,
       .stride = handleSizeAligned,
       .size = handleSizeAligned,
   };
   rtps->sbtEntryHit = {
-      .deviceAddress = idxHit ? gpuAddress(rtps->sbt, idxHit * sbtEntrySizeAligned) : 0,
+      .deviceAddress = idxHit ? baseAddress + idxHit * sbtEntrySizeAligned : 0,
       .stride = handleSizeAligned,
       .size = handleSizeAligned,
   };
   rtps->sbtEntryCallable = {
-      .deviceAddress = idxCallable ? gpuAddress(rtps->sbt, idxCallable * sbtEntrySizeAligned) : 0,
+      .deviceAddress = idxCallable ? baseAddress + idxCallable * sbtEntrySizeAligned : 0,
       .stride = handleSizeAligned,
       .size = handleSizeAligned,
   };
