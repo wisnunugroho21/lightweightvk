@@ -1251,8 +1251,6 @@ void handle_cmd(android_app* app, int32_t cmd) {
                                                    height_,
                                                    {
                                                      .enableValidation = kEnableValidationLayers,
-                                                     .enableAccelerationStructure = true,
-                                                     .enableRayQuery = true,
                                                    });
       if (!init()) {
         LLOGW("Failed to initialize the app\n");
