@@ -401,10 +401,12 @@ lvk::Holder<lvk::AccelStructHandle> TLAS;
 
 #if USE_SPONZA
 #define MODEL_PATH "src/Sponza/sponza.obj"
+#define CACHE_FILE_NAME "cache3.data"
 CameraPositioner_FirstPerson positioner_(vec3(-25, 10, -1), vec3(10, 10, 0), vec3(0, 1, 0));
-vec3 lightDir_ = normalize(vec3(0.05f, 1.0f, 0.01f));
+vec3 lightDir_ = normalize(vec3(-0.5f, 0.85f, -0.05f));
 #else
 #define MODEL_PATH "src/bistro/Exterior/exterior.obj"
+#define CACHE_FILE_NAME "cache2.data"
 CameraPositioner_FirstPerson positioner_(vec3(-100, 40, -47), vec3(0, 35, 0), vec3(0, 1, 0));
 vec3 lightDir_ = normalize(vec3(0.032f, 0.835f, 0.549f));
 #endif
@@ -699,7 +701,7 @@ bool loadFromCache(const char* cacheFileName) {
 }
 
 bool initModel() {
-  const std::string cacheFileName = folderContentRoot + "cache2.data";
+  const std::string cacheFileName = folderContentRoot + CACHE_FILE_NAME;
 
   if (!loadFromCache(cacheFileName.c_str())) {
     if (!LVK_VERIFY(loadAndCache(cacheFileName.c_str()))) {
