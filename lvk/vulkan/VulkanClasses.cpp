@@ -4197,63 +4197,10 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTextureView(lvk::Textu
 }
 
 lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& desc, Result* outResult) {
-  LVK_ASSERT(desc.type == AccelStructType_BLAS);
-  LVK_ASSERT(desc.geometryType == AccelStructGeomType_Triangles);
-  LVK_ASSERT(desc.numVertices);
-  LVK_ASSERT(desc.indexBuffer.valid());
-  LVK_ASSERT(desc.vertexBuffer.valid());
-  LVK_ASSERT(desc.transformBuffer.valid());
-  LVK_ASSERT(desc.buildRange.primitiveCount);
+  VkAccelerationStructureGeometryKHR accelerationStructureGeometry{};
+  VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo{};
+  getBuildInfoBLAS(desc, accelerationStructureGeometry, accelerationStructureBuildSizesInfo);
 
-  LVK_ASSERT(buffersPool_.get(desc.indexBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-  LVK_ASSERT(buffersPool_.get(desc.vertexBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-  LVK_ASSERT(buffersPool_.get(desc.transformBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-
-  VkGeometryFlagsKHR geometryFlags = 0;
-
-  if (desc.geometryFlags & AccelStructGeometryFlagBits_Opaque) {
-    geometryFlags |= VK_GEOMETRY_OPAQUE_BIT_KHR;
-  }
-  if (desc.geometryFlags & AccelStructGeometryFlagBits_NoDuplicateAnyHit) {
-    geometryFlags |= VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
-  }
-
-  const VkAccelerationStructureGeometryKHR accelerationStructureGeometry{
-      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-      .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
-      .geometry =
-          {
-              .triangles =
-                  {
-                      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
-                      .vertexFormat = vertexFormatToVkFormat(desc.vertexFormat),
-                      .vertexData = {.deviceAddress = gpuAddress(desc.vertexBuffer)},
-                      .vertexStride = desc.vertexStride ? desc.vertexStride : lvk::getVertexFormatSize(desc.vertexFormat),
-                      .maxVertex = desc.numVertices - 1,
-                      .indexType = VK_INDEX_TYPE_UINT32,
-                      .indexData = {.deviceAddress = gpuAddress(desc.indexBuffer)},
-                      .transformData = {.deviceAddress = gpuAddress(desc.transformBuffer)},
-                  },
-          },
-      .flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
-  };
-
-  const VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo{
-      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-      .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
-      .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
-      .geometryCount = 1,
-      .pGeometries = &accelerationStructureGeometry,
-  };
-
-  VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo = {
-      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
-  };
-  vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
-                                          VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-                                          &accelerationStructureBuildGeometryInfo,
-                                          &desc.buildRange.primitiveCount,
-                                          &accelerationStructureBuildSizesInfo);
   char debugNameBuffer[256] = {0};
   if (desc.debugName) {
     snprintf(debugNameBuffer, sizeof(debugNameBuffer) - 1, "Buffer: %s", desc.debugName);
@@ -4322,44 +4269,9 @@ lvk::AccelStructHandle lvk::VulkanContext::createBLAS(const AccelStructDesc& des
 }
 
 lvk::AccelStructHandle lvk::VulkanContext::createTLAS(const AccelStructDesc& desc, Result* outResult) {
-  LVK_ASSERT(desc.type == AccelStructType_TLAS);
-  LVK_ASSERT(desc.geometryType == AccelStructGeomType_Instances);
-  LVK_ASSERT(desc.numVertices == 0);
-  LVK_ASSERT(desc.instancesBuffer.valid());
-  LVK_ASSERT(desc.buildRange.primitiveCount);
-  LVK_ASSERT(buffersPool_.get(desc.instancesBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
-
-  const VkAccelerationStructureGeometryKHR accelerationStructureGeometry{
-      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
-      .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
-      .geometry =
-          {
-              .instances =
-                  {
-                      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
-                      .arrayOfPointers = VK_FALSE,
-                      .data = {.deviceAddress = gpuAddress(desc.instancesBuffer)},
-                  },
-          },
-      .flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
-  };
-
-  const VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo = {
-      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
-      .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
-      .flags = buildFlagsToVkBuildAccelerationStructureFlags(desc.buildFlags),
-      .geometryCount = 1,
-      .pGeometries = &accelerationStructureGeometry,
-  };
-
-  VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo{
-      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
-  };
-  vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
-                                          VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
-                                          &accelerationStructureBuildGeometryInfo,
-                                          &desc.buildRange.primitiveCount,
-                                          &accelerationStructureBuildSizesInfo);
+  VkAccelerationStructureGeometryKHR accelerationStructureGeometry{};
+  VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo{};
+  getBuildInfoTLAS(desc, accelerationStructureGeometry, accelerationStructureBuildSizesInfo);
 
   char debugNameBuffer[256] = {0};
   if (desc.debugName) {
@@ -5775,6 +5687,38 @@ bool lvk::VulkanContext::getQueryPoolResults(QueryPoolHandle pool,
   return true;
 }
 
+lvk::AccelStructSizes lvk::VulkanContext::getAccelStructSizes(const AccelStructDesc& desc, Result* outResult) const {
+  LVK_PROFILER_FUNCTION();
+
+  if (!LVK_VERIFY(hasAccelerationStructure_)) {
+    Result::setResult(outResult, Result(Result::Code::RuntimeError, "VK_KHR_acceleration_structure is not enabled"));
+    return {};
+  }
+
+  Result result;
+  VkAccelerationStructureGeometryKHR accelerationStructureGeometry{};
+  VkAccelerationStructureBuildSizesInfoKHR accelerationStructureBuildSizesInfo{};
+  switch (desc.type) {
+    case AccelStructType_BLAS:
+      getBuildInfoBLAS(desc, accelerationStructureGeometry, accelerationStructureBuildSizesInfo);
+      break;
+    case AccelStructType_TLAS:
+      getBuildInfoTLAS(desc, accelerationStructureGeometry, accelerationStructureBuildSizesInfo);
+      break;
+    default:
+      LVK_ASSERT_MSG(false, "Invalid acceleration structure type");
+      Result::setResult(outResult, Result(Result::Code::ArgumentOutOfRange, "Invalid acceleration structure type"));
+      return {};
+  }
+
+  Result::setResult(outResult, Result::Code::Ok);
+  return lvk::AccelStructSizes{
+    .accelerationStructureSize = accelerationStructureBuildSizesInfo.accelerationStructureSize,
+    .updateScratchSize = accelerationStructureBuildSizesInfo.updateScratchSize,
+    .buildScratchSize = accelerationStructureBuildSizesInfo.buildScratchSize
+  };
+}
+
 void lvk::VulkanContext::createInstance() {
   vkInstance_ = VK_NULL_HANDLE;
 
@@ -6074,6 +6018,107 @@ void lvk::VulkanContext::addNextPhysicalDeviceProperties(void* properties) {
       std::launder(reinterpret_cast<VkBaseOutStructure*>(vkPhysicalDeviceProperties2_.pNext));
 
   vkPhysicalDeviceProperties2_.pNext = properties;
+}
+
+void lvk::VulkanContext::getBuildInfoBLAS(const AccelStructDesc& desc,
+                                          VkAccelerationStructureGeometryKHR& outGeometry,
+                                          VkAccelerationStructureBuildSizesInfoKHR& outSizesInfo) const {
+  LVK_ASSERT(desc.type == AccelStructType_BLAS);
+  LVK_ASSERT(desc.geometryType == AccelStructGeomType_Triangles);
+  LVK_ASSERT(desc.numVertices);
+  LVK_ASSERT(desc.indexBuffer.valid());
+  LVK_ASSERT(desc.vertexBuffer.valid());
+  LVK_ASSERT(desc.transformBuffer.valid());
+  LVK_ASSERT(desc.buildRange.primitiveCount);
+
+  LVK_ASSERT(buffersPool_.get(desc.indexBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+  LVK_ASSERT(buffersPool_.get(desc.vertexBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+  LVK_ASSERT(buffersPool_.get(desc.transformBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+
+  VkGeometryFlagsKHR geometryFlags = 0;
+
+  if (desc.geometryFlags & AccelStructGeometryFlagBits_Opaque) {
+    geometryFlags |= VK_GEOMETRY_OPAQUE_BIT_KHR;
+  }
+  if (desc.geometryFlags & AccelStructGeometryFlagBits_NoDuplicateAnyHit) {
+    geometryFlags |= VK_GEOMETRY_NO_DUPLICATE_ANY_HIT_INVOCATION_BIT_KHR;
+  }
+
+  outGeometry = VkAccelerationStructureGeometryKHR{
+      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+      .geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR,
+      .geometry =
+          {
+              .triangles =
+                  {
+                      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR,
+                      .vertexFormat = vertexFormatToVkFormat(desc.vertexFormat),
+                      .vertexData = {.deviceAddress = gpuAddress(desc.vertexBuffer)},
+                      .vertexStride = desc.vertexStride ? desc.vertexStride : lvk::getVertexFormatSize(desc.vertexFormat),
+                      .maxVertex = desc.numVertices - 1,
+                      .indexType = VK_INDEX_TYPE_UINT32,
+                      .indexData = {.deviceAddress = gpuAddress(desc.indexBuffer)},
+                      .transformData = {.deviceAddress = gpuAddress(desc.transformBuffer)},
+                  },
+          },
+      .flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
+  };
+
+  const VkAccelerationStructureBuildGeometryInfoKHR accelerationBuildGeometryInfo{
+      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+      .type = VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR,
+      .flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR,
+      .geometryCount = 1,
+      .pGeometries = &outGeometry,
+  };
+
+  outSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+  vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
+                                          VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                                          &accelerationBuildGeometryInfo,
+                                          &desc.buildRange.primitiveCount,
+                                          &outSizesInfo);
+}
+
+void lvk::VulkanContext::getBuildInfoTLAS(const AccelStructDesc& desc,
+                                          VkAccelerationStructureGeometryKHR& outGeometry,
+                                          VkAccelerationStructureBuildSizesInfoKHR& outSizesInfo) const {
+  LVK_ASSERT(desc.type == AccelStructType_TLAS);
+  LVK_ASSERT(desc.geometryType == AccelStructGeomType_Instances);
+  LVK_ASSERT(desc.numVertices == 0);
+  LVK_ASSERT(desc.instancesBuffer.valid());
+  LVK_ASSERT(desc.buildRange.primitiveCount);
+  LVK_ASSERT(buffersPool_.get(desc.instancesBuffer)->vkUsageFlags_ & VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR);
+
+  outGeometry = VkAccelerationStructureGeometryKHR{
+      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR,
+      .geometryType = VK_GEOMETRY_TYPE_INSTANCES_KHR,
+      .geometry =
+          {
+              .instances =
+                  {
+                      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR,
+                      .arrayOfPointers = VK_FALSE,
+                      .data = {.deviceAddress = gpuAddress(desc.instancesBuffer)},
+                  },
+          },
+      .flags = VK_GEOMETRY_OPAQUE_BIT_KHR,
+  };
+
+  const VkAccelerationStructureBuildGeometryInfoKHR accelerationStructureBuildGeometryInfo = {
+      .sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR,
+      .type = VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR,
+      .flags = buildFlagsToVkBuildAccelerationStructureFlags(desc.buildFlags),
+      .geometryCount = 1,
+      .pGeometries = &outGeometry,
+  };
+
+  outSizesInfo.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR,
+  vkGetAccelerationStructureBuildSizesKHR(vkDevice_,
+                                          VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR,
+                                          &accelerationStructureBuildGeometryInfo,
+                                          &desc.buildRange.primitiveCount,
+                                          &outSizesInfo);
 }
 
 lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {

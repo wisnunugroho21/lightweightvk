@@ -7,8 +7,8 @@
 
 #pragma once
 
-#include <lvk/vulkan/VulkanUtils.h>
 #include <lvk/Pool.h>
+#include <lvk/vulkan/VulkanUtils.h>
 
 #include <deque>
 #include <future>
@@ -213,7 +213,8 @@ struct RenderPipelineState final {
   VkVertexInputBindingDescription vkBindings_[VertexInput::LVK_VERTEX_BUFFER_MAX] = {};
   VkVertexInputAttributeDescription vkAttributes_[VertexInput::LVK_VERTEX_ATTRIBUTES_MAX] = {};
 
-  // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (if the context has a new layout, invalidate all VkPipeline objects)
+  // non-owning, the last seen VkDescriptorSetLayout from VulkanContext::vkDSL_ (if the context has a new layout, invalidate all VkPipeline
+  // objects)
   VkDescriptorSetLayout lastVkDescriptorSetLayout_ = VK_NULL_HANDLE;
 
   VkShaderStageFlags shaderStageFlags_ = 0;
@@ -549,6 +550,8 @@ class VulkanContext final : public IContext {
   bool getQueryPoolResults(QueryPoolHandle pool, uint32_t firstQuery, uint32_t queryCount, size_t dataSize, void* outData, size_t stride)
       const override;
 
+  [[nodiscard]] AccelStructSizes getAccelStructSizes(const AccelStructDesc& desc, Result* outResult) const override;
+
   ///////////////
 
   VkPipeline getVkPipeline(ComputePipelineHandle handle);
@@ -622,6 +625,13 @@ class VulkanContext final : public IContext {
   VkSampler getOrCreateYcbcrSampler(lvk::Format format);
   void addNextPhysicalDeviceProperties(void* properties);
 
+  void getBuildInfoBLAS(const AccelStructDesc& desc,
+                        VkAccelerationStructureGeometryKHR& geom,
+                        VkAccelerationStructureBuildSizesInfoKHR& outSizesInfo) const;
+  void getBuildInfoTLAS(const AccelStructDesc& desc,
+                        VkAccelerationStructureGeometryKHR& outGeometry,
+                        VkAccelerationStructureBuildSizesInfoKHR& outSizesInfo) const;
+
  private:
   friend class lvk::VulkanSwapchain;
   friend class lvk::VulkanStagingDevice;
@@ -639,7 +649,7 @@ class VulkanContext final : public IContext {
                                                     .pNext = &vkFeatures12_};
   VkPhysicalDeviceFeatures2 vkFeatures10_ = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, .pNext = &vkFeatures11_};
 
-public:
+ public:
   VkPhysicalDeviceRayTracingPipelinePropertiesKHR rayTracingPipelineProperties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR};
   VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties_ = {
