@@ -2371,7 +2371,7 @@ void lvk::CommandBuffer::cmdBindVertexBuffer(uint32_t index, BufferHandle buffer
 
   LVK_ASSERT(buf->vkUsageFlags_ & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 
-  vkCmdBindVertexBuffers(wrapper_->cmdBuf_, index, 1, &buf->vkBuffer_, &bufferOffset);
+  vkCmdBindVertexBuffers2(wrapper_->cmdBuf_, index, 1, &buf->vkBuffer_, &bufferOffset, nullptr, nullptr);
 }
 
 void lvk::CommandBuffer::cmdBindIndexBuffer(BufferHandle indexBuffer, IndexFormat indexFormat, uint64_t indexBufferOffset) {
