@@ -2884,13 +2884,13 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
                                           &as->buildRangeInfo.primitiveCount,
                                           &accelerationStructureBuildSizesInfo);
 
-  if (!as->scratchBuffer.valid() || bufferSize(*ctx_, as->scratchBuffer) < accelerationStructureBuildSizesInfo.buildScratchSize) {
+  if (!as->scratchBuffer.valid() || bufferSize(*ctx_, as->scratchBuffer) < accelerationStructureBuildSizesInfo.updateScratchSize) {
     LLOGD("Recreating scratch buffer for TLAS update");
     as->scratchBuffer = ctx_->createBuffer(
         lvk::BufferDesc{
             .usage = lvk::BufferUsageBits_Storage,
             .storage = lvk::StorageType_Device,
-            .size = accelerationStructureBuildSizesInfo.buildScratchSize,
+            .size = accelerationStructureBuildSizesInfo.updateScratchSize,
             .debugName = "scratchBuffer",
         },
         nullptr,
