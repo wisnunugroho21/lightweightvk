@@ -757,25 +757,21 @@ bool initModel() {
       .buildFlags = lvk::AccelStructBuildFlagBits_PreferFastTrace,
       .debugName = "BLAS",
   };
-  lvk::AccelStructSizes blasSizes = ctx_->getAccelStructSizes(blasDesc);
+  const lvk::AccelStructSizes blasSizes = ctx_->getAccelStructSizes(blasDesc);
   LLOGL("Full model BLAS sizes buildScratchSize = %llu bytes, accelerationStructureSize = %llu\n",
         blasSizes.buildScratchSize, blasSizes.accelerationStructureSize);
   const uint32_t maxStorageBufferSize = ctx_->getMaxStorageBufferSize();
 
   // Calculate number of BLAS
-  uint32_t requiredBlasCount = 1;
-  if (maxStorageBufferSize != -1) {
-    requiredBlasCount = blasSizes.buildScratchSize / maxStorageBufferSize;
-    const uint32_t cnt = blasSizes.accelerationStructureSize / maxStorageBufferSize;
-    if (cnt > requiredBlasCount)
-      requiredBlasCount = cnt;
-    requiredBlasCount++;
-
-    blasDesc.buildRange.primitiveCount = totalPrimitiveCount / requiredBlasCount;
-  }
+  const uint32_t requiredBlasCount = [&blasSizes, maxStorageBufferSize]() {
+    const uint32_t count1 = blasSizes.buildScratchSize / maxStorageBufferSize;
+    const uint32_t count2 = blasSizes.accelerationStructureSize / maxStorageBufferSize;
+    return 1 + (count1 > count2 ? count1 : count2);
+  }();
+  blasDesc.buildRange.primitiveCount = totalPrimitiveCount / requiredBlasCount;
 
   LVK_ASSERT(requiredBlasCount > 0);
-  LLOGL("maxStorageBufferSize = %d bytes, number of BLAS = %d\n", maxStorageBufferSize, requiredBlasCount);
+  LLOGL("maxStorageBufferSize = %u bytes, number of BLAS = %u\n", maxStorageBufferSize, requiredBlasCount);
 
   const glm::mat3x4 transform(glm::scale(mat4(1.0f), vec3(0.05f)));
   BLAS.reserve(requiredBlasCount);
@@ -783,15 +779,13 @@ bool initModel() {
   std::vector<lvk::AccelStructInstance> instances;
   instances.reserve(requiredBlasCount);
   const uint32_t primitiveCount = blasDesc.buildRange.primitiveCount;
-  for (int i = 0; i < totalPrimitiveCount; i += (int)primitiveCount) {
+  for (uint32_t i = 0; i < totalPrimitiveCount; i += primitiveCount) {
     const int rest = (int)totalPrimitiveCount - i;
-    blasDesc.buildRange.primitiveOffset = (uint32_t)i * 3 * sizeof(uint32_t);
+    blasDesc.buildRange.primitiveOffset = i * 3 * sizeof(uint32_t);
     blasDesc.buildRange.primitiveCount = (primitiveCount < rest) ? primitiveCount : rest;
     BLAS.emplace_back(ctx_->createAccelerationStructure(blasDesc));
     instances.emplace_back(lvk::AccelStructInstance{
-        // clang-format off
         .transform = (const lvk::mat3x4&)transform,
-        // clang-format on
         .instanceCustomIndex = 0,
         .mask = 0xff,
         .instanceShaderBindingTableRecordOffset = 0,
