@@ -71,11 +71,62 @@ layout (location=0) in vec2 uv;
 layout (location=0) out vec4 out_FragColor;
 
 layout(push_constant) uniform constants {
-	uint tex;
+   uint tex;
+   uint denoise;
+   float sigma;
+   float ksigma;
+   float threshold;
 } pc;
 
+#define INV_SQRT_OF_2PI 0.39894228040143267793994605993439  // 1.0/SQRT_OF_2PI
+#define INV_PI 0.31830988618379067153776752674503
+
+// https://github.com/BrutPitt/glslSmartDeNoise
+/*
+//  Copyright (c) 2018-2024 Michele Morrone
+//  All rights reserved.
+//  https://michelemorrone.eu - https://brutpitt.com
+//  X: https://x.com/BrutPitt - GitHub: https://github.com/BrutPitt
+//  direct mail: brutpitt(at)gmail.com - me(at)michelemorrone.eu
+//  This software is distributed under the terms of the BSD 2-Clause license
+*/
+vec4 smartDeNoise(uint tex, vec2 uv, float sigma, float kSigma, float threshold) {
+  float radius = round(kSigma*sigma);
+  float radQ   = radius * radius;
+
+  float invSigmaQx2   = .5 / (sigma * sigma);      // 1.0 / (sigma^2 * 2.0)
+  float invSigmaQx2PI = INV_PI * invSigmaQx2;    // 1/(2 * PI * sigma^2)
+
+  float invThresholdSqx2    = .5 / (threshold * threshold);     // 1.0 / (sigma^2 * 2.0)
+  float invThresholdSqrt2PI = INV_SQRT_OF_2PI / threshold;   // 1.0 / (sqrt(2*PI) * sigma^2)
+
+  vec4 centrPx = textureBindless2D(tex, 0, uv);
+
+  float zBuff = 0.0;
+  vec4 aBuff  = vec4(0.0);
+  vec2 size   = vec2(textureBindlessSize2D(tex));
+
+  vec2 d;
+  for (d.x=-radius; d.x <= radius; d.x++) {
+    float pt = sqrt(radQ-d.x*d.x);       // pt = yRadius: have circular trend
+    for (d.y=-pt; d.y <= pt; d.y++) {
+      float blurFactor = exp( -dot(d , d) * invSigmaQx2 ) * invSigmaQx2PI;
+
+      vec4 walkPx = textureBindless2D(tex, 0, uv+d/size);
+      vec4 dC = walkPx-centrPx;
+      float deltaFactor = exp( -dot(dC, dC) * invThresholdSqx2) * invThresholdSqrt2PI * blurFactor;
+
+      zBuff += deltaFactor;
+      aBuff += deltaFactor*walkPx;
+    }
+  }
+  return aBuff/zBuff;
+}
+
 void main() {
-  out_FragColor = textureBindless2D(pc.tex, 0, uv);
+  out_FragColor = pc.denoise > 0 ?
+      smartDeNoise(pc.tex, uv, pc.sigma, pc.ksigma, pc.threshold) :
+      textureBindless2D(pc.tex, 0, uv);
 }
 )";
 
@@ -416,6 +467,11 @@ bool mousePressed_ = false;
 
 bool enableShadows_ = true;
 bool enableAO_ = true;
+
+float denoiseSigma_ = 1.2f;
+float denoiseKSigma_ = 6.0f;
+float denoiseThreshold_ = 0.43f;
+bool enableDenoise_ = false;
 
 int aoSamples_ = 2;
 bool aoDistanceBased_ = true;
@@ -989,6 +1045,14 @@ void render(double delta, uint32_t frameIndex) {
     imGuiPopFlagsAndStyles();
     lightDir_ = glm::normalize(lightDir_);
     ImGui::Unindent(indentSize);
+    ImGui::Checkbox("Denoise:", &enableDenoise_);
+    ImGui::Indent(indentSize);
+    imGuiPushFlagsAndStyles(enableDenoise_);
+    ImGui::SliderFloat("Sigma", &denoiseSigma_, 0.001f, 3.0f);
+    ImGui::SliderFloat("kSigma", &denoiseKSigma_, 0.001f, 9.0f);
+    ImGui::SliderFloat("Threshold", &denoiseThreshold_, 0.001f, 1.0f);
+    ImGui::Unindent(indentSize);
+    imGuiPopFlagsAndStyles();
     ImGui::Checkbox("Ray traced AO:", &enableAO_);
     ImGui::Indent(indentSize);
     imGuiPushFlagsAndStyles(enableAO_);
@@ -1121,8 +1185,16 @@ void render(double delta, uint32_t frameIndex) {
       buffer.cmdBindDepthState({});
       struct {
         uint32_t texture;
+        uint32_t denoise;
+        float denoiseSigma = 2.0f;
+        float denoiseKSigma = 2.0f;
+        float denoiseThreshold = 0.5f;
       } bindings = {
           .texture = tex.index(),
+          .denoise = enableDenoise_ ? 1u : 0u,
+          .denoiseSigma = denoiseSigma_,
+          .denoiseKSigma = denoiseKSigma_,
+          .denoiseThreshold = denoiseThreshold_,
       };
       buffer.cmdPushConstants(bindings);
       buffer.cmdDraw(3);
