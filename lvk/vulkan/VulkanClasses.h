@@ -483,7 +483,7 @@ class VulkanStagingDevice final {
   uint32_t stagingBufferCounter_ = 0;
   uint32_t maxBufferSize_ = 0;
   const uint32_t minBufferSize_ = 4u * 2048u * 2048u;
-  std::deque<MemoryRegionDesc> regions_;
+  std::vector<MemoryRegionDesc> regions_;
 };
 
 class VulkanContext final : public IContext {

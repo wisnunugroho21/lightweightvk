@@ -3388,7 +3388,7 @@ void lvk::VulkanStagingDevice::ensureStagingBufferSize(uint32_t sizeNeeded) {
   LVK_ASSERT(!stagingBuffer_.empty());
 
   regions_.clear();
-  regions_.push_front({0, stagingBufferSize_, SubmitHandle()});
+  regions_.push_back({0, stagingBufferSize_, SubmitHandle()});
 }
 
 lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFreeOffset(uint32_t size) {
@@ -3416,7 +3416,7 @@ lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFree
         SCOPE_EXIT {
           regions_.erase(it);
           if (unusedSize > 0) {
-            regions_.push_front({unusedOffset, unusedSize, SubmitHandle()});
+            regions_.insert(regions_.begin(), {unusedOffset, unusedSize, SubmitHandle()});
           }
         };
 
@@ -3450,7 +3450,7 @@ lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFree
 
   if (unusedSize) {
     const uint32_t unusedOffset = stagingBufferSize_ - unusedSize;
-    regions_.push_front({unusedOffset, unusedSize, SubmitHandle()});
+    regions_.insert(regions_.begin(), {unusedOffset, unusedSize, SubmitHandle()});
   }
 
   // ...and then return the smallest free region that can hold the requested size
@@ -3469,7 +3469,7 @@ void lvk::VulkanStagingDevice::waitAndReset() {
   };
 
   regions_.clear();
-  regions_.push_front({0, stagingBufferSize_, SubmitHandle()});
+  regions_.push_back({0, stagingBufferSize_, SubmitHandle()});
 }
 
 lvk::VulkanContext::VulkanContext(const lvk::ContextConfig& config, void* window, void* display, VkSurfaceKHR surface) :
