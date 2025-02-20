@@ -20,10 +20,10 @@
 
 #include <ldrutils/lutils/ScopeExit.h>
 
+#include <fast_obj.h>
 #include <meshoptimizer.h>
 #include <shared/Camera.h>
 #include <shared/UtilsFPS.h>
-#include <fast_obj.h>
 
 #if defined(ANDROID)
 #include <android_native_app_glue.h>
@@ -52,7 +52,8 @@ std::string folderContentRoot;
 
 std::unique_ptr<lvk::ImGuiRenderer> imgui_;
 
-#define UBOS_AND_PUSH_CONSTANTS R"(
+#define UBOS_AND_PUSH_CONSTANTS \
+  R"(
 struct Material {
   vec4 ambient;
   vec4 diffuse;
@@ -102,9 +103,8 @@ const char* codeRayGen = R"(
 
 layout (set = 0, binding = 2, rgba8) uniform image2D kTextures2DInOut[];
 layout (set = 0, binding = 4) uniform accelerationStructureEXT kTLAS[];
-)"
-UBOS_AND_PUSH_CONSTANTS
-R"(
+)" UBOS_AND_PUSH_CONSTANTS
+                         R"(
 layout(location = 0) rayPayloadEXT vec4 payload;
 
 const float tmin = 0.001;
@@ -162,9 +162,8 @@ layout(location = 0) rayPayloadInEXT vec4 payload;
 layout(location = 1) rayPayloadEXT bool isShadowed;
 
 hitAttributeEXT vec2 attribs;
-)"
-UBOS_AND_PUSH_CONSTANTS
-R"(
+)" UBOS_AND_PUSH_CONSTANTS
+                             R"(
 
 // https://www.shadertoy.com/view/llfcRl
 vec2 unpackSnorm2x8(uint d) {
@@ -587,7 +586,8 @@ bool initModel() {
   };
   auto blasSizes = ctx_->getAccelStructSizes(blasDesc);
   LLOGL("Full model BLAS sizes buildScratchSize = %llu bytes, accelerationStructureSize = %llu\n",
-        blasSizes.buildScratchSize, blasSizes.accelerationStructureSize);
+        blasSizes.buildScratchSize,
+        blasSizes.accelerationStructureSize);
   const auto maxStorageBufferSize = ctx_->getMaxStorageBufferSize();
 
   // Calculate number of BLAS
@@ -650,17 +650,15 @@ bool initModel() {
 
 void createPipelines() {
   if (!rayTracingPipeline_.valid()) {
-    smRaygen_ = ctx_->createShaderModule(
-        {codeRayGen, lvk::Stage_RayGen, "Shader Module: main (raygen)"});
+    smRaygen_ = ctx_->createShaderModule({codeRayGen, lvk::Stage_RayGen, "Shader Module: main (raygen)"});
     smMiss_ = ctx_->createShaderModule({codeMiss, lvk::Stage_Miss, "Shader Module: main (miss)"});
     smMissShadow_ = ctx_->createShaderModule({codeMissShadow, lvk::Stage_Miss, "Shader Module: main (miss shadow)"});
-    smHit_ = ctx_->createShaderModule(
-        {codeClosestHit, lvk::Stage_ClosestHit, "Shader Module: main (closesthit)"});
+    smHit_ = ctx_->createShaderModule({codeClosestHit, lvk::Stage_ClosestHit, "Shader Module: main (closesthit)"});
 
     rayTracingPipeline_ = ctx_->createRayTracingPipeline(lvk::RayTracingPipelineDesc{
-        .smRayGen = {smRaygen_},
-        .smClosestHit = {smHit_},
-        .smMiss = {smMiss_, smMissShadow_},
+        .smRayGen = {lvk::ShaderModuleHandle(smRaygen_)},
+        .smClosestHit = {lvk::ShaderModuleHandle(smHit_)},
+        .smMiss = {lvk::ShaderModuleHandle(smMiss_), lvk::ShaderModuleHandle(smMissShadow_)},
     });
   }
 
@@ -749,13 +747,13 @@ void render(double delta, uint32_t frameIndex) {
     lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
 
     struct {
-        vec4 lightDir;
-        uint64_t perFrame;
-        uint64_t materials;
-        uint64_t indices;
-        uint64_t vertices;
-        uint32_t outTexture;
-        uint32_t tlas;
+      vec4 lightDir;
+      uint64_t perFrame;
+      uint64_t materials;
+      uint64_t indices;
+      uint64_t vertices;
+      uint32_t outTexture;
+      uint32_t tlas;
     } pc = {
         .lightDir = vec4(lightDir_, 0.0f),
         .perFrame = ctx_->gpuAddress(ubPerFrame_[frameIndex]),
@@ -768,8 +766,7 @@ void render(double delta, uint32_t frameIndex) {
 
     buffer.cmdBindRayTracingPipeline(rayTracingPipeline_);
     buffer.cmdPushConstants(pc);
-    buffer.cmdTraceRays((uint32_t)width_, (uint32_t)height_, 1,
-                        {.textures = {lvk::TextureHandle(rayTracingOutputImage_)}});
+    buffer.cmdTraceRays((uint32_t)width_, (uint32_t)height_, 1, {.textures = {lvk::TextureHandle(rayTracingOutputImage_)}});
     ctx_->submit(buffer);
   }
 
@@ -778,7 +775,7 @@ void render(double delta, uint32_t frameIndex) {
     lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
 
     // This will clear the framebuffer
-    buffer.cmdBeginRendering(renderPassMain_, fbMain_, {.textures = {rayTracingOutputImage_}});
+    buffer.cmdBeginRendering(renderPassMain_, fbMain_, {.textures = {lvk::TextureHandle(rayTracingOutputImage_)}});
     {
       buffer.cmdBindRenderPipeline(renderPipelineState_Fullscreen_);
       buffer.cmdPushDebugGroupLabel("Swapchain Output", 0xff0000ff);
@@ -960,7 +957,7 @@ void handle_cmd(android_app* app, int32_t cmd) {
                                                    width_,
                                                    height_,
                                                    {
-                                                     .enableValidation = kEnableValidationLayers,
+                                                       .enableValidation = kEnableValidationLayers,
                                                    });
       if (!init()) {
         LLOGW("Failed to initialize the app\n");
