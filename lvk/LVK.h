@@ -718,7 +718,7 @@ struct RenderPass final {
     StoreOp storeOp = StoreOp_Store;
     uint8_t layer = 0;
     uint8_t level = 0;
-    float clearColor[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    ClearColorValue clearColor = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
     float clearDepth = 1.0f;
     uint32_t clearStencil = 0;
   };

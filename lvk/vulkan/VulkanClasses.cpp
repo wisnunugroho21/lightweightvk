@@ -47,6 +47,7 @@ static_assert(lvk::Swizzle_B == (uint32_t)VK_COMPONENT_SWIZZLE_B);
 static_assert(lvk::Swizzle_A == (uint32_t)VK_COMPONENT_SWIZZLE_A);
 static_assert(sizeof(lvk::AccelStructInstance) == sizeof(VkAccelerationStructureInstanceKHR));
 static_assert(sizeof(lvk::mat3x4) == sizeof(VkTransformMatrixKHR));
+static_assert(sizeof(lvk::ClearColorValue) == sizeof(VkClearColorValue));
 
 namespace {
 
@@ -2178,9 +2179,8 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
         .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .loadOp = loadOpToVkAttachmentLoadOp(descColor.loadOp),
         .storeOp = storeOpToVkAttachmentStoreOp(descColor.storeOp),
-        .clearValue =
-            {.color = {.float32 = {descColor.clearColor[0], descColor.clearColor[1], descColor.clearColor[2], descColor.clearColor[3]}}},
     };
+    memcpy(&colorAttachments[i].clearValue.color, &descColor.clearColor, sizeof(descColor.clearColor));
     // handle MSAA
     if (descColor.storeOp == StoreOp_MsaaResolve) {
       LVK_ASSERT(samples > 1);
