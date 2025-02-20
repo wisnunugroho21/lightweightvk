@@ -7,7 +7,6 @@
 
 #include <cstring>
 #include <deque>
-#include <set>
 #include <vector>
 
 #define VMA_IMPLEMENTATION
@@ -3817,6 +3816,22 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
     desc.debugName = debugName;
   }
 
+  auto getClosestDepthStencilFormat = [this](lvk::Format desiredFormat) -> VkFormat {
+    // Get a list of compatible depth formats for a given desired format.
+    // The list will contain depth format that are ordered from most to least closest
+    const std::vector<VkFormat> compatibleDepthStencilFormatList = getCompatibleDepthStencilFormats(desiredFormat);
+
+    // check if any of the format in compatible list is supported
+    for (VkFormat format : compatibleDepthStencilFormatList) {
+      if (std::find(deviceDepthFormats_.cbegin(), deviceDepthFormats_.cend(), format) != deviceDepthFormats_.cend()) {
+        return format;
+      }
+    }
+
+    // no matching found, choose the first supported format
+    return !deviceDepthFormats_.empty() ? deviceDepthFormats_[0] : VK_FORMAT_D24_UNORM_S8_UINT;
+  };
+
   const VkFormat vkFormat = lvk::isDepthOrStencilFormat(desc.format) ? getClosestDepthStencilFormat(desc.format)
                                                                      : formatToVkFormat(desc.format);
 
@@ -7284,28 +7299,6 @@ void lvk::VulkanContext::querySurfaceCapabilities() {
     devicePresentModes_.resize(presentModeCount);
     vkGetPhysicalDeviceSurfacePresentModesKHR(vkPhysicalDevice_, vkSurface_, &presentModeCount, devicePresentModes_.data());
   }
-}
-
-VkFormat lvk::VulkanContext::getClosestDepthStencilFormat(lvk::Format desiredFormat) const {
-  // get a list of compatible depth formats for a given desired format
-  // The list will contain depth format that are ordered from most to least closest
-  const std::vector<VkFormat> compatibleDepthStencilFormatList = getCompatibleDepthStencilFormats(desiredFormat);
-
-  // Generate a set of device supported formats
-  std::set<VkFormat> availableFormats;
-  for (VkFormat format : deviceDepthFormats_) {
-    availableFormats.insert(format);
-  }
-
-  // check if any of the format in compatible list is supported
-  for (VkFormat depthStencilFormat : compatibleDepthStencilFormatList) {
-    if (availableFormats.count(depthStencilFormat) != 0) {
-      return depthStencilFormat;
-    }
-  }
-
-  // no matching found, choose the first supported format
-  return !deviceDepthFormats_.empty() ? deviceDepthFormats_[0] : VK_FORMAT_D24_UNORM_S8_UINT;
 }
 
 std::vector<uint8_t> lvk::VulkanContext::getPipelineCacheData() const {

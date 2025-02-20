@@ -582,8 +582,6 @@ class VulkanContext final : public IContext {
     return vkPhysicalDeviceProperties2_.properties;
   }
 
-  VkFormat getClosestDepthStencilFormat(lvk::Format desiredFormat) const;
-
   // OpenXR needs Vulkan instance to find physical device
   VkInstance getVkInstance() const {
     return vkInstance_;
