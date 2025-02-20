@@ -6,7 +6,6 @@
  */
 
 #include <cstring>
-#include <deque>
 #include <vector>
 
 #define VMA_IMPLEMENTATION
@@ -734,7 +733,7 @@ struct VulkanContextImpl final {
 
   lvk::CommandBuffer currentCommandBuffer_;
 
-  mutable std::deque<DeferredTask> deferredTasks_;
+  std::vector<DeferredTask> deferredTasks_;
 
   struct YcbcrConversionData {
     VkSamplerYcbcrConversionInfo info;
@@ -7326,10 +7325,13 @@ void* lvk::VulkanContext::getVmaAllocator() const {
 }
 
 void lvk::VulkanContext::processDeferredTasks() const {
-  while (!pimpl_->deferredTasks_.empty() && immediate_->isReady(pimpl_->deferredTasks_.front().handle_, true)) {
-    pimpl_->deferredTasks_.front().task_();
-    pimpl_->deferredTasks_.pop_front();
+  std::vector<DeferredTask>::iterator it = pimpl_->deferredTasks_.begin();
+
+  while (it != pimpl_->deferredTasks_.end() && immediate_->isReady(it->handle_, true)) {
+    (it++)->task_();
   }
+
+  pimpl_->deferredTasks_.erase(pimpl_->deferredTasks_.begin(), it);
 }
 
 void lvk::VulkanContext::waitDeferredTasks() {

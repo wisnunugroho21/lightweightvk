@@ -10,7 +10,6 @@
 #include <lvk/Pool.h>
 #include <lvk/vulkan/VulkanUtils.h>
 
-#include <deque>
 #include <future>
 #include <memory>
 #include <vector>
