@@ -2232,22 +2232,6 @@ void lvk::CommandBuffer::cmdEndRendering() {
 
   vkCmdEndRendering(wrapper_->cmdBuf_);
 
-  const uint32_t numFbColorAttachments = framebuffer_.getNumColorAttachments();
-
-  // set image layouts after the render pass
-  for (uint32_t i = 0; i != numFbColorAttachments; i++) {
-    const lvk::Framebuffer::AttachmentDesc& attachment = framebuffer_.color[i];
-    const VulkanImage& tex = *ctx_->texturesPool_.get(attachment.texture);
-    // this must match the final layout of the render pass
-    tex.vkImageLayout_ = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  }
-
-  if (framebuffer_.depthStencil.texture) {
-    const VulkanImage& tex = *ctx_->texturesPool_.get(framebuffer_.depthStencil.texture);
-    // this must match the final layout of the render pass
-    tex.vkImageLayout_ = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-  }
-
   framebuffer_ = {};
 }
 
