@@ -2085,10 +2085,20 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
   if (depthTex) {
     const lvk::VulkanImage& depthImg = *ctx_->texturesPool_.get(depthTex);
     LVK_ASSERT_MSG(depthImg.vkImageFormat_ != VK_FORMAT_UNDEFINED, "Invalid depth attachment format");
+    LVK_ASSERT_MSG(depthImg.isDepthFormat_, "Invalid depth attachment format");
     const VkImageAspectFlags flags = depthImg.getImageAspectFlags();
     depthImg.transitionLayout(wrapper_->cmdBuf_,
                               VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                               VkImageSubresourceRange{flags, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS});
+  }
+  // handle depth MSAA
+  if (TextureHandle handle = fb.depthStencil.resolveTexture) {
+    lvk::VulkanImage& depthResolveImg = *ctx_->texturesPool_.get(handle);
+    LVK_ASSERT_MSG(depthResolveImg.isDepthFormat_, "Invalid resolve depth attachment format");
+    const VkImageAspectFlags flags = depthResolveImg.getImageAspectFlags();
+    depthResolveImg.transitionLayout(wrapper_->cmdBuf_,
+                                     VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                                     VkImageSubresourceRange{flags, 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS});
   }
 
   VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
