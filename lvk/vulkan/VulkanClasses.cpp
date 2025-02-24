@@ -1932,7 +1932,7 @@ void lvk::CommandBuffer::cmdDispatchThreadGroups(const Dimensions& threadgroupCo
   LVK_ASSERT(!isRendering_);
 
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.textures[i]; i++) {
-    useComputeTexture(deps.textures[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    useComputeTexture(deps.textures[i], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
   }
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
     const lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(deps.buffers[i]);
@@ -1988,7 +1988,7 @@ void lvk::CommandBuffer::cmdPopDebugGroupLabel() const {
   vkCmdEndDebugUtilsLabelEXT(wrapper_->cmdBuf_);
 }
 
-void lvk::CommandBuffer::useComputeTexture(TextureHandle handle, VkPipelineStageFlags dstStage) {
+void lvk::CommandBuffer::useComputeTexture(TextureHandle handle, VkPipelineStageFlags2 dstStage) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_BARRIER);
 
   LVK_ASSERT(!handle.empty());
@@ -2554,7 +2554,7 @@ void lvk::CommandBuffer::cmdTraceRays(uint32_t width, uint32_t height, uint32_t 
   LVK_ASSERT(!isRendering_);
 
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.textures[i]; i++) {
-    useComputeTexture(deps.textures[i], VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+    useComputeTexture(deps.textures[i], VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR);
   }
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
     bufferBarrier(deps.buffers[i],
