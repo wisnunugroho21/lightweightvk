@@ -867,8 +867,16 @@ void lvk::VulkanImage::transitionLayout(VkCommandBuffer commandBuffer,
     newImageLayout = isDepthAttachment() ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   }
 
-  const StageAccess src = getPipelineStageAccess(oldImageLayout);
-  const StageAccess dst = getPipelineStageAccess(newImageLayout);
+  StageAccess src = getPipelineStageAccess(oldImageLayout);
+  StageAccess dst = getPipelineStageAccess(newImageLayout);
+
+  if (isDepthAttachment() && isResolveAttachment) {
+    // https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#renderpass-resolve-operations
+    src.stage |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    dst.stage |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    src.access |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+    dst.access |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  }
 
   const VkImageMemoryBarrier2 barrier = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -2077,6 +2085,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
     // handle MSAA
     if (TextureHandle handle = fb.color[i].resolveTexture) {
       lvk::VulkanImage* colorResolveTex = ctx_->texturesPool_.get(handle);
+      colorResolveTex->isResolveAttachment = true;
       transitionToColorAttachment(wrapper_->cmdBuf_, colorResolveTex);
     }
   }
@@ -2095,6 +2104,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
   if (TextureHandle handle = fb.depthStencil.resolveTexture) {
     lvk::VulkanImage& depthResolveImg = *ctx_->texturesPool_.get(handle);
     LVK_ASSERT_MSG(depthResolveImg.isDepthFormat_, "Invalid resolve depth attachment format");
+    depthResolveImg.isResolveAttachment = true;
     const VkImageAspectFlags flags = depthResolveImg.getImageAspectFlags();
     depthResolveImg.transitionLayout(wrapper_->cmdBuf_,
                                      VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,

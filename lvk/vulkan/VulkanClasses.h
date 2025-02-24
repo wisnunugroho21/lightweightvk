@@ -102,6 +102,7 @@ struct VulkanImage final {
   void* mappedPtr_ = nullptr;
   bool isSwapchainImage_ = false;
   bool isOwningVkImage_ = true;
+  bool isResolveAttachment = false; // autoset by cmdBeginRendering() for extra synchronization
   uint32_t numLevels_ = 1u;
   uint32_t numLayers_ = 1u;
   bool isDepthFormat_ = false;
