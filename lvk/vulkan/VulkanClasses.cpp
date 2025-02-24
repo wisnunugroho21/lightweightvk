@@ -1938,8 +1938,9 @@ void lvk::CommandBuffer::cmdDispatchThreadGroups(const Dimensions& threadgroupCo
     const lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(deps.buffers[i]);
     LVK_ASSERT_MSG(buf->vkUsageFlags_ & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
                    "Did you forget to specify BufferUsageBits_Storage on your buffer?");
-    bufferBarrier(
-        deps.buffers[i], VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    bufferBarrier(deps.buffers[i],
+                  VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                  VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
   }
 
   vkCmdDispatch(wrapper_->cmdBuf_, threadgroupCount.width, threadgroupCount.height, threadgroupCount.depth);
@@ -1999,19 +2000,23 @@ void lvk::CommandBuffer::useComputeTexture(TextureHandle handle, VkPipelineStage
     return;
   }
 
+  (void)dstStage; // TODO: add extra dstStage
+
   tex.transitionLayout(wrapper_->cmdBuf_,
                        VK_IMAGE_LAYOUT_GENERAL,
                        VkImageSubresourceRange{tex.getImageAspectFlags(), 0, VK_REMAINING_MIP_LEVELS, 0, VK_REMAINING_ARRAY_LAYERS});
 }
 
-void lvk::CommandBuffer::bufferBarrier(BufferHandle handle, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage) {
+void lvk::CommandBuffer::bufferBarrier(BufferHandle handle, VkPipelineStageFlags2 srcStage, VkPipelineStageFlags2 dstStage) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_BARRIER);
 
   lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(handle);
 
-  VkBufferMemoryBarrier barrier = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+  VkBufferMemoryBarrier2 barrier = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+      .srcStageMask = srcStage,
       .srcAccessMask = 0,
+      .dstStageMask = dstStage,
       .dstAccessMask = 0,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
@@ -2020,25 +2025,31 @@ void lvk::CommandBuffer::bufferBarrier(BufferHandle handle, VkPipelineStageFlags
       .size = VK_WHOLE_SIZE,
   };
 
-  if (srcStage & VK_PIPELINE_STAGE_TRANSFER_BIT) {
-    barrier.srcAccessMask |= VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  if (srcStage & VK_PIPELINE_STAGE_2_TRANSFER_BIT) {
+    barrier.srcAccessMask |= VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT;
   } else {
-    barrier.srcAccessMask |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.srcAccessMask |= VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
   }
 
-  if (dstStage & VK_PIPELINE_STAGE_TRANSFER_BIT) {
-    barrier.dstAccessMask |= VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+  if (dstStage & VK_PIPELINE_STAGE_2_TRANSFER_BIT) {
+    barrier.dstAccessMask |= VK_ACCESS_2_TRANSFER_READ_BIT | VK_ACCESS_2_TRANSFER_WRITE_BIT;
   } else {
-    barrier.dstAccessMask |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    barrier.dstAccessMask |= VK_ACCESS_2_SHADER_READ_BIT | VK_ACCESS_2_SHADER_WRITE_BIT;
   }
-  if (dstStage & VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT) {
-    barrier.dstAccessMask |= VK_ACCESS_INDIRECT_COMMAND_READ_BIT;
+  if (dstStage & VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT) {
+    barrier.dstAccessMask |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
   }
   if (buf->vkUsageFlags_ & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
-    barrier.dstAccessMask |= VK_ACCESS_INDEX_READ_BIT;
+    barrier.dstAccessMask |= VK_ACCESS_2_INDEX_READ_BIT;
   }
 
-  vkCmdPipelineBarrier(wrapper_->cmdBuf_, srcStage, dstStage, VkDependencyFlags{}, 0, nullptr, 1, &barrier, 0, nullptr);
+  const VkDependencyInfo depInfo = {
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+      .bufferMemoryBarrierCount = 1,
+      .pBufferMemoryBarriers = &barrier,
+  };
+
+  vkCmdPipelineBarrier2(wrapper_->cmdBuf_, &depInfo);
 }
 
 void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, const lvk::Framebuffer& fb, const Dependencies& deps) {
@@ -2052,16 +2063,16 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
     transitionToShaderReadOnly(deps.textures[i]);
   }
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
-    VkPipelineStageFlags dstStageFlags = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    VkPipelineStageFlags2 dstStageFlags = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
     const lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(deps.buffers[i]);
     LVK_ASSERT(buf);
     if ((buf->vkUsageFlags_ & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) || (buf->vkUsageFlags_ & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)) {
-      dstStageFlags |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+      dstStageFlags |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
     }
     if (buf->vkUsageFlags_ & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) {
-      dstStageFlags |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+      dstStageFlags |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
     }
-    bufferBarrier(deps.buffers[i], VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, dstStageFlags);
+    bufferBarrier(deps.buffers[i], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, dstStageFlags);
   }
 
   const uint32_t numFbColorAttachments = fb.getNumColorAttachments();
@@ -2373,20 +2384,20 @@ void lvk::CommandBuffer::cmdFillBuffer(BufferHandle buffer, size_t bufferOffset,
 
   lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(buffer);
 
-  bufferBarrier(buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+  bufferBarrier(buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT);
 
   vkCmdFillBuffer(wrapper_->cmdBuf_, buf->vkBuffer_, bufferOffset, size, data);
 
-  VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+  VkPipelineStageFlags2 dstStage = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
 
   if (buf->vkUsageFlags_ & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) {
-    dstStage |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    dstStage |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
   }
   if (buf->vkUsageFlags_ & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
-    dstStage |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+    dstStage |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
   }
 
-  bufferBarrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage);
+  bufferBarrier(buffer, VK_PIPELINE_STAGE_2_TRANSFER_BIT, dstStage);
 }
 
 void lvk::CommandBuffer::cmdUpdateBuffer(BufferHandle buffer, size_t bufferOffset, size_t size, const void* data) {
@@ -2399,20 +2410,20 @@ void lvk::CommandBuffer::cmdUpdateBuffer(BufferHandle buffer, size_t bufferOffse
 
   lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(buffer);
 
-  bufferBarrier(buffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+  bufferBarrier(buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_2_TRANSFER_BIT);
 
   vkCmdUpdateBuffer(wrapper_->cmdBuf_, buf->vkBuffer_, bufferOffset, size, data);
 
-  VkPipelineStageFlags dstStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+  VkPipelineStageFlags2 dstStage = VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
 
   if (buf->vkUsageFlags_ & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT) {
-    dstStage |= VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
+    dstStage |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
   }
   if (buf->vkUsageFlags_ & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
-    dstStage |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+    dstStage |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
   }
 
-  bufferBarrier(buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, dstStage);
+  bufferBarrier(buffer, VK_PIPELINE_STAGE_2_TRANSFER_BIT, dstStage);
 }
 
 void lvk::CommandBuffer::cmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t baseInstance) {
@@ -2558,8 +2569,8 @@ void lvk::CommandBuffer::cmdTraceRays(uint32_t width, uint32_t height, uint32_t 
   }
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
     bufferBarrier(deps.buffers[i],
-                  VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                  VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);
+                  VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                  VK_PIPELINE_STAGE_2_RAY_TRACING_SHADER_BIT_KHR);
   }
 
   vkCmdTraceRaysKHR(
