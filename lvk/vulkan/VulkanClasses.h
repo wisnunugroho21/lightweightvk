@@ -649,11 +649,16 @@ class VulkanContext final : public IContext {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR};
   VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
-  // provided by Vulkan 1.2
   VkPhysicalDeviceDriverProperties vkPhysicalDeviceDriverProperties_ = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES, nullptr};
+  // provided by Vulkan 1.3
+  VkPhysicalDeviceVulkan13Properties vkPhysicalDeviceVulkan13Properties_ = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES,
+      &vkPhysicalDeviceDriverProperties_,
+  };
+  // provided by Vulkan 1.2
   VkPhysicalDeviceVulkan12Properties vkPhysicalDeviceVulkan12Properties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
-      &vkPhysicalDeviceDriverProperties_,
+      &vkPhysicalDeviceVulkan13Properties_,
   };
   // provided by Vulkan 1.1
   VkPhysicalDeviceProperties2 vkPhysicalDeviceProperties2_ = {
