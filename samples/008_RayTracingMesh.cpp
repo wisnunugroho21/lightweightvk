@@ -584,23 +584,19 @@ bool initModel() {
       .buildFlags = lvk::AccelStructBuildFlagBits_PreferFastTrace,
       .debugName = "BLAS",
   };
-  auto blasSizes = ctx_->getAccelStructSizes(blasDesc);
+  const lvk::AccelStructSizes blasSizes = ctx_->getAccelStructSizes(blasDesc);
   LLOGL("Full model BLAS sizes buildScratchSize = %llu bytes, accelerationStructureSize = %llu\n",
         blasSizes.buildScratchSize,
         blasSizes.accelerationStructureSize);
-  const auto maxStorageBufferSize = ctx_->getMaxStorageBufferSize();
+  const uint32_t maxStorageBufferSize = ctx_->getMaxStorageBufferSize();
 
   // Calculate number of BLAS
-  uint32_t requiredBlasCount = 1;
-  if (maxStorageBufferSize != -1) {
-    requiredBlasCount = blasSizes.buildScratchSize / maxStorageBufferSize;
-    const auto cnt = blasSizes.accelerationStructureSize / maxStorageBufferSize;
-    if (cnt > requiredBlasCount)
-      requiredBlasCount = cnt;
-    requiredBlasCount++;
-
-    blasDesc.buildRange.primitiveCount = totalPrimitiveCount / requiredBlasCount;
-  }
+  const uint32_t requiredBlasCount = [&blasSizes, maxStorageBufferSize]() {
+    const uint32_t count1 = blasSizes.buildScratchSize / maxStorageBufferSize;
+    const uint32_t count2 = blasSizes.accelerationStructureSize / maxStorageBufferSize;
+    return 1 + (count1 > count2 ? count1 : count2);
+  }();
+  blasDesc.buildRange.primitiveCount = totalPrimitiveCount / requiredBlasCount;
 
   LVK_ASSERT(requiredBlasCount > 0);
   LLOGL("maxStorageBufferSize = %d bytes, number of BLAS = %d\n", maxStorageBufferSize, requiredBlasCount);
