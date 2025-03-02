@@ -137,4 +137,10 @@ VkBuffer getVkBuffer(const IContext* ctx, AccelStructHandle accelStruct);
 VkPipeline getVkPipeline(const IContext* ctx, RayTracingPipelineHandle pipeline);
 VkPipelineLayout getVkPipelineLayout(const IContext* ctx, RayTracingPipelineHandle pipeline);
 
+// properties/limits
+const VkPhysicalDeviceProperties2& getVkPhysicalDeviceProperties2(const IContext* ctx);
+const VkPhysicalDeviceVulkan11Properties& getVkPhysicalDeviceVulkan11Properties(const IContext* ctx);
+const VkPhysicalDeviceVulkan12Properties& getVkPhysicalDeviceVulkan12Properties(const IContext* ctx);
+const VkPhysicalDeviceVulkan13Properties& getVkPhysicalDeviceVulkan13Properties(const IContext* ctx);
+
 } // namespace lvk

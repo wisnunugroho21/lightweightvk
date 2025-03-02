@@ -1131,3 +1131,19 @@ VkPipelineLayout lvk::getVkPipelineLayout(const IContext* ctx, RayTracingPipelin
 
   return static_cast<const VulkanContext*>(ctx)->rayTracingPipelinesPool_.get(pipeline)->pipelineLayout_;
 }
+
+const VkPhysicalDeviceProperties2& lvk::getVkPhysicalDeviceProperties2(const IContext* ctx) {
+  return static_cast<const VulkanContext*>(ctx)->vkPhysicalDeviceProperties2_;
+}
+
+const VkPhysicalDeviceVulkan11Properties& lvk::getVkPhysicalDeviceVulkan11Properties(const IContext* ctx) {
+  return static_cast<const VulkanContext*>(ctx)->vkPhysicalDeviceVulkan11Properties_;
+}
+
+const VkPhysicalDeviceVulkan12Properties& lvk::getVkPhysicalDeviceVulkan12Properties(const IContext* ctx) {
+  return static_cast<const VulkanContext*>(ctx)->vkPhysicalDeviceVulkan12Properties_;
+}
+
+const VkPhysicalDeviceVulkan13Properties& lvk::getVkPhysicalDeviceVulkan13Properties(const IContext* ctx) {
+  return static_cast<const VulkanContext*>(ctx)->vkPhysicalDeviceVulkan13Properties_;
+}
