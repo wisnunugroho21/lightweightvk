@@ -5878,7 +5878,11 @@ void lvk::VulkanContext::createInstance() {
       .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
       .pEngineName = "LVK/Vulkan",
       .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+#if defined(VK_API_VERSION_1_4)
+      .apiVersion = config_.vulkanVersion == VulkanVersion_1_3 ? VK_API_VERSION_1_3 : VK_API_VERSION_1_4,
+#else
       .apiVersion = VK_API_VERSION_1_3,
+#endif // VK_API_VERSION_1_4
   };
 
   VkInstanceCreateFlags flags = 0;
@@ -6165,6 +6169,14 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   if (hasExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, allDeviceExtensions)) {
     addNextPhysicalDeviceProperties(&rayTracingPipelineProperties_);
   }
+
+#if defined(VK_API_VERSION_1_4)
+  if (config_.vulkanVersion >= VulkanVersion_1_4) {
+    addNextPhysicalDeviceProperties(&vkPhysicalDeviceVulkan14Properties_);
+  }
+#else
+  LVK_ASSERT_MSG(config_.vulkanVersion == VulkanVersion_1_3, "Only Vulkan 1.3 is supported on this platform");
+#endif // VK_API_VERSION_1_4
 
   vkGetPhysicalDeviceFeatures2(vkPhysicalDevice_, &vkFeatures10_);
   vkGetPhysicalDeviceProperties2(vkPhysicalDevice_, &vkPhysicalDeviceProperties2_);

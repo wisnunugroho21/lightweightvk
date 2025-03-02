@@ -650,6 +650,13 @@ class VulkanContext final : public IContext {
   VkPhysicalDeviceAccelerationStructurePropertiesKHR accelerationStructureProperties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_PROPERTIES_KHR};
   VkPhysicalDeviceDriverProperties vkPhysicalDeviceDriverProperties_ = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES, nullptr};
+#if defined(VK_API_VERSION_1_4)
+  // provided by Vulkan 1.4
+  VkPhysicalDeviceVulkan14Properties vkPhysicalDeviceVulkan14Properties_ = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_PROPERTIES,
+      &vkPhysicalDeviceDriverProperties_,
+  };
+#endif // VK_API_VERSION_1_4
   // provided by Vulkan 1.3
   VkPhysicalDeviceVulkan13Properties vkPhysicalDeviceVulkan13Properties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_PROPERTIES,
