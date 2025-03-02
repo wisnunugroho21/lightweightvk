@@ -95,6 +95,7 @@ lvk::Holder<lvk::RenderPipelineHandle> ImGuiRenderer::createNewPipelineState(con
           }},
           .depthFormat = desc.depthStencil.texture ? ctx_.getFormat(desc.depthStencil.texture) : lvk::Format_Invalid,
           .cullMode = lvk::CullMode_None,
+          .debugName = "ImGuiRenderer: createNewPipelineState()",
       },
       nullptr);
 }
