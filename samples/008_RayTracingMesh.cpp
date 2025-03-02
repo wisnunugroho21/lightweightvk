@@ -588,7 +588,7 @@ bool initModel() {
   LLOGL("Full model BLAS sizes buildScratchSize = %llu bytes, accelerationStructureSize = %llu\n",
         blasSizes.buildScratchSize,
         blasSizes.accelerationStructureSize);
-  const uint32_t maxStorageBufferSize = ctx_->getMaxStorageBufferSize();
+  const uint32_t maxStorageBufferSize = ctx_->getMaxStorageBufferRange();
 
   // Calculate number of BLAS
   const uint32_t requiredBlasCount = [&blasSizes, maxStorageBufferSize]() {

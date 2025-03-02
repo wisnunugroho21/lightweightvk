@@ -7306,7 +7306,6 @@ void lvk::VulkanContext::invokeShaderModuleErrorCallback(int line, int col, cons
   }
 }
 
-uint32_t lvk::VulkanContext::getMaxStorageBufferSize() const {
-  const VkPhysicalDeviceLimits& limits = getVkPhysicalDeviceProperties().limits;
-  return limits.maxStorageBufferRange;
+uint32_t lvk::VulkanContext::getMaxStorageBufferRange() const {
+  return vkPhysicalDeviceProperties2_.properties.limits.maxStorageBufferRange;
 }
