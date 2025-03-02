@@ -661,9 +661,13 @@ class VulkanContext final : public IContext {
       &vkPhysicalDeviceVulkan13Properties_,
   };
   // provided by Vulkan 1.1
+  VkPhysicalDeviceVulkan11Properties vkPhysicalDeviceVulkan11Properties_ = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
+      &vkPhysicalDeviceVulkan12Properties_,
+  };
   VkPhysicalDeviceProperties2 vkPhysicalDeviceProperties2_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-      &vkPhysicalDeviceVulkan12Properties_,
+      &vkPhysicalDeviceVulkan11Properties_,
       VkPhysicalDeviceProperties{},
   };
 
