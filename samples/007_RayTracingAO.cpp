@@ -814,7 +814,7 @@ bool initModel() {
       .debugName = "BLAS",
   };
   const lvk::AccelStructSizes blasSizes = ctx_->getAccelStructSizes(blasDesc);
-  LLOGL("Full model BLAS sizes buildScratchSize = %llu bytes, accelerationStructureSize = %llu\n",
+  LLOGL("Full model BLAS sizes (byts):\n   buildScratchSize = %llu,\n   accelerationStructureSize = %llu\n",
         blasSizes.buildScratchSize, blasSizes.accelerationStructureSize);
   const uint32_t maxStorageBufferSize = ctx_->getMaxStorageBufferRange();
 
@@ -827,7 +827,7 @@ bool initModel() {
   blasDesc.buildRange.primitiveCount = totalPrimitiveCount / requiredBlasCount;
 
   LVK_ASSERT(requiredBlasCount > 0);
-  LLOGL("maxStorageBufferSize = %u bytes, number of BLAS = %u\n", maxStorageBufferSize, requiredBlasCount);
+  LLOGL("maxStorageBufferSize = %u bytes\nNumber of BLAS = %u\n", maxStorageBufferSize, requiredBlasCount);
 
   const glm::mat3x4 transform(glm::scale(mat4(1.0f), vec3(0.05f)));
   BLAS.reserve(requiredBlasCount);
