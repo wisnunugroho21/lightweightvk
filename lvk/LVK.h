@@ -1139,7 +1139,13 @@ using ShaderModuleErrorCallback = void (*)(lvk::IContext*, lvk::ShaderModuleHand
 
 constexpr uint32_t kMaxCustomExtensions = 32;
 
+enum VulkanVersion {
+  VulkanVersion_1_3,
+  VulkanVersion_1_4,
+};
+
 struct ContextConfig {
+  VulkanVersion vulkanVersion = VulkanVersion_1_3;
   bool terminateOnValidationError = false; // invoke std::terminate() on any validation error
   bool enableValidation = true;
   lvk::ColorSpace swapChainColorSpace = lvk::ColorSpace_SRGB_LINEAR;
