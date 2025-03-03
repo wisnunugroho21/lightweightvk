@@ -7098,13 +7098,15 @@ void lvk::VulkanContext::checkAndUpdateDescriptorSets() {
   std::vector<VkAccelerationStructureKHR> handlesAccelStructs;
   handlesAccelStructs.reserve(accelStructuresPool_.objects_.size());
 
-  VkAccelerationStructureKHR dummyTLAS = VK_NULL_HANDLE;
   // use the first valid TLAS as a dummy
-  for (const auto& as : accelStructuresPool_.objects_) {
-    if (as.obj_.vkHandle && as.obj_.isTLAS) {
-      dummyTLAS = as.obj_.vkHandle;
+  const VkAccelerationStructureKHR dummyTLAS = [this]() -> VkAccelerationStructureKHR {
+    for (const auto& as : accelStructuresPool_.objects_) {
+      if (as.obj_.vkHandle && as.obj_.isTLAS)
+        return as.obj_.vkHandle;
     }
-  }
+    return VK_NULL_HANDLE;
+  }();
+
   for (const auto& as : accelStructuresPool_.objects_) {
     handlesAccelStructs.push_back(as.obj_.isTLAS ? as.obj_.vkHandle : dummyTLAS);
   }
