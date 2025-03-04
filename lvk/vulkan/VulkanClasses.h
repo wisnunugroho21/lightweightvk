@@ -667,10 +667,14 @@ class VulkanContext final : public IContext {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
       &vkPhysicalDeviceVulkan13Properties_,
   };
+  VkPhysicalDeviceDepthStencilResolveProperties vkPhysicalDeviceDepthStencilResolveProperties_ = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES,
+      &vkPhysicalDeviceVulkan12Properties_,
+  };
   // provided by Vulkan 1.1
   VkPhysicalDeviceVulkan11Properties vkPhysicalDeviceVulkan11Properties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
-      &vkPhysicalDeviceVulkan12Properties_,
+      &vkPhysicalDeviceDepthStencilResolveProperties_,
   };
   VkPhysicalDeviceProperties2 vkPhysicalDeviceProperties2_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
@@ -682,6 +686,8 @@ class VulkanContext final : public IContext {
   std::vector<VkSurfaceFormatKHR> deviceSurfaceFormats_;
   VkSurfaceCapabilitiesKHR deviceSurfaceCaps_;
   std::vector<VkPresentModeKHR> devicePresentModes_;
+
+  VkResolveModeFlagBits depthResolveMode_ = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
 
  public:
   DeviceQueues deviceQueues_;
