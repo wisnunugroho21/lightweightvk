@@ -790,26 +790,6 @@ static uint32_t findMemoryType(VkPhysicalDevice physDev, uint32_t memoryTypeBits
   return 0;
 }
 
-VkResult lvk::allocateMemory(VkPhysicalDevice physDev,
-                             VkDevice device,
-                             const VkMemoryRequirements* memRequirements,
-                             VkMemoryPropertyFlags props,
-                             VkDeviceMemory* outMemory) {
-  assert(memRequirements);
-
-  const VkMemoryAllocateFlagsInfo memoryAllocateFlagsInfo = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO,
-      .flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR,
-  };
-  const VkMemoryAllocateInfo ai = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .pNext = &memoryAllocateFlagsInfo,
-      .allocationSize = memRequirements->size,
-      .memoryTypeIndex = findMemoryType(physDev, memRequirements->memoryTypeBits, props),
-  };
-  return vkAllocateMemory(device, &ai, nullptr, outMemory);
-}
-
 VkResult lvk::allocateMemory2(VkPhysicalDevice physDev,
                               VkDevice device,
                               const VkMemoryRequirements2* memRequirements,
