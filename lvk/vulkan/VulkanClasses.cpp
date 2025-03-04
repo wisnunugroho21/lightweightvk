@@ -6963,13 +6963,19 @@ lvk::BufferHandle lvk::VulkanContext::createBuffer(VkDeviceSize bufferSize,
 
     // back the buffer with some memory
     {
-      VkMemoryRequirements requirements = {};
-      vkGetBufferMemoryRequirements(vkDevice_, buf.vkBuffer_, &requirements);
-      if (requirements.memoryTypeBits & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) {
+      const VkBufferMemoryRequirementsInfo2 ri = {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2,
+          .buffer = buf.vkBuffer_,
+      };
+      VkMemoryRequirements2 requirements = {
+          .sType = VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2,
+      };
+      vkGetBufferMemoryRequirements2(vkDevice_, &ri, &requirements);
+      if (requirements.memoryRequirements.memoryTypeBits & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) {
         buf.isCoherentMemory_ = true;
       }
 
-      VK_ASSERT(lvk::allocateMemory(vkPhysicalDevice_, vkDevice_, &requirements, memFlags, &buf.vkMemory_));
+      VK_ASSERT(lvk::allocateMemory2(vkPhysicalDevice_, vkDevice_, &requirements, memFlags, &buf.vkMemory_));
       VK_ASSERT(vkBindBufferMemory(vkDevice_, buf.vkBuffer_, buf.vkMemory_, 0));
     }
 
