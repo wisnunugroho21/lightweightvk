@@ -6276,6 +6276,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .fragmentStoresAndAtomics = VK_TRUE,
       .shaderImageGatherExtended = VK_TRUE,
       .shaderInt64 = vkFeatures10_.features.shaderInt64, // enable if supported
+      .shaderInt16 = vkFeatures10_.features.shaderInt16, // enable if supported
   };
   VkPhysicalDeviceVulkan11Features deviceFeatures11 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
