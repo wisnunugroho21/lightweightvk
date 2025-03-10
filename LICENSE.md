@@ -33,6 +33,9 @@ SOFTWARE.
 3D-Graphics-Rendering-Cookbook
 https://github.com/PacktPublishing/3D-Graphics-Rendering-Cookbook/blob/master/LICENSE
 
+3D-Graphics-Rendering-Cookbook (2nd Edition)
+https://github.com/PacktPublishing/3D-Graphics-Rendering-Cookbook-Second-Edition/blob/master/LICENSE
+
 Amazon Lumberyard Bistro
 https://developer.nvidia.com/orca/amazon-lumberyard-bistro
 https://casual-effects.com/data/
