@@ -45,6 +45,7 @@ static const char* cmdToString(int32_t cmd) {
     CMD(APP_CMD_DESTROY);
   }
 #undef CMD
+  return "";
 }
 
 extern "C" {
