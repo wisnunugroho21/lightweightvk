@@ -44,7 +44,7 @@ VULKAN_APP_MAIN {
   };
   VULKAN_APP_DECLARE(app, cfg);
 
-  std::unique_ptr<lvk::IContext> ctx(app.ctx_.get());
+  lvk::IContext* ctx = app.ctx_.get();
 
   {
     lvk::Holder<lvk::ShaderModuleHandle> vert_ = ctx->createShaderModule({codeVS, lvk::Stage_Vert, "Shader Module: main (vert)"});
@@ -73,8 +73,6 @@ VULKAN_APP_MAIN {
       buffer.cmdEndRendering();
       ctx->submit(buffer, ctx->getCurrentSwapchainTexture());
     });
-
-    ctx.release();
   }
 
   VULKAN_APP_EXIT();
