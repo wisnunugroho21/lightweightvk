@@ -61,7 +61,7 @@ static void handle_cmd(android_app* androidApp, int32_t cmd) {
       app->width_ = ANativeWindow_getWidth(androidApp->window);
       app->height_ = ANativeWindow_getHeight(androidApp->window);
       if (!app->ctx_)
-        app->ctx_ = lvk::createVulkanContextWithSwapchain(androidApp->window, app->width_, app->height_, {});
+        app->ctx_ = lvk::createVulkanContextWithSwapchain(androidApp->window, app->width_, app->height_, app->cfg_.contextConfig);
       app->canRender_ = true;
     }
     return;
@@ -159,12 +159,7 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
 
   window_ = lvk::initWindow("Simple example", width_, height_, cfg.resizable);
 
-  ctx_ = lvk::createVulkanContextWithSwapchain(window_,
-                                               width_,
-                                               height_,
-                                               {
-                                                   .enableValidation = true,
-                                               });
+  ctx_ = lvk::createVulkanContextWithSwapchain(window_, width_, height_, cfg.contextConfig);
 #endif // ANDROID
 
   depthTexture_ = ctx_->createTexture({

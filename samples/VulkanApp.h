@@ -61,6 +61,7 @@ struct VulkanAppConfig {
   bool resizable = false;
   vec3 initialCameraPos = vec3(0.0f, 0.0f, -2.5f);
   vec3 initialCameraTarget = vec3(0.0f, 0.0f, 0.0f);
+  lvk::ContextConfig contextConfig;
 };
 
 class VulkanApp {
