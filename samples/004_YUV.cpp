@@ -1,28 +1,14 @@
 /*
-* LightweightVK
-*
-* This source code is licensed under the MIT license found in the
-* LICENSE file in the root directory of this source tree.
-*/
+ * LightweightVK
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
-#include <shared/UtilsFPS.h>
-
-#include <lvk/LVK.h>
-#include <lvk/HelpersImGui.h>
+#include "VulkanApp.h"
 #include <ldrutils/lutils/ScopeExit.h>
-#if defined(ANDROID)
-#include <android_native_app_glue.h>
-#include <jni.h>
-#include <time.h>
-#else
-#include <GLFW/glfw3.h>
-#endif
 
-#include <cstddef>
 #include <filesystem>
-#include <vector>
-
-std::filesystem::path getPathToContentFolder();
 
 const char* codeVS = R"(
 #version 460
@@ -51,12 +37,7 @@ void main() {
 };
 )";
 
-int width_ = 0;
-int height_ = 0;
-FramesPerSecondCounter fps_;
 size_t currentDemo_ = 0;
-
-std::unique_ptr<lvk::IContext> ctx_;
 
 // demonstrate different YUV formats
 struct YUVFormatDemo {
@@ -67,7 +48,6 @@ struct YUVFormatDemo {
 };
 
 struct Resources {
-  std::unique_ptr<lvk::ImGuiRenderer> imgui;
   lvk::Holder<lvk::ShaderModuleHandle> vert;
   lvk::Holder<lvk::ShaderModuleHandle> frag;
   std::vector<YUVFormatDemo> demos;
@@ -75,12 +55,12 @@ struct Resources {
 
 Resources res_;
 
-void createDemo(const char* name, lvk::Format format, const char* fileName) {
+void createDemo(lvk::IContext* ctx, const char* contentFolder, const char* name, lvk::Format format, const char* fileName) {
   using namespace std::filesystem;
-  path dir = getPathToContentFolder();
+  path dir(contentFolder);
   int32_t texWidth = 1920;
   int32_t texHeight = 1080;
-  FILE* file = fopen((dir / path(fileName)).string().c_str(), "rb");
+  FILE* file = fopen((dir / "src" / path(fileName)).string().c_str(), "rb");
   SCOPE_EXIT {
     if (file) {
       fclose(file);
@@ -101,7 +81,7 @@ void createDemo(const char* name, lvk::Format format, const char* fileName) {
   std::vector<uint8_t> pixels(length);
   fread(pixels.data(), 1, length, file);
 
-  lvk::Holder<lvk::TextureHandle> texture = ctx_->createTexture({
+  lvk::Holder<lvk::TextureHandle> texture = ctx->createTexture({
       .type = lvk::TextureType_2D,
       .format = format,
       .dimensions = {(uint32_t)texWidth, (uint32_t)texHeight},
@@ -116,108 +96,41 @@ void createDemo(const char* name, lvk::Format format, const char* fileName) {
       .name = name,
       .format = format,
       .texture = std::move(texture),
-      .renderPipelineState = ctx_->createRenderPipeline({
+      .renderPipelineState = ctx->createRenderPipeline({
           .topology = lvk::Topology_TriangleStrip,
           .smVert = res_.vert,
           .smFrag = res_.frag,
           .specInfo = {.entries = {{.constantId = 0, .size = sizeof(uint32_t)}}, .data = &textureId, .dataSize = sizeof(textureId)},
-          .color = {{.format = ctx_->getSwapchainFormat()}},
+          .color = {{.format = ctx->getSwapchainFormat()}},
           .debugName = name,
       }),
   });
 }
 
-void init() {
-  res_.imgui = std::make_unique<lvk::ImGuiRenderer>(*ctx_, nullptr, float(height_) / 70.0f);
-
-  res_.vert = ctx_->createShaderModule({codeVS, lvk::Stage_Vert, "Shader Module: main (vert)"});
-  res_.frag = ctx_->createShaderModule({codeFS, lvk::Stage_Frag, "Shader Module: main (frag)"});
-
-  createDemo("YUV NV12", lvk::Format_YUV_NV12, "igl-samples/output_frame_900.nv12.yuv");
-  createDemo("YUV 420p", lvk::Format_YUV_420p, "igl-samples/output_frame_900.420p.yuv");
-}
-
-void destroy() {
-  res_ = {};
-  ctx_ = nullptr;
-}
-
-void resize() {
-  if (!width_ || !height_) {
-    return;
-  }
-  ctx_->recreateSwapchain(width_, height_);
-}
-
-void render() {
-  if (!width_ || !height_) {
-    return;
-  }
-
-  const lvk::Framebuffer framebuffer = {
-      .color = {{.texture = ctx_->getCurrentSwapchainTexture()}},
+VULKAN_APP_MAIN {
+  const VulkanAppConfig cfg{
+      .width = 0,
+      .height = 0,
   };
+  VULKAN_APP_DECLARE(app, cfg);
 
-  lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
+  lvk::IContext* ctx = app.ctx_.get();
 
-  buffer.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_DontCare}}}, framebuffer);
+  // res_.imgui = std::make_unique<lvk::ImGuiRenderer>(*ctx, nullptr, float(height_) / 70.0f);
 
-  if (!res_.demos.empty()) {
-    const YUVFormatDemo& demo = res_.demos[currentDemo_];
-    buffer.cmdBindRenderPipeline(demo.renderPipelineState);
-    buffer.cmdDraw(4);
-    {
-      res_.imgui->beginFrame(framebuffer);
-      const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-                                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
-      ImGui::SetNextWindowPos({15.0f, 15.0f});
-      ImGui::SetNextWindowBgAlpha(0.30f);
-      ImGui::Begin("##FormatYUV", nullptr, flags);
-      ImGui::Text("%s", demo.name);
-      ImGui::Text("Press any key to change");
-      ImGui::End();
-      res_.imgui->endFrame(buffer);
-    }
-  }
+  res_.vert = ctx->createShaderModule({codeVS, lvk::Stage_Vert, "Shader Module: main (vert)"});
+  res_.frag = ctx->createShaderModule({codeFS, lvk::Stage_Frag, "Shader Module: main (frag)"});
 
-  buffer.cmdEndRendering();
-
-  ctx_->submit(buffer, ctx_->getCurrentSwapchainTexture());
-}
+  createDemo(ctx, app.folderContentRoot_.c_str(), "YUV NV12", lvk::Format_YUV_NV12, "igl-samples/output_frame_900.nv12.yuv");
+  createDemo(ctx, app.folderContentRoot_.c_str(), "YUV 420p", lvk::Format_YUV_420p, "igl-samples/output_frame_900.420p.yuv");
 
 #if !defined(ANDROID)
-std::filesystem::path getPathToContentFolder() {
-  using namespace std::filesystem;
-  path dir = current_path();
-  const char* contentFolder = "third-party/content/src/";
-  while (dir != current_path().root_path() && !exists(dir / path(contentFolder))) {
-    dir = dir.parent_path();
-  }
-  return dir / path(contentFolder);
-}
-
-int main(int argc, char* argv[]) {
-  minilog::initialize(nullptr, {.threadNames = false});
-
-  GLFWwindow* window = lvk::initWindow("Vulkan YUV", width_, height_, true);
-
-  ctx_ = lvk::createVulkanContextWithSwapchain(window, width_, height_, {});
-  if (!ctx_) {
-    return 1;
-  }
-  init();
-
-  glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int width, int height) {
-    width_ = width;
-    height_ = height;
-    resize();
-  });
-  glfwSetMouseButtonCallback(window, [](auto* window, int button, int action, int mods) {
+  app.addMouseButtonCallback([](auto* window, int button, int action, int mods) {
     if (action == GLFW_PRESS && !res_.demos.empty()) {
       currentDemo_ = (currentDemo_ + 1) % res_.demos.size();
     }
   });
-  glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int, int action, int) {
+  app.addKeyCallback([](GLFWwindow* window, int key, int, int action, int) {
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
       glfwSetWindowShouldClose(window, GLFW_TRUE);
     } else if (key == GLFW_KEY_T && action == GLFW_PRESS) {
@@ -228,92 +141,43 @@ int main(int argc, char* argv[]) {
       currentDemo_ = (currentDemo_ + 1) % res_.demos.size();
     }
   });
+#endif // !ANDROID
 
-  double prevTime = glfwGetTime();
+  app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
+    const lvk::Framebuffer framebuffer = {
+        .color = {{.texture = ctx->getCurrentSwapchainTexture()}},
+    };
 
-  // main loop
-  while (!glfwWindowShouldClose(window)) {
-    const double newTime = glfwGetTime();
-    fps_.tick(newTime - prevTime);
-    prevTime = newTime;
-    render();
-    glfwPollEvents();
-  }
+    lvk::ICommandBuffer& buffer = ctx->acquireCommandBuffer();
 
-  // destroy all the Vulkan stuff before closing the window
-  destroy();
+    buffer.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_DontCare}}}, framebuffer);
 
-  glfwDestroyWindow(window);
-  glfwTerminate();
-
-  return 0;
-}
-#else
-std::filesystem::path getPathToContentFolder() {
-  if (const char* externalStorage = std::getenv("EXTERNAL_STORAGE")) {
-    return std::filesystem::path(externalStorage) / "LVK" / "content" / "src";
-  }
-  return {};
-}
-
-extern "C" {
-void handle_cmd(android_app* app, int32_t cmd) {
-  switch (cmd) {
-  case APP_CMD_INIT_WINDOW:
-    if (app->window != nullptr) {
-      width_ = ANativeWindow_getWidth(app->window);
-      height_ = ANativeWindow_getHeight(app->window);
-      ctx_ = lvk::createVulkanContextWithSwapchain(app->window, width_, height_, {});
-      init();
-    }
-    break;
-  case APP_CMD_TERM_WINDOW:
-    destroy();
-    break;
-  }
-}
-
-void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
-  int w = ANativeWindow_getWidth(window);
-  int h = ANativeWindow_getHeight(window);
-  if (width_ != w || height_ != h) {
-    width_ = w;
-    height_ = h;
-    if (ctx_) {
-      resize();
-    }
-  }
-}
-
-void android_main(android_app* app) {
-  minilog::initialize(nullptr, {.threadNames = false});
-  app->onAppCmd = handle_cmd;
-  app->activity->callbacks->onNativeWindowResized = resize_callback;
-
-  fps_.printFPS_ = false;
-
-  timespec prevTime = {0, 0};
-  clock_gettime(CLOCK_MONOTONIC, &prevTime);
-
-  int events = 0;
-  android_poll_source* source = nullptr;
-  do {
-    timespec newTime = {0, 0};
-    clock_gettime(CLOCK_MONOTONIC, &newTime);
-    if (fps_.tick(((double)newTime.tv_sec + 1.0e-9 * newTime.tv_nsec) - 
-                  ((double)prevTime.tv_sec + 1.0e-9 * prevTime.tv_nsec))) {
-      LLOGL("FPS: %.1f\n", fps_.getFPS());
-    }
-    prevTime = newTime;
-    if (ctx_) {
-      render();
-    }
-    if (ALooper_pollOnce(0, nullptr, &events, (void**)&source) >= 0) {
-      if (source) {
-        source->process(app, source);
+    if (!res_.demos.empty()) {
+      const YUVFormatDemo& demo = res_.demos[currentDemo_];
+      buffer.cmdBindRenderPipeline(demo.renderPipelineState);
+      buffer.cmdDraw(4);
+      {
+        app.imgui_->beginFrame(framebuffer);
+        const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                       ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
+                                       ImGuiWindowFlags_NoMove;
+        ImGui::SetNextWindowPos({15.0f, 15.0f});
+        ImGui::SetNextWindowBgAlpha(0.30f);
+        ImGui::Begin("##FormatYUV", nullptr, flags);
+        ImGui::Text("%s", demo.name);
+        ImGui::Text("Press any key to change");
+        ImGui::End();
+        app.imgui_->endFrame(buffer);
       }
     }
-  } while (!app->destroyRequested);
+
+    buffer.cmdEndRendering();
+
+    ctx->submit(buffer, ctx->getCurrentSwapchainTexture());
+  });
+
+  // destroy all the Vulkan stuff before closing the window
+  res_ = {};
+
+  VULKAN_APP_EXIT();
 }
-} // extern "C"
-#endif
