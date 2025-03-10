@@ -1,20 +1,11 @@
 /*
-* LightweightVK
-*
-* This source code is licensed under the MIT license found in the
-* LICENSE file in the root directory of this source tree.
-*/
+ * LightweightVK
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
-#include <shared/UtilsFPS.h>
-
-#include <lvk/LVK.h>
-#if defined(ANDROID)
-#include <android_native_app_glue.h>
-#include <jni.h>
-#include <time.h>
-#else
-#include <GLFW/glfw3.h>
-#endif
+#include "VulkanApp.h"
 
 // we are going to use raw Vulkan here to initialize VK_EXT_mesh_shader
 #include <lvk/vulkan/VulkanUtils.h>
@@ -65,12 +56,6 @@ void main() {
 };
 )";
 
-int width_ = 800;
-int height_ = 600;
-FramesPerSecondCounter fps_;
-
-std::unique_ptr<lvk::IContext> ctx_;
-
 struct {
   lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Triangle_;
   lvk::Holder<lvk::ShaderModuleHandle> task_;
@@ -78,100 +63,58 @@ struct {
   lvk::Holder<lvk::ShaderModuleHandle> frag_;
 } res;
 
-void init() {
-  res.task_ = ctx_->createShaderModule({codeTask, lvk::Stage_Task, "Shader Module: main (task)"});
-  res.mesh_ = ctx_->createShaderModule({codeMesh, lvk::Stage_Mesh, "Shader Module: main (mesh)"});
-  res.frag_ = ctx_->createShaderModule({codeFrag, lvk::Stage_Frag, "Shader Module: main (frag)"});
-
-  res.renderPipelineState_Triangle_ = ctx_->createRenderPipeline(
-      {
-          .smTask = res.task_,
-          .smMesh = res.mesh_,
-          .smFrag = res.frag_,
-          .color = {{.format = ctx_->getSwapchainFormat()}},
-      },
-      nullptr);
-
-  LVK_ASSERT(res.renderPipelineState_Triangle_.valid());
-}
-
-void destroy() {
-  res = {};
-  ctx_ = nullptr;
-}
-
-void resize() {
-  if (!width_ || !height_) {
-    return;
-  }
-  ctx_->recreateSwapchain(width_, height_);
-}
-
-void render() {
-  if (!width_ || !height_) {
-    return;
-  }
-
-  lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
-
-  // This will clear the framebuffer
-  buffer.cmdBeginRendering(
-      {.color = {{.loadOp = lvk::LoadOp_Clear, .clearColor = {1.0f, 1.0f, 1.0f, 1.0f}}}},
-      {.color = {{.texture = ctx_->getCurrentSwapchainTexture()}}});
-  buffer.cmdBindRenderPipeline(res.renderPipelineState_Triangle_);
-  buffer.cmdPushDebugGroupLabel("Render Triangle", 0xff0000ff);
-  buffer.cmdDrawMeshTasks({1, 1, 1});
-
-  buffer.cmdPopDebugGroupLabel();
-  buffer.cmdEndRendering();
-  ctx_->submit(buffer, ctx_->getCurrentSwapchainTexture());
-}
-
-int main(int argc, char* argv[]) {
-  minilog::initialize(nullptr, {.threadNames = false});
-
-  GLFWwindow* window = lvk::initWindow("Vulkan Hello Mesh Shaders", width_, height_, true);
-
+VULKAN_APP_MAIN {
   VkPhysicalDeviceMeshShaderFeaturesEXT meshShaderFeatures = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
       .taskShader = VK_TRUE,
       .meshShader = VK_TRUE,
   };
+  const VulkanAppConfig cfg{
+      .width = 800,
+      .height = 600,
+      .resizable = true,
+      .contextConfig =
+          {
+              .extensionsDevice = {"VK_EXT_mesh_shader"},
+              .extensionsDeviceFeatures = &meshShaderFeatures,
+          },
+  };
+  VULKAN_APP_DECLARE(app, cfg);
 
-  ctx_ = lvk::createVulkanContextWithSwapchain(window,
-                                               width_,
-                                               height_,
-                                               {
-                                                   .extensionsDevice = {"VK_EXT_mesh_shader"},
-                                                   .extensionsDeviceFeatures = &meshShaderFeatures,
-                                               });
-  if (!ctx_) {
-    return 255;
-  }
-  init();
+  lvk::IContext* ctx = app.ctx_.get();
 
-  glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int width, int height) {
-    width_ = width;
-    height_ = height;
-    resize();
+  res.task_ = ctx->createShaderModule({codeTask, lvk::Stage_Task, "Shader Module: main (task)"});
+  res.mesh_ = ctx->createShaderModule({codeMesh, lvk::Stage_Mesh, "Shader Module: main (mesh)"});
+  res.frag_ = ctx->createShaderModule({codeFrag, lvk::Stage_Frag, "Shader Module: main (frag)"});
+
+  res.renderPipelineState_Triangle_ = ctx->createRenderPipeline(
+      {
+          .smTask = res.task_,
+          .smMesh = res.mesh_,
+          .smFrag = res.frag_,
+          .color = {{.format = ctx->getSwapchainFormat()}},
+      },
+      nullptr);
+
+  LVK_ASSERT(res.renderPipelineState_Triangle_.valid());
+
+  app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
+    lvk::ICommandBuffer& buffer = ctx->acquireCommandBuffer();
+
+    // This will clear the framebuffer
+    buffer.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Clear, .clearColor = {1.0f, 1.0f, 1.0f, 1.0f}}}},
+                             {.color = {{.texture = ctx->getCurrentSwapchainTexture()}}});
+    buffer.cmdBindRenderPipeline(res.renderPipelineState_Triangle_);
+    buffer.cmdPushDebugGroupLabel("Render Triangle", 0xff0000ff);
+    buffer.cmdDrawMeshTasks({1, 1, 1});
+
+    buffer.cmdPopDebugGroupLabel();
+    buffer.cmdEndRendering();
+    ctx->submit(buffer, ctx->getCurrentSwapchainTexture());
   });
 
-  double prevTime = glfwGetTime();
-
-  // main loop
-  while (!glfwWindowShouldClose(window)) {
-    const double newTime = glfwGetTime();
-    fps_.tick(newTime - prevTime);
-    prevTime = newTime;
-    render();
-    glfwPollEvents();
-  }
-
   // destroy all the Vulkan stuff before closing the window
-  destroy();
+  res = {};
 
-  glfwDestroyWindow(window);
-  glfwTerminate();
-
-  return 0;
+  VULKAN_APP_EXIT();
 }
