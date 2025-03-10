@@ -8,13 +8,7 @@
 #include <shared/UtilsFPS.h>
 
 #include <lvk/LVK.h>
-#if defined(ANDROID)
-#include <android_native_app_glue.h>
-#include <jni.h>
-#include <time.h>
-#else
 #include <GLFW/glfw3.h>
-#endif
 
 #include <slang.h>
 #include <slang-com-helper.h>
@@ -218,7 +212,6 @@ void render() {
   ctx_->submit(buffer, ctx_->getCurrentSwapchainTexture());
 }
 
-#if !defined(ANDROID)
 int main(int argc, char* argv[]) {
   minilog::initialize(nullptr, {.threadNames = false});
 
@@ -255,65 +248,3 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
-#else
-extern "C" {
-void handle_cmd(android_app* app, int32_t cmd) {
-  switch (cmd) {
-  case APP_CMD_INIT_WINDOW:
-    if (app->window != nullptr) {
-      width_ = ANativeWindow_getWidth(app->window);
-      height_ = ANativeWindow_getHeight(app->window);
-      ctx_ = lvk::createVulkanContextWithSwapchain(app->window, width_, height_, {});
-      init();
-    }
-    break;
-  case APP_CMD_TERM_WINDOW:
-    destroy();
-    break;
-  }
-}
-
-void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
-  int w = ANativeWindow_getWidth(window);
-  int h = ANativeWindow_getHeight(window);
-  if (width_ != w || height_ != h) {
-    width_ = w;
-    height_ = h;
-    if (ctx_) {
-      resize();
-    }
-  }
-}
-
-void android_main(android_app* app) {
-  minilog::initialize(nullptr, {.threadNames = false});
-  app->onAppCmd = handle_cmd;
-  app->activity->callbacks->onNativeWindowResized = resize_callback;
-
-  fps_.printFPS_ = false;
-
-  timespec prevTime = {0, 0};
-  clock_gettime(CLOCK_MONOTONIC, &prevTime);
-
-  int events = 0;
-  android_poll_source* source = nullptr;
-  do {
-    timespec newTime = {0, 0};
-    clock_gettime(CLOCK_MONOTONIC, &newTime);
-    if (fps_.tick(((double)newTime.tv_sec + 1.0e-9 * newTime.tv_nsec) - 
-                  ((double)prevTime.tv_sec + 1.0e-9 * prevTime.tv_nsec))) {
-      LLOGL("FPS: %.1f\n", fps_.getFPS());
-    }
-    prevTime = newTime;
-    if (ctx_) {
-      render();
-    }
-    if (ALooper_pollOnce(0, nullptr, &events, (void**)&source) >= 0) {
-      if (source) {
-        source->process(app, source);
-      }
-    }
-  } while (!app->destroyRequested);
-}
-} // extern "C"
-#endif
