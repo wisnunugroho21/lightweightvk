@@ -665,7 +665,11 @@ class VulkanContext final : public IContext {
   // provided by Vulkan 1.2
   VkPhysicalDeviceVulkan12Properties vkPhysicalDeviceVulkan12Properties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES,
+#if defined(__APPLE__)
+      &vkPhysicalDeviceDriverProperties_,
+#else
       &vkPhysicalDeviceVulkan13Properties_,
+#endif // __APPLE__
   };
   VkPhysicalDeviceDepthStencilResolveProperties vkPhysicalDeviceDepthStencilResolveProperties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES,

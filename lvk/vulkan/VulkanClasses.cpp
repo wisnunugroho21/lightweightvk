@@ -6319,25 +6319,31 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   };
 
 #ifdef __APPLE__
-  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicStateFeature = {
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT dynamicStateFeatures = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
-      .pNext = &deviceFeatures13,
+      .pNext = &deviceFeatures12,
       .extendedDynamicState = VK_TRUE,
   };
 
-  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2Feature = {
+  VkPhysicalDeviceExtendedDynamicState2FeaturesEXT dynamicState2Features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT,
-      .pNext = &dynamicStateFeature,
+      .pNext = &dynamicStateFeatures,
       .extendedDynamicState2 = VK_TRUE,
   };
 
-  VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2Feature = {
+  VkPhysicalDeviceSynchronization2FeaturesKHR synchronization2Features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
-      .pNext = &dynamicState2Feature,
+      .pNext = &dynamicState2Features,
       .synchronization2 = VK_TRUE,
   };
 
-  void* createInfoNext = &synchronization2Feature;
+  VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeatures = {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+    .pNext = &synchronization2Features,
+    .dynamicRendering = VK_TRUE,
+  };
+
+  void* createInfoNext = &dynamicRenderingFeatures;
 #else
   void* createInfoNext = &deviceFeatures13;
 #endif
