@@ -16,7 +16,7 @@
 #include <android/asset_manager_jni.h>
 #include <android/native_window_jni.h>
 
-static double glfwGetTime() {
+double glfwGetTime() {
   timespec t = {0, 0};
   clock_gettime(CLOCK_MONOTONIC, &t);
   return (double)t.tv_sec + 1.0e-9 * t.tv_nsec;

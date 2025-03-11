@@ -24,6 +24,7 @@
 #  include <android_native_app_glue.h>
 #  include <jni.h>
 #  include <time.h>
+double glfwGetTime();
 #else
 #  include <GLFW/glfw3.h>
 #endif
