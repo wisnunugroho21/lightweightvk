@@ -139,11 +139,17 @@ VULKAN_APP_MAIN {
 
       buffer.cmdPushDebugGroupLabel("Render to Cube Map", 0xff0000ff);
       for (uint8_t face = 0; face != 6; face++) {
+        const lvk::ClearColorValue colors[] = {{0.3f, 0.1f, 0.1f, 1.0f},
+                                               {0.1f, 0.3f, 0.1f, 1.0f},
+                                               {0.1f, 0.1f, 0.3f, 1.0f},
+                                               {0.3f, 0.1f, 0.3f, 1.0f},
+                                               {0.3f, 0.3f, 0.1f, 1.0f},
+                                               {0.1f, 0.3f, 0.3f, 1.0f}};
         buffer.cmdBeginRendering({.color = {{
                                       .loadOp = lvk::LoadOp_Clear,
                                       .storeOp = lvk::StoreOp_Store,
                                       .layer = face,
-                                      .clearColor = {0.3f, 0.3f, 0.3f, 1.0f},
+                                      .clearColor = colors[face],
                                   }}},
                                  {.color = {{.texture = texture_}}});
         buffer.cmdBindRenderPipeline(renderPipelineState_Triangle_);
