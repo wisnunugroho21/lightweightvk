@@ -127,17 +127,13 @@ VULKAN_APP_MAIN {
         .debugName = "Pipeline: triangle",
     });
 
-    float time = 0;
-
     app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
       LVK_PROFILER_FUNCTION();
-
-      time += deltaSeconds;
 
       const float fov = float(45.0f * (M_PI / 180.0f));
       const mat4 proj = glm::perspectiveLH(fov, aspectRatio, 0.1f, 500.0f);
       const mat4 view = glm::translate(mat4(1.0f), vec3(0.0f, 0.0f, 5.0f));
-      const mat4 model = glm::rotate(mat4(1.0f), time, glm::normalize(vec3(1.0f, 1.0f, 1.0f)));
+      const mat4 model = glm::rotate(mat4(1.0f), (float)glfwGetTime(), glm::normalize(vec3(1.0f, 1.0f, 1.0f)));
 
       lvk::ICommandBuffer& buffer = ctx->acquireCommandBuffer();
 
@@ -156,7 +152,7 @@ VULKAN_APP_MAIN {
           float time;
         } pc = {
             .face = face,
-            .time = 10.0f * time,
+            .time = 10.0f * (float)glfwGetTime(),
         };
         buffer.cmdPushConstants(pc);
         buffer.cmdDraw(3);
