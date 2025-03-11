@@ -5,20 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <shared/UtilsFPS.h>
-
-#if defined(ANDROID)
-#include <android_native_app_glue.h>
-#include <jni.h>
-#include <time.h>
-#else
-#include <GLFW/glfw3.h>
-#endif
-
-#include <lvk/LVK.h>
-
-#include <glm/ext.hpp>
-#include <glm/glm.hpp>
+#include "VulkanApp.h"
 
 const char* codeRayGen = R"(
 #version 460
@@ -100,11 +87,7 @@ void main() {
 }
 )";
 
-int width_ = -80;
-int height_ = -80;
-FramesPerSecondCounter fps_;
-
-std::unique_ptr<lvk::IContext> ctx_;
+lvk::IContext* ctx_ = nullptr;
 
 struct Resources {
   lvk::Holder<lvk::AccelStructHandle> BLAS;
@@ -217,14 +200,26 @@ void createTopLevelAccelerationStructure() {
   });
 }
 
-void init() {
+VULKAN_APP_MAIN {
+  const VulkanAppConfig cfg{
+      .width = -80,
+      .height = -80,
+      .resizable = true,
+  };
+  VULKAN_APP_DECLARE(app, cfg);
+
+  ctx_ = app.ctx_.get();
+
   createBottomLevelAccelerationStructure();
   createTopLevelAccelerationStructure();
 
-  struct UniformData {
-    glm::mat4 viewInverse = glm::inverse(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -5.0f)));
-    glm::mat4 projInverse = glm::inverse(glm::perspective(glm::radians(60.0f), (float)width_ / (float)height_, 0.1f, 1000.0f));
-  } uniformData;
+  const struct UniformData {
+    glm::mat4 viewInverse;
+    glm::mat4 projInverse;
+  } uniformData = {
+      .viewInverse = glm::inverse(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, -5.0f))),
+      .projInverse = glm::inverse(glm::perspective(glm::radians(60.0f), (float)app.width_ / (float)app.height_, 0.1f, 1000.0f)),
+  };
 
   res.ubo = ctx_->createBuffer(lvk::BufferDesc{
       .usage = lvk::BufferUsageBits_Storage,
@@ -238,7 +233,7 @@ void init() {
       lvk::TextureDesc{
           .type = lvk::TextureType_2D,
           .format = lvk::Format_BGRA_UN8,
-          .dimensions = {(uint32_t)width_, (uint32_t)height_, 1u},
+          .dimensions = {(uint32_t)app.width_, (uint32_t)app.height_, 1u},
           .numLayers = 1,
           .numSamples = 1,
           .usage = lvk::TextureUsageBits_Storage,
@@ -254,166 +249,36 @@ void init() {
       .smClosestHit = {lvk::ShaderModuleHandle(res.hit_)},
       .smMiss = {lvk::ShaderModuleHandle(res.miss_)},
   });
-}
 
-void destroy() {
-  res = {};
-  ctx_ = nullptr;
-}
+  app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
+    lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
 
-void resize() {
-  if (!width_ || !height_) {
-    return;
-  }
-  ctx_->recreateSwapchain(width_, height_);
-}
+    const glm::mat3x4 transformMatrix = glm::rotate(glm::mat4(1.0f), (float)glfwGetTime(), glm::vec3(1, 1, 1));
+    ctx_->upload(res.instancesBuffer, &transformMatrix, sizeof(transformMatrix), offsetof(lvk::AccelStructInstance, transform));
 
-double glfwGetTime();
+    struct {
+      uint64_t camBuffer;
+      uint32_t outTexture;
+      uint32_t tlas;
+      float time;
+    } pc = {
+        .camBuffer = ctx_->gpuAddress(res.ubo),
+        .outTexture = res.storageImage.index(),
+        .tlas = res.TLAS.index(),
+        .time = (float)glfwGetTime(),
+    };
 
-void render() {
-  if (!width_ || !height_) {
-    return;
-  }
+    buffer.cmdUpdateTLAS(res.TLAS, res.instancesBuffer);
+    buffer.cmdBindRayTracingPipeline(res.pipeline);
+    buffer.cmdPushConstants(pc);
+    buffer.cmdTraceRays(width, height, 1, {.textures = {lvk::TextureHandle(res.storageImage)}});
+    buffer.cmdCopyImage(res.storageImage, ctx_->getCurrentSwapchainTexture(), ctx_->getDimensions(ctx_->getCurrentSwapchainTexture()));
 
-  lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
-
-  const glm::mat3x4 transformMatrix = glm::rotate(glm::mat4(1.0f), (float)glfwGetTime(), glm::vec3(1, 1, 1));
-  ctx_->upload(res.instancesBuffer, &transformMatrix, sizeof(transformMatrix), offsetof(lvk::AccelStructInstance, transform));
-
-  struct {
-    uint64_t camBuffer;
-    uint32_t outTexture;
-    uint32_t tlas;
-    float time;
-  } pc = {
-      .camBuffer = ctx_->gpuAddress(res.ubo),
-      .outTexture = res.storageImage.index(),
-      .tlas = res.TLAS.index(),
-      .time = (float)glfwGetTime(),
-  };
-
-  buffer.cmdUpdateTLAS(res.TLAS, res.instancesBuffer);
-  buffer.cmdBindRayTracingPipeline(res.pipeline);
-  buffer.cmdPushConstants(pc);
-  buffer.cmdTraceRays((uint32_t)width_, (uint32_t)height_, 1, {.textures = {lvk::TextureHandle(res.storageImage)}});
-  buffer.cmdCopyImage(res.storageImage, ctx_->getCurrentSwapchainTexture(), ctx_->getDimensions(ctx_->getCurrentSwapchainTexture()));
-
-  ctx_->submit(buffer, ctx_->getCurrentSwapchainTexture());
-}
-
-#if !defined(ANDROID)
-int main(int argc, char* argv[]) {
-  minilog::initialize(nullptr, {.threadNames = false});
-
-  GLFWwindow* window = lvk::initWindow("Vulkan Hello Ray Tracing", width_, height_, true);
-
-  ctx_ = lvk::createVulkanContextWithSwapchain(window, width_, height_, {
-#if defined(NDEBUG)
-    .enableValidation = false,
-#else
-    .enableValidation = true,
-#endif
+    ctx_->submit(buffer, ctx_->getCurrentSwapchainTexture());
   });
-  if (!ctx_) {
-    return 255;
-  }
-  init();
-
-  glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int width, int height) {
-    width_ = width;
-    height_ = height;
-    resize();
-  });
-
-  double prevTime = glfwGetTime();
-
-  // main loop
-  while (!glfwWindowShouldClose(window)) {
-    const double newTime = glfwGetTime();
-    fps_.tick(newTime - prevTime);
-    prevTime = newTime;
-    render();
-    glfwPollEvents();
-  }
 
   // destroy all the Vulkan stuff before closing the window
-  destroy();
+  res = {};
 
-  glfwDestroyWindow(window);
-  glfwTerminate();
-
-  return 0;
+  VULKAN_APP_EXIT();
 }
-#else
-double glfwGetTime() {
-  timespec t = {0, 0};
-  clock_gettime(CLOCK_MONOTONIC, &t);
-  return (double)t.tv_sec + 1.0e-9 * t.tv_nsec;
-}
-
-extern "C" {
-void handle_cmd(android_app* app, int32_t cmd) {
-  switch (cmd) {
-  case APP_CMD_INIT_WINDOW:
-    if (app->window != nullptr) {
-      width_ = ANativeWindow_getWidth(app->window);
-      height_ = ANativeWindow_getHeight(app->window);
-      ctx_ = lvk::createVulkanContextWithSwapchain(app->window,
-                                                   width_,
-                                                   height_,
-                                                   {
-                                                     .enableValidation = false,
-                                                     .enableAccelerationStructure = true,
-                                                     .enableRayTracingPipeline = true,
-                                                   });
-      init();
-    }
-    break;
-  case APP_CMD_TERM_WINDOW:
-    destroy();
-    break;
-  }
-}
-
-void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
-  int w = ANativeWindow_getWidth(window);
-  int h = ANativeWindow_getHeight(window);
-  if (width_ != w || height_ != h) {
-    width_ = w;
-    height_ = h;
-    if (ctx_) {
-      resize();
-    }
-  }
-}
-
-void android_main(android_app* app) {
-  minilog::initialize(nullptr, {.threadNames = false});
-  app->onAppCmd = handle_cmd;
-  app->activity->callbacks->onNativeWindowResized = resize_callback;
-
-  fps_.printFPS_ = false;
-
-  double prevTime = glfwGetTime();
-
-  int events = 0;
-  android_poll_source* source = nullptr;
-  do {
-    double newTime = glfwGetTime();
-    double delta = newTime - prevTime;
-    if (fps_.tick(delta)) {
-      LLOGL("FPS: %.1f\n", fps_.getFPS());
-    }
-    prevTime = newTime;
-    if (ctx_) {
-      render();
-    }
-    if (ALooper_pollOnce(0, nullptr, &events, (void**)&source) >= 0) {
-      if (source) {
-        source->process(app, source);
-      }
-    }
-  } while (!app->destroyRequested);
-}
-} // extern "C"
-#endif
