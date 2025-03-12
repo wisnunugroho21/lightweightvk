@@ -165,6 +165,7 @@ VULKAN_APP_MAIN {
         ImGui::Text("%s", demo.name);
         ImGui::Text("Press any key to change");
         ImGui::End();
+        app.drawFPS();
         app.imgui_->endFrame(buffer);
       }
     }
