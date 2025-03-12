@@ -116,8 +116,6 @@ VULKAN_APP_MAIN {
 
   lvk::IContext* ctx = app.ctx_.get();
 
-  // res_.imgui = std::make_unique<lvk::ImGuiRenderer>(*ctx, nullptr, float(height_) / 70.0f);
-
   res_.vert = ctx->createShaderModule({codeVS, lvk::Stage_Vert, "Shader Module: main (vert)"});
   res_.frag = ctx->createShaderModule({codeFS, lvk::Stage_Frag, "Shader Module: main (frag)"});
 
