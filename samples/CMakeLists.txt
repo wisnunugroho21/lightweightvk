@@ -146,8 +146,6 @@ if((WIN32 OR UNIX AND NOT (APPLE)) OR LVK_WITH_SAMPLES_ANDROID)
 endif()
 ADD_DEMO("009_TriplanarMapping")
 
-ADD_DEMO("Tiny")
-ADD_DEMO("Tiny_Mesh")
 ADD_DEMO("Tiny_MeshLarge")
 ADD_DEMO_SOURCES("Tiny_MeshLarge"
   "${LVK_ROOT_DIR}/third-party/deps/src/3D-Graphics-Rendering-Cookbook/shared/UtilsCubemap.cpp")

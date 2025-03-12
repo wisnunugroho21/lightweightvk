@@ -36,14 +36,6 @@
 
 ![lvk_android](../.github/samples/009_TriplanarMapping.jpg)
 
-## Tiny
-
-![lvk_android](../.github/samples/Tiny.jpg)
-
-## Tiny_Mesh
-
-![lvk_android](../.github/samples/Tiny_Mesh.jpg)
-
 ## Tiny_MeshLarge
 
 ![lvk_android](../.github/samples/Tiny_MeshLarge.jpg)
