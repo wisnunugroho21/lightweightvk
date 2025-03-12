@@ -78,9 +78,7 @@ class VulkanApp {
   virtual void drawFPS();
 
   lvk::Format getDepthFormat() const;
-  lvk::TextureHandle getDepthTexture() const {
-    return depthTexture_;
-  }
+  lvk::TextureHandle getDepthTexture() const;
 #if !defined(ANDROID)
     void addMouseButtonCallback(GLFWmousebuttonfun cb) {
       callbacksMouseButton.push_back(cb);
@@ -101,7 +99,7 @@ class VulkanApp {
   GLFWwindow* window_ = nullptr;
 #endif // ANDROID
   std::unique_ptr<lvk::IContext> ctx_;
-  lvk::Holder<lvk::TextureHandle> depthTexture_;
+  mutable lvk::Holder<lvk::TextureHandle> depthTexture_;
   FramesPerSecondCounter fpsCounter_ = FramesPerSecondCounter(0.5f);
   std::unique_ptr<lvk::ImGuiRenderer> imgui_;
 

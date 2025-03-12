@@ -88,6 +88,7 @@ static void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
     app->height_ = h;
     if (app->ctx_) {
       app->ctx_->recreateSwapchain(w, h);
+      app->depthTexture_.reset();
       LLOGD("Swapchain recreated");
     }
   }
@@ -162,14 +163,6 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
   ctx_ = lvk::createVulkanContextWithSwapchain(window_, width_, height_, cfg.contextConfig);
 #endif // ANDROID
 
-  depthTexture_ = ctx_->createTexture({
-      .type = lvk::TextureType_2D,
-      .format = lvk::Format_Z_F32,
-      .dimensions = {(uint32_t)width_, (uint32_t)height_},
-      .usage = lvk::TextureUsageBits_Attachment,
-      .debugName = "Depth buffer",
-  });
-
   imgui_ = std::make_unique<lvk::ImGuiRenderer>(
       *ctx_, (folderThirdParty_ + "3D-Graphics-Rendering-Cookbook/data/OpenSans-Light.ttf").c_str(), 30.0f);
 #if !defined(ANDROID)
@@ -177,9 +170,12 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
 
   glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* window, int width, int height) {
     VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
+    if (app->width_ == width && app->height_ == height)
+      return;
     app->width_ = width;
     app->height_ = height;
     app->ctx_->recreateSwapchain(width, height);
+    app->depthTexture_.reset();
   });
   glfwSetMouseButtonCallback(window_, [](GLFWwindow* window, int button, int action, int mods) {
     VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
@@ -252,7 +248,21 @@ VulkanApp::~VulkanApp() {
 }
 
 lvk::Format VulkanApp::getDepthFormat() const {
-  return ctx_->getFormat(depthTexture_);
+  return ctx_->getFormat(getDepthTexture());
+}
+
+lvk::TextureHandle VulkanApp::getDepthTexture() const {
+  if (depthTexture_.empty()) {
+    depthTexture_ = ctx_->createTexture({
+        .type = lvk::TextureType_2D,
+        .format = lvk::Format_Z_F32,
+        .dimensions = {(uint32_t)width_, (uint32_t)height_},
+        .usage = lvk::TextureUsageBits_Attachment,
+        .debugName = "Depth buffer",
+    });
+  }
+
+  return depthTexture_;
 }
 
 void VulkanApp::run(DrawFrameFunc drawFrame) {
