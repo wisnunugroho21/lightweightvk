@@ -144,6 +144,7 @@ if((WIN32 OR UNIX AND NOT (APPLE)) OR LVK_WITH_SAMPLES_ANDROID)
   ADD_DEMO("007_RayTracingAO")
   ADD_DEMO("008_RayTracingMesh")
 endif()
+ADD_DEMO("009_TriplanarMapping")
 
 ADD_DEMO("Tiny")
 ADD_DEMO("Tiny_Mesh")
