@@ -28,6 +28,14 @@
 
 ![lvk_android](../.github/samples/007_RayTracingAO.jpg)
 
+## 008_RayTracingMesh
+
+![lvk_android](../.github/samples/008_RayTracingMesh.jpg)
+
+## 009_TriplanarMapping
+
+![lvk_android](../.github/samples/009_TriplanarMapping.jpg)
+
 ## Tiny
 
 ![lvk_android](../.github/samples/Tiny.jpg)
