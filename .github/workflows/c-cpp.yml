@@ -57,9 +57,9 @@ jobs:
         run: |
           cmake -G "Unix Makefiles" -S "${{ github.workspace }}" -B build -DLVK_WITH_SAMPLES_ANDROID=ON
 
-      - name: Assemble Tiny_Mesh APK
+      - name: Assemble 009_TriplanarMapping APK
         run: |
-          cd build/android/Tiny_Mesh
+          cd build/android/009_TriplanarMapping
           chmod +x ./gradlew
           ./gradlew assembleDebug  
 
