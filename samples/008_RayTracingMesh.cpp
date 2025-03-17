@@ -5,52 +5,21 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if !defined(_USE_MATH_DEFINES)
-#define _USE_MATH_DEFINES
-#endif // _USE_MATH_DEFINES
-#include <cassert>
-#include <cmath>
-#include <cstddef>
-#include <filesystem>
-#include <stdio.h>
+#include "Bistro.h"
+#include "VulkanApp.h"
 
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/ext.hpp>
-#include <glm/glm.hpp>
+// scene navigation
+#define USE_SPONZA 0
 
-#include <ldrutils/lutils/ScopeExit.h>
-
-#include <fast_obj.h>
-#include <meshoptimizer.h>
-#include <shared/Camera.h>
-#include <shared/UtilsFPS.h>
-
-#if defined(ANDROID)
-#include <android_native_app_glue.h>
-#include <jni.h>
-#include <time.h>
+#if USE_SPONZA
+#define MODEL_PATH "src/Sponza/sponza.obj"
+#define CACHE_FILE_NAME "cache3.data"
+vec3 lightDir_ = normalize(vec3(0.05f, 1.0f, 0.01f));
 #else
-#include <GLFW/glfw3.h>
+#define MODEL_PATH "src/bistro/Exterior/exterior.obj"
+#define CACHE_FILE_NAME "cache2.data"
+vec3 lightDir_ = normalize(vec3(0.032f, 0.835f, 0.549f));
 #endif
-
-#include <lvk/HelpersImGui.h>
-#include <lvk/LVK.h>
-
-constexpr uint32_t kMeshCacheVersion = 0xC0DE000A;
-#if defined(NDEBUG)
-constexpr bool kEnableValidationLayers = false;
-#else
-constexpr bool kEnableValidationLayers = true;
-#endif // NDEBUG
-
-#if defined(ANDROID)
-constexpr int kFramebufferScalar = 2;
-#endif
-
-std::string folderThirdParty;
-std::string folderContentRoot;
-
-std::unique_ptr<lvk::ImGuiRenderer> imgui_;
 
 #define UBOS_AND_PUSH_CONSTANTS \
   R"(
@@ -235,94 +204,30 @@ void main() {
 }
 )";
 
-using glm::mat4;
-using glm::vec2;
-using glm::vec3;
-using glm::vec4;
+lvk::IContext* ctx_ = nullptr;
 
-int width_ = 0;
-int height_ = 0;
-FramesPerSecondCounter fps_;
-
-constexpr uint32_t kNumBufferedFrames = 3;
-
-std::unique_ptr<lvk::IContext> ctx_;
-lvk::Framebuffer fbMain_; // swapchain
-lvk::Holder<lvk::ShaderModuleHandle> smFullscreenVert_;
-lvk::Holder<lvk::ShaderModuleHandle> smFullscreenFrag_;
-lvk::Holder<lvk::ShaderModuleHandle> smRaygen_;
-lvk::Holder<lvk::ShaderModuleHandle> smMiss_;
-lvk::Holder<lvk::ShaderModuleHandle> smMissShadow_;
-lvk::Holder<lvk::ShaderModuleHandle> smHit_;
-lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Fullscreen_;
-lvk::Holder<lvk::BufferHandle> vb0_, ib0_; // buffers for vertices and indices
-lvk::Holder<lvk::BufferHandle> sbMaterials_; // storage buffer for materials
-lvk::Holder<lvk::BufferHandle> sbInstances_; // storage buffer for TLAS instances
-std::vector<lvk::Holder<lvk::BufferHandle>> ubPerFrame_;
-lvk::RenderPass renderPassMain_;
-std::vector<lvk::Holder<lvk::AccelStructHandle>> BLAS_;
-lvk::Holder<lvk::AccelStructHandle> TLAS_;
-lvk::Holder<lvk::TextureHandle> rayTracingOutputImage_;
-lvk::Holder<lvk::RayTracingPipelineHandle> rayTracingPipeline_;
-
-// scene navigation
-#define USE_SPONZA 0
-
-#if USE_SPONZA
-#define MODEL_PATH "src/Sponza/sponza.obj"
-CameraPositioner_FirstPerson positioner_(vec3(-25, 10, -1), vec3(10, 10, 0), vec3(0, 1, 0));
-vec3 lightDir_ = normalize(vec3(0.05f, 1.0f, 0.01f));
-#else
-#define MODEL_PATH "src/bistro/Exterior/exterior.obj"
-CameraPositioner_FirstPerson positioner_(vec3(-100, 40, -47), vec3(0, 35, 0), vec3(0, 1, 0));
-vec3 lightDir_ = normalize(vec3(0.032f, 0.835f, 0.549f));
-#endif
-Camera camera_(positioner_);
-glm::vec2 mousePos_ = glm::vec2(0.0f);
-bool mousePressed_ = false;
-
-uint32_t frameId = 0;
-
-struct VertexData {
-  vec3 position;
-  uint32_t uv; // hvec2
-  uint16_t normal; // Octahedral 16-bit https://www.shadertoy.com/view/llfcRl
-  uint16_t mtlIndex;
-};
-
-static_assert(sizeof(VertexData) == 5 * sizeof(uint32_t));
-
-vec2 msign(vec2 v) {
-  return vec2(v.x >= 0.0 ? 1.0f : -1.0f, v.y >= 0.0 ? 1.0f : -1.0f);
-}
-
-// https://www.shadertoy.com/view/llfcRl
-uint16_t packSnorm2x8(vec2 v) {
-  glm::uvec2 d = glm::uvec2(round(127.5f + v * 127.5f));
-  return d.x | (d.y << 8u);
-}
-
-// https://www.shadertoy.com/view/llfcRl
-uint16_t packOctahedral16(vec3 n) {
-  n /= (abs(n.x) + abs(n.y) + abs(n.z));
-  return ::packSnorm2x8((n.z >= 0.0) ? vec2(n.x, n.y) : (vec2(1.0) - abs(vec2(n.y, n.x))) * msign(vec2(n)));
-}
-
-std::vector<VertexData> vertexData_;
-std::vector<uint32_t> indexData_;
+struct {
+  lvk::Holder<lvk::ShaderModuleHandle> smFullscreenVert_;
+  lvk::Holder<lvk::ShaderModuleHandle> smFullscreenFrag_;
+  lvk::Holder<lvk::ShaderModuleHandle> smRaygen_;
+  lvk::Holder<lvk::ShaderModuleHandle> smMiss_;
+  lvk::Holder<lvk::ShaderModuleHandle> smMissShadow_;
+  lvk::Holder<lvk::ShaderModuleHandle> smHit_;
+  lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Fullscreen_;
+  lvk::Holder<lvk::BufferHandle> vb0_, ib0_; // buffers for vertices and indices
+  lvk::Holder<lvk::BufferHandle> sbMaterials_; // storage buffer for materials
+  lvk::Holder<lvk::BufferHandle> sbInstances_; // storage buffer for TLAS instances
+  lvk::Holder<lvk::BufferHandle> ubPerFrame_;
+  std::vector<lvk::Holder<lvk::AccelStructHandle>> BLAS_;
+  lvk::Holder<lvk::AccelStructHandle> TLAS_;
+  lvk::Holder<lvk::TextureHandle> rayTracingOutputImage_;
+  lvk::Holder<lvk::RayTracingPipelineHandle> rayTracingPipeline_;
+} res;
 
 struct UniformsPerFrame {
   mat4 viewInverse;
   mat4 projInverse;
 } perFrame_;
-
-#define MAX_MATERIAL_NAME 128
-
-struct CachedMaterial {
-  char name[MAX_MATERIAL_NAME] = {};
-  vec3 ambient = vec3(0.0f);
-  vec3 diffuse = vec3(0.0f);
-};
 
 // this goes into our GLSL shaders
 struct GPUMaterial {
@@ -332,206 +237,15 @@ struct GPUMaterial {
 
 static_assert(sizeof(GPUMaterial) % 16 == 0);
 
-std::vector<CachedMaterial> cachedMaterials_;
 std::vector<GPUMaterial> materials_;
 
-bool initModel();
 void createPipelines();
-void createRayTracingOutputImage();
 
-bool init() {
-  for (uint32_t i = 0; i != kNumBufferedFrames; i++) {
-    ubPerFrame_.push_back(ctx_->createBuffer({.usage = lvk::BufferUsageBits_Uniform,
-                                              .storage = lvk::StorageType_HostVisible,
-                                              .size = sizeof(UniformsPerFrame),
-                                              .debugName = "Buffer: uniforms (per frame)"},
-                                             nullptr));
-  }
-
-  renderPassMain_ = {
-      .color = {{.loadOp = lvk::LoadOp_Clear, .storeOp = lvk::StoreOp_Store, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
-  };
-
-  fbMain_ = {
-      .color = {{.texture = ctx_->getCurrentSwapchainTexture()}},
-  };
-
-  createRayTracingOutputImage();
-  createPipelines();
-
-  float fontSizePixels = float(height_) / 70.0f;
-#if defined(ANDROID)
-  fontSizePixels *= kFramebufferScalar;
-#endif
-  imgui_ = std::make_unique<lvk::ImGuiRenderer>(
-      *ctx_, (folderThirdParty + "3D-Graphics-Rendering-Cookbook/data/OpenSans-Light.ttf").c_str(), fontSizePixels);
-
-  if (!initModel()) {
-    return false;
-  }
-
-  return true;
-}
-
-void destroy() {
-  imgui_ = nullptr;
-
-  vb0_ = nullptr;
-  ib0_ = nullptr;
-  sbMaterials_ = nullptr;
-  ubPerFrame_.clear();
-  smFullscreenVert_ = nullptr;
-  smFullscreenFrag_ = nullptr;
-  smRaygen_ = nullptr;
-  smHit_ = nullptr;
-  smMiss_ = nullptr;
-  smMissShadow_ = nullptr;
-  renderPipelineState_Fullscreen_ = nullptr;
-  rayTracingPipeline_ = nullptr;
-  rayTracingOutputImage_ = nullptr;
-  ctx_->destroy(fbMain_);
-  TLAS_ = nullptr;
-  BLAS_.clear();
-  sbInstances_ = nullptr;
-  ctx_ = nullptr;
-}
-
-bool loadAndCache(const char* cacheFileName) {
-  LVK_PROFILER_FUNCTION();
-
-  // load 3D model and cache it
-  LLOGL("Loading `%s`... It can take a while in debug builds...\n", MODEL_PATH);
-
-  fastObjMesh* mesh = fast_obj_read((folderContentRoot + MODEL_PATH).c_str());
-  SCOPE_EXIT {
-    if (mesh)
-      fast_obj_destroy(mesh);
-  };
-
-  if (!LVK_VERIFY(mesh)) {
-    LVK_ASSERT_MSG(false, "Did you read the tutorial at the top of this file?");
-    return false;
-  }
-
-  uint32_t vertexCount = 0;
-
-  for (uint32_t i = 0; i < mesh->face_count; ++i)
-    vertexCount += mesh->face_vertices[i];
-
-  vertexData_.reserve(vertexCount);
-
-  uint32_t vertexIndex = 0;
-
-  for (uint32_t face = 0; face < mesh->face_count; face++) {
-    for (uint32_t v = 0; v < mesh->face_vertices[face]; v++) {
-      LVK_ASSERT(v < 3);
-      const fastObjIndex gi = mesh->indices[vertexIndex++];
-
-      const float* p = &mesh->positions[gi.p * 3];
-      const float* n = &mesh->normals[gi.n * 3];
-      const float* t = &mesh->texcoords[gi.t * 2];
-
-      vertexData_.push_back({
-          .position = vec3(p[0], p[1], p[2]),
-          .uv = glm::packHalf2x16(vec2(t[0], t[1])),
-          .normal = packOctahedral16(vec3(n[0], n[1], n[2])),
-          .mtlIndex = (uint16_t)mesh->face_materials[face],
-      });
-    }
-  }
-
-  // repack the mesh as described in https://github.com/zeux/meshoptimizer
-  {
-    // 1. Generate an index buffer
-    const size_t indexCount = vertexData_.size();
-    std::vector<uint32_t> remap(indexCount);
-    const size_t vertexCount =
-        meshopt_generateVertexRemap(remap.data(), nullptr, indexCount, vertexData_.data(), indexCount, sizeof(VertexData));
-    // 2. Remap vertices
-    std::vector<VertexData> remappedVertices;
-    indexData_.resize(indexCount);
-    remappedVertices.resize(vertexCount);
-    meshopt_remapIndexBuffer(indexData_.data(), nullptr, indexCount, &remap[0]);
-    meshopt_remapVertexBuffer(remappedVertices.data(), vertexData_.data(), indexCount, sizeof(VertexData), remap.data());
-    vertexData_ = remappedVertices;
-    // 3. Optimize for the GPU vertex cache reuse and overdraw
-    meshopt_optimizeVertexCache(indexData_.data(), indexData_.data(), indexCount, vertexCount);
-    meshopt_optimizeOverdraw(
-        indexData_.data(), indexData_.data(), indexCount, &vertexData_[0].position.x, vertexCount, sizeof(VertexData), 1.05f);
-    meshopt_optimizeVertexFetch(vertexData_.data(), indexData_.data(), indexCount, vertexData_.data(), vertexCount, sizeof(VertexData));
-  }
-
-  // loop over materials
-  for (uint32_t mtlIdx = 0; mtlIdx != mesh->material_count; mtlIdx++) {
-    const fastObjMaterial& m = mesh->materials[mtlIdx];
-    CachedMaterial mtl;
-    mtl.ambient = vec3(m.Ka[0], m.Ka[1], m.Ka[2]);
-    mtl.diffuse = vec3(m.Kd[0], m.Kd[1], m.Kd[2]);
-    LVK_ASSERT(strlen(m.name) < MAX_MATERIAL_NAME);
-    strcat(mtl.name, m.name);
-    cachedMaterials_.push_back(mtl);
-  }
-
-  LLOGL("Caching mesh...\n");
-
-  FILE* cacheFile = fopen(cacheFileName, "wb");
-  if (!cacheFile) {
-    return false;
-  }
-  const uint32_t numMaterials = (uint32_t)cachedMaterials_.size();
-  const uint32_t numVertices = (uint32_t)vertexData_.size();
-  const uint32_t numIndices = (uint32_t)indexData_.size();
-  fwrite(&kMeshCacheVersion, sizeof(kMeshCacheVersion), 1, cacheFile);
-  fwrite(&numMaterials, sizeof(numMaterials), 1, cacheFile);
-  fwrite(&numVertices, sizeof(numVertices), 1, cacheFile);
-  fwrite(&numIndices, sizeof(numIndices), 1, cacheFile);
-  fwrite(cachedMaterials_.data(), sizeof(CachedMaterial), numMaterials, cacheFile);
-  fwrite(vertexData_.data(), sizeof(VertexData), numVertices, cacheFile);
-  fwrite(indexData_.data(), sizeof(uint32_t), numIndices, cacheFile);
-  return fclose(cacheFile) == 0;
-}
-
-bool loadFromCache(const char* cacheFileName) {
-  FILE* cacheFile = fopen(cacheFileName, "rb");
-  SCOPE_EXIT {
-    if (cacheFile) {
-      fclose(cacheFile);
-    }
-  };
-  if (!cacheFile) {
-    return false;
-  }
-#define CHECK_READ(expected, read) \
-  if ((read) != (expected)) {      \
-    return false;                  \
-  }
-  uint32_t versionProbe = 0;
-  CHECK_READ(1, fread(&versionProbe, sizeof(versionProbe), 1, cacheFile));
-  if (versionProbe != kMeshCacheVersion) {
-    LLOGL("Cache file has wrong version id\n");
-    return false;
-  }
-  uint32_t numMaterials = 0;
-  uint32_t numVertices = 0;
-  uint32_t numIndices = 0;
-  CHECK_READ(1, fread(&numMaterials, sizeof(numMaterials), 1, cacheFile));
-  CHECK_READ(1, fread(&numVertices, sizeof(numVertices), 1, cacheFile));
-  CHECK_READ(1, fread(&numIndices, sizeof(numIndices), 1, cacheFile));
-  cachedMaterials_.resize(numMaterials);
-  vertexData_.resize(numVertices);
-  indexData_.resize(numIndices);
-  CHECK_READ(numMaterials, fread(cachedMaterials_.data(), sizeof(CachedMaterial), numMaterials, cacheFile));
-  CHECK_READ(numVertices, fread(vertexData_.data(), sizeof(VertexData), numVertices, cacheFile));
-  CHECK_READ(numIndices, fread(indexData_.data(), sizeof(uint32_t), numIndices, cacheFile));
-#undef CHECK_READ
-  return true;
-}
-
-bool initModel() {
-  const std::string cacheFileName = folderContentRoot + "cache2.data";
+bool initModel(const std::string& folderContentRoot) {
+  const std::string cacheFileName = folderContentRoot + CACHE_FILE_NAME;
 
   if (!loadFromCache(cacheFileName.c_str())) {
-    if (!LVK_VERIFY(loadAndCache(cacheFileName.c_str()))) {
+    if (!LVK_VERIFY(loadAndCache(folderContentRoot, cacheFileName.c_str(), MODEL_PATH))) {
       LVK_ASSERT_MSG(false, "Cannot load 3D model");
       return false;
     }
@@ -540,25 +254,25 @@ bool initModel() {
   for (const auto& mtl : cachedMaterials_) {
     materials_.push_back(GPUMaterial{vec4(mtl.ambient, 1.0f), vec4(mtl.diffuse, 1.0f)});
   }
-  sbMaterials_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage,
-                                     .storage = lvk::StorageType_Device,
-                                     .size = sizeof(GPUMaterial) * materials_.size(),
-                                     .data = materials_.data(),
-                                     .debugName = "Buffer: materials"},
-                                    nullptr);
+  res.sbMaterials_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage,
+                                         .storage = lvk::StorageType_Device,
+                                         .size = sizeof(GPUMaterial) * materials_.size(),
+                                         .data = materials_.data(),
+                                         .debugName = "Buffer: materials"},
+                                        nullptr);
 
-  vb0_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage | lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
-                             .storage = lvk::StorageType_Device,
-                             .size = sizeof(VertexData) * vertexData_.size(),
-                             .data = vertexData_.data(),
-                             .debugName = "Buffer: vertex"},
-                            nullptr);
-  ib0_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage | lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
-                             .storage = lvk::StorageType_Device,
-                             .size = sizeof(uint32_t) * indexData_.size(),
-                             .data = indexData_.data(),
-                             .debugName = "Buffer: index"},
-                            nullptr);
+  res.vb0_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage | lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
+                                 .storage = lvk::StorageType_Device,
+                                 .size = sizeof(VertexData) * vertexData_.size(),
+                                 .data = vertexData_.data(),
+                                 .debugName = "Buffer: vertex"},
+                                nullptr);
+  res.ib0_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage | lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
+                                 .storage = lvk::StorageType_Device,
+                                 .size = sizeof(uint32_t) * indexData_.size(),
+                                 .data = indexData_.data(),
+                                 .debugName = "Buffer: index"},
+                                nullptr);
 
   const glm::mat3x4 transformMatrix(1.0f);
 
@@ -574,11 +288,11 @@ bool initModel() {
       .type = lvk::AccelStructType_BLAS,
       .geometryType = lvk::AccelStructGeomType_Triangles,
       .vertexFormat = lvk::VertexFormat::Float3,
-      .vertexBuffer = vb0_,
+      .vertexBuffer = res.vb0_,
       .vertexStride = sizeof(VertexData),
       .numVertices = (uint32_t)vertexData_.size(),
       .indexFormat = lvk::IndexFormat_UI32,
-      .indexBuffer = ib0_,
+      .indexBuffer = res.ib0_,
       .transformBuffer = transformBuffer,
       .buildRange = {.primitiveCount = totalPrimitiveCount},
       .buildFlags = lvk::AccelStructBuildFlagBits_PreferFastTrace,
@@ -586,7 +300,8 @@ bool initModel() {
   };
   const lvk::AccelStructSizes blasSizes = ctx_->getAccelStructSizes(blasDesc);
   LLOGL("Full model BLAS sizes (byts):\n   buildScratchSize = %llu,\n   accelerationStructureSize = %llu\n",
-        blasSizes.buildScratchSize, blasSizes.accelerationStructureSize);
+        blasSizes.buildScratchSize,
+        blasSizes.accelerationStructureSize);
   const uint32_t maxStorageBufferSize = ctx_->getMaxStorageBufferRange();
 
   // Calculate number of BLAS
@@ -601,7 +316,7 @@ bool initModel() {
   LLOGL("maxStorageBufferSize = %u bytes\nNumber of BLAS = %u\n", maxStorageBufferSize, requiredBlasCount);
 
   const glm::mat3x4 transform(glm::scale(mat4(1.0f), vec3(0.05f)));
-  BLAS_.reserve(requiredBlasCount);
+  res.BLAS_.reserve(requiredBlasCount);
 
   std::vector<lvk::AccelStructInstance> instances;
   instances.reserve(requiredBlasCount);
@@ -610,7 +325,7 @@ bool initModel() {
     const auto rest = (int)totalPrimitiveCount - i;
     blasDesc.buildRange.primitiveOffset = (uint32_t)i * 3 * sizeof(uint32_t);
     blasDesc.buildRange.primitiveCount = (primitiveCount < rest) ? primitiveCount : rest;
-    BLAS_.emplace_back(ctx_->createAccelerationStructure(blasDesc));
+    res.BLAS_.emplace_back(ctx_->createAccelerationStructure(blasDesc));
     instances.emplace_back(lvk::AccelStructInstance{
         // clang-format off
         .transform = (const lvk::mat3x4&)transform,
@@ -619,12 +334,12 @@ bool initModel() {
         .mask = 0xff,
         .instanceShaderBindingTableRecordOffset = 0,
         .flags = lvk::AccelStructInstanceFlagBits_TriangleFacingCullDisable,
-        .accelerationStructureReference = ctx_->gpuAddress(BLAS_.back()),
+        .accelerationStructureReference = ctx_->gpuAddress(res.BLAS_.back()),
     });
   }
 
   // Buffer for instance data
-  sbInstances_ = ctx_->createBuffer(lvk::BufferDesc{
+  res.sbInstances_ = ctx_->createBuffer(lvk::BufferDesc{
       .usage = lvk::BufferUsageBits_AccelStructBuildInputReadOnly,
       .storage = lvk::StorageType_HostVisible,
       .size = sizeof(lvk::AccelStructInstance) * instances.size(),
@@ -632,10 +347,10 @@ bool initModel() {
       .debugName = "sbInstances_",
   });
 
-  TLAS_ = ctx_->createAccelerationStructure({
+  res.TLAS_ = ctx_->createAccelerationStructure({
       .type = lvk::AccelStructType_TLAS,
       .geometryType = lvk::AccelStructGeomType_Instances,
-      .instancesBuffer = sbInstances_,
+      .instancesBuffer = res.sbInstances_,
       .buildRange = {.primitiveCount = (uint32_t)instances.size()},
       .buildFlags = lvk::AccelStructBuildFlagBits_PreferFastTrace,
   });
@@ -643,388 +358,135 @@ bool initModel() {
   return true;
 }
 
-void createPipelines() {
-  if (!rayTracingPipeline_.valid()) {
-    smRaygen_ = ctx_->createShaderModule({codeRayGen, lvk::Stage_RayGen, "Shader Module: main (raygen)"});
-    smMiss_ = ctx_->createShaderModule({codeMiss, lvk::Stage_Miss, "Shader Module: main (miss)"});
-    smMissShadow_ = ctx_->createShaderModule({codeMissShadow, lvk::Stage_Miss, "Shader Module: main (miss shadow)"});
-    smHit_ = ctx_->createShaderModule({codeClosestHit, lvk::Stage_ClosestHit, "Shader Module: main (closesthit)"});
+VULKAN_APP_MAIN {
+  const VulkanAppConfig cfg{
+      .width = 0,
+      .height = 0,
+#if USE_SPONZA
+      .initialCameraPos = vec3(-25, 10, -1),
+      .initialCameraTarget = vec3(10, 10, 0),
+#else
+      .initialCameraPos = vec3(-100, 40, -47),
+      .initialCameraTarget = vec3(0, 35, 0),
+#endif
+  };
+  VULKAN_APP_DECLARE(app, cfg);
 
-    rayTracingPipeline_ = ctx_->createRayTracingPipeline(lvk::RayTracingPipelineDesc{
-        .smRayGen = {lvk::ShaderModuleHandle(smRaygen_)},
-        .smClosestHit = {lvk::ShaderModuleHandle(smHit_)},
-        .smMiss = {lvk::ShaderModuleHandle(smMiss_), lvk::ShaderModuleHandle(smMissShadow_)},
-    });
-  }
+  ctx_ = app.ctx_.get();
 
-  if (!renderPipelineState_Fullscreen_.valid()) {
-    smFullscreenVert_ = ctx_->createShaderModule({kCodeFullscreenVS, lvk::Stage_Vert, "Shader Module: fullscreen (vert)"});
-    smFullscreenFrag_ = ctx_->createShaderModule({kCodeFullscreenFS, lvk::Stage_Frag, "Shader Module: fullscreen (frag)"});
-    const lvk::RenderPipelineDesc desc = {
-        .smVert = smFullscreenVert_,
-        .smFrag = smFullscreenFrag_,
-        .color = {{.format = ctx_->getFormat(fbMain_.color[0].texture)}},
-        .cullMode = lvk::CullMode_None,
-        .debugName = "Pipeline: fullscreen",
-    };
-    renderPipelineState_Fullscreen_ = ctx_->createRenderPipeline(desc, nullptr);
-  }
-}
+  res.ubPerFrame_ = ctx_->createBuffer({
+      .usage = lvk::BufferUsageBits_Storage,
+      .storage = lvk::StorageType_HostVisible,
+      .size = sizeof(UniformsPerFrame),
+      .debugName = "Buffer: uniforms (per frame)",
+  });
 
-void createRayTracingOutputImage() {
-  const lvk::TextureDesc descColor = {
+  res.rayTracingOutputImage_ = ctx_->createTexture(lvk::TextureDesc{
       .type = lvk::TextureType_2D,
       .format = lvk::Format_BGRA_UN8,
-      .dimensions = {(uint32_t)width_, (uint32_t)height_},
+      .dimensions = {(uint32_t)app.width_, (uint32_t)app.height_},
       .usage = lvk::TextureUsageBits_Sampled | lvk::TextureUsageBits_Storage,
       .debugName = "Ray-Tracing Output Image",
-  };
-  rayTracingOutputImage_ = ctx_->createTexture(descColor);
-}
+  });
 
-void resize() {
-  if (!width_ || !height_) {
-    return;
-  }
-  ctx_->recreateSwapchain(width_, height_);
-  createRayTracingOutputImage();
-}
+  res.smRaygen_ = ctx_->createShaderModule({codeRayGen, lvk::Stage_RayGen, "Shader Module: main (raygen)"});
+  res.smMiss_ = ctx_->createShaderModule({codeMiss, lvk::Stage_Miss, "Shader Module: main (miss)"});
+  res.smMissShadow_ = ctx_->createShaderModule({codeMissShadow, lvk::Stage_Miss, "Shader Module: main (miss shadow)"});
+  res.smHit_ = ctx_->createShaderModule({codeClosestHit, lvk::Stage_ClosestHit, "Shader Module: main (closesthit)"});
 
-void render(double delta, uint32_t frameIndex) {
-  LVK_PROFILER_FUNCTION();
-
-  if (!width_ && !height_)
-    return;
-
-  lvk::TextureHandle nativeDrawable = ctx_->getCurrentSwapchainTexture();
-  fbMain_.color[0].texture = nativeDrawable;
-
-  // imGui
-  {
-    imgui_->beginFrame(fbMain_);
-
-    // a nice FPS counter
-    {
-      const ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
-                                     ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
-      const ImGuiViewport* v = ImGui::GetMainViewport();
-      LVK_ASSERT(v);
-      ImGui::SetNextWindowPos(
+  res.rayTracingPipeline_ = ctx_->createRayTracingPipeline(lvk::RayTracingPipelineDesc{
+      .smRayGen = {lvk::ShaderModuleHandle(res.smRaygen_)},
+      .smClosestHit = {lvk::ShaderModuleHandle(res.smHit_)},
+      .smMiss =
           {
-              v->WorkPos.x + v->WorkSize.x - 15.0f,
-              v->WorkPos.y + 15.0f,
+              lvk::ShaderModuleHandle(res.smMiss_),
+              lvk::ShaderModuleHandle(res.smMissShadow_),
           },
-          ImGuiCond_Always,
-          {1.0f, 0.0f});
-      ImGui::SetNextWindowBgAlpha(0.30f);
-      ImGui::SetNextWindowSize(ImVec2(ImGui::CalcTextSize("FPS : _______").x, 0));
-      if (ImGui::Begin("##FPS", nullptr, flags)) {
-        ImGui::Text("FPS : %i", (int)fps_.getFPS());
-        ImGui::Text("Ms  : %.1f", 1000.0 / fps_.getFPS());
-      }
-      ImGui::End();
-    }
+  });
+
+  res.smFullscreenVert_ = ctx_->createShaderModule({kCodeFullscreenVS, lvk::Stage_Vert, "Shader Module: fullscreen (vert)"});
+  res.smFullscreenFrag_ = ctx_->createShaderModule({kCodeFullscreenFS, lvk::Stage_Frag, "Shader Module: fullscreen (frag)"});
+  res.renderPipelineState_Fullscreen_ = ctx_->createRenderPipeline(lvk::RenderPipelineDesc{
+      .smVert = res.smFullscreenVert_,
+      .smFrag = res.smFullscreenFrag_,
+      .color = {{.format = app.ctx_->getSwapchainFormat()}},
+      .cullMode = lvk::CullMode_None,
+      .debugName = "Pipeline: fullscreen",
+  });
+
+  if (!initModel(app.folderContentRoot_)) {
+    VULKAN_APP_EXIT();
   }
 
-  positioner_.update(delta, mousePos_, mousePressed_);
+  app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
+    LVK_PROFILER_FUNCTION();
 
-  const float fov = float(45.0f * (M_PI / 180.0f));
-  const float aspectRatio = (float)width_ / (float)height_;
-
-  perFrame_ = UniformsPerFrame{
-      .viewInverse = glm::inverse(camera_.getViewMatrix()),
-      .projInverse = glm::inverse(glm::perspective(fov, aspectRatio, 0.5f, 500.0f)),
-  };
-  ctx_->upload(ubPerFrame_[frameIndex], &perFrame_, sizeof(perFrame_));
-
-  // Pass 1: ray-trace the scene
-  {
     lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
 
-    struct {
-      vec4 lightDir;
-      uint64_t perFrame;
-      uint64_t materials;
-      uint64_t indices;
-      uint64_t vertices;
-      uint32_t outTexture;
-      uint32_t tlas;
-    } pc = {
-        .lightDir = vec4(lightDir_, 0.0f),
-        .perFrame = ctx_->gpuAddress(ubPerFrame_[frameIndex]),
-        .materials = ctx_->gpuAddress(sbMaterials_),
-        .indices = ctx_->gpuAddress(ib0_),
-        .vertices = ctx_->gpuAddress(vb0_),
-        .outTexture = rayTracingOutputImage_.index(),
-        .tlas = TLAS_.index(),
-    };
+    buffer.cmdUpdateBuffer(res.ubPerFrame_,
+                           UniformsPerFrame{
+                               .viewInverse = glm::inverse(app.camera_.getViewMatrix()),
+                               .projInverse = glm::inverse(glm::perspective(float(45.0f * (M_PI / 180.0f)), aspectRatio, 0.5f, 500.0f)),
+                           });
 
-    buffer.cmdBindRayTracingPipeline(rayTracingPipeline_);
-    buffer.cmdPushConstants(pc);
-    buffer.cmdTraceRays((uint32_t)width_, (uint32_t)height_, 1, {.textures = {lvk::TextureHandle(rayTracingOutputImage_)}});
-    ctx_->submit(buffer);
-  }
-
-  // Pass 2: render into the swapchain image
-  {
-    lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
-
-    // This will clear the framebuffer
-    buffer.cmdBeginRendering(renderPassMain_, fbMain_, {.textures = {lvk::TextureHandle(rayTracingOutputImage_)}});
+    // Pass 1: ray-trace the scene
     {
-      buffer.cmdBindRenderPipeline(renderPipelineState_Fullscreen_);
-      buffer.cmdPushDebugGroupLabel("Swapchain Output", 0xff0000ff);
-      buffer.cmdBindDepthState({});
       struct {
-        uint32_t texture;
-      } bindings = {
-          .texture = rayTracingOutputImage_.index(),
+        vec4 lightDir;
+        uint64_t perFrame;
+        uint64_t materials;
+        uint64_t indices;
+        uint64_t vertices;
+        uint32_t outTexture;
+        uint32_t tlas;
+      } pc = {
+          .lightDir = vec4(lightDir_, 0.0f),
+          .perFrame = ctx_->gpuAddress(res.ubPerFrame_),
+          .materials = ctx_->gpuAddress(res.sbMaterials_),
+          .indices = ctx_->gpuAddress(res.ib0_),
+          .vertices = ctx_->gpuAddress(res.vb0_),
+          .outTexture = res.rayTracingOutputImage_.index(),
+          .tlas = res.TLAS_.index(),
       };
-      buffer.cmdPushConstants(bindings);
-      buffer.cmdDraw(3);
-      buffer.cmdPopDebugGroupLabel();
 
-      imgui_->endFrame(buffer);
+      buffer.cmdBindRayTracingPipeline(res.rayTracingPipeline_);
+      buffer.cmdPushConstants(pc);
+      buffer.cmdTraceRays(width, height, 1, {.textures = {lvk::TextureHandle(res.rayTracingOutputImage_)}});
     }
-    buffer.cmdEndRendering();
 
-    ctx_->submit(buffer, fbMain_.color[0].texture);
-  }
-}
+    // Pass 2: render into the swapchain image
+    {
+      const lvk::RenderPass renderPassMain = {
+          .color = {{.loadOp = lvk::LoadOp_Clear, .storeOp = lvk::StoreOp_Store, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
+      };
+      const lvk::Framebuffer fbMain = {
+          .color = {{.texture = ctx_->getCurrentSwapchainTexture()}},
+      };
+      buffer.cmdBeginRendering(renderPassMain, fbMain, {.textures = {lvk::TextureHandle(res.rayTracingOutputImage_)}});
+      {
+        buffer.cmdBindRenderPipeline(res.renderPipelineState_Fullscreen_);
+        buffer.cmdPushDebugGroupLabel("Swapchain Output", 0xff0000ff);
+        buffer.cmdBindDepthState({});
+        struct {
+          uint32_t texture;
+        } bindings = {
+            .texture = res.rayTracingOutputImage_.index(),
+        };
+        buffer.cmdPushConstants(bindings);
+        buffer.cmdDraw(3);
+        buffer.cmdPopDebugGroupLabel();
 
-inline ImVec4 toVec4(const vec4& c) {
-  return ImVec4(c.x, c.y, c.z, c.w);
-}
-
-#if !defined(ANDROID)
-int main(int argc, char* argv[]) {
-  minilog::initialize(nullptr, {.threadNames = false});
-
-  // find the content folder
-  {
-    using namespace std::filesystem;
-    path subdir("third-party/content/");
-    path dir = current_path();
-    // find the content somewhere above our current build directory
-    while (dir != current_path().root_path() && !exists(dir / subdir)) {
-      dir = dir.parent_path();
-    }
-    if (!exists(dir / subdir)) {
-      printf("Cannot find the content directory. Run `deploy_content.py` before running this app.");
-      LVK_ASSERT(false);
-      return EXIT_FAILURE;
-    }
-    folderThirdParty = (dir / path("third-party/deps/src/")).string();
-    folderContentRoot = (dir / subdir).string();
-  }
-
-  GLFWwindow* window = lvk::initWindow("Vulkan Bistro", width_, height_);
-  ctx_ = lvk::createVulkanContextWithSwapchain(
-      window, width_, height_, {.enableValidation = kEnableValidationLayers}, lvk::HWDeviceType_Discrete);
-  if (!ctx_) {
-    return EXIT_FAILURE;
-  }
-
-  if (!init()) {
-    return EXIT_FAILURE;
-  }
-
-  glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int width, int height) {
-    width_ = width;
-    height_ = height;
-    resize();
-  });
-
-  glfwSetCursorPosCallback(window, [](auto* window, double x, double y) {
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-    if (width && height) {
-      mousePos_ = vec2(x / width, 1.0f - y / height);
-      ImGui::GetIO().MousePos = ImVec2(x, y);
-    }
-  });
-
-  glfwSetMouseButtonCallback(window, [](auto* window, int button, int action, int mods) {
-    if (!ImGui::GetIO().WantCaptureMouse) {
-      if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        mousePressed_ = (action == GLFW_PRESS);
+        app.imgui_->beginFrame(fbMain);
+        app.drawFPS();
+        app.imgui_->endFrame(buffer);
       }
-    } else {
-      // release the mouse
-      mousePressed_ = false;
+      buffer.cmdEndRendering();
     }
-    double xpos, ypos;
-    glfwGetCursorPos(window, &xpos, &ypos);
-    const ImGuiMouseButton_ imguiButton = (button == GLFW_MOUSE_BUTTON_LEFT)
-                                              ? ImGuiMouseButton_Left
-                                              : (button == GLFW_MOUSE_BUTTON_RIGHT ? ImGuiMouseButton_Right : ImGuiMouseButton_Middle);
-    ImGuiIO& io = ImGui::GetIO();
-    io.MousePos = ImVec2((float)xpos, (float)ypos);
-    io.MouseDown[imguiButton] = action == GLFW_PRESS;
+    ctx_->submit(buffer, app.ctx_->getCurrentSwapchainTexture());
   });
-
-  glfwSetScrollCallback(window, [](GLFWwindow* window, double dx, double dy) {
-    ImGuiIO& io = ImGui::GetIO();
-    io.MouseWheelH = (float)dx;
-    io.MouseWheel = (float)dy;
-  });
-
-  glfwSetKeyCallback(window, [](GLFWwindow* window, int key, int, int action, int mods) {
-    const bool pressed = action != GLFW_RELEASE;
-    if (key == GLFW_KEY_ESCAPE && pressed) {
-      glfwSetWindowShouldClose(window, GLFW_TRUE);
-    }
-    if (key == GLFW_KEY_ESCAPE && pressed)
-      glfwSetWindowShouldClose(window, GLFW_TRUE);
-    if (key == GLFW_KEY_W) {
-      positioner_.movement_.forward_ = pressed;
-    }
-    if (key == GLFW_KEY_S) {
-      positioner_.movement_.backward_ = pressed;
-    }
-    if (key == GLFW_KEY_A) {
-      positioner_.movement_.left_ = pressed;
-    }
-    if (key == GLFW_KEY_D) {
-      positioner_.movement_.right_ = pressed;
-    }
-    if (key == GLFW_KEY_1) {
-      positioner_.movement_.up_ = pressed;
-    }
-    if (key == GLFW_KEY_2) {
-      positioner_.movement_.down_ = pressed;
-    }
-    if (mods & GLFW_MOD_SHIFT) {
-      positioner_.movement_.fastSpeed_ = pressed;
-    }
-    if (key == GLFW_KEY_LEFT_SHIFT || key == GLFW_KEY_RIGHT_SHIFT) {
-      positioner_.movement_.fastSpeed_ = pressed;
-    }
-    if (key == GLFW_KEY_SPACE) {
-      positioner_.setUpVector(vec3(0.0f, 1.0f, 0.0f));
-    }
-  });
-
-  double prevTime = glfwGetTime();
-  uint32_t frameIndex = 0;
-
-  // Main loop
-  while (!glfwWindowShouldClose(window)) {
-    glfwPollEvents();
-
-    const double newTime = glfwGetTime();
-    const double delta = newTime - prevTime;
-    prevTime = newTime;
-
-    if (!width_ || !height_)
-      continue;
-
-    fps_.tick(delta);
-
-    render(delta, frameIndex);
-
-    frameIndex = (frameIndex + 1) % kNumBufferedFrames;
-  }
 
   // destroy all the Vulkan stuff before closing the window
-  destroy();
+  res = {};
 
-  glfwDestroyWindow(window);
-  glfwTerminate();
-
-  return 0;
+  VULKAN_APP_EXIT();
 }
-#else
-double getCurrentTimestamp() {
-  timespec t = {0, 0};
-  clock_gettime(CLOCK_MONOTONIC, &t);
-  return (double)t.tv_sec + 1.0e-9 * t.tv_nsec;
-}
-
-extern "C" {
-void handle_cmd(android_app* app, int32_t cmd) {
-  switch (cmd) {
-  case APP_CMD_INIT_WINDOW:
-    if (app->window != nullptr) {
-      width_ = ANativeWindow_getWidth(app->window) / kFramebufferScalar;
-      height_ = ANativeWindow_getHeight(app->window) / kFramebufferScalar;
-      ctx_ = lvk::createVulkanContextWithSwapchain(app->window,
-                                                   width_,
-                                                   height_,
-                                                   {
-                                                       .enableValidation = kEnableValidationLayers,
-                                                   });
-      if (!init()) {
-        LLOGW("Failed to initialize the app\n");
-        std::terminate();
-      }
-    }
-    break;
-  case APP_CMD_TERM_WINDOW:
-    destroy();
-    break;
-  }
-}
-
-void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
-  int w = ANativeWindow_getWidth(window) / kFramebufferScalar;
-  int h = ANativeWindow_getHeight(window) / kFramebufferScalar;
-  if (width_ != w || height_ != h) {
-    width_ = w;
-    height_ = h;
-    if (ctx_) {
-      resize();
-    }
-  }
-}
-
-void android_main(android_app* app) {
-  minilog::initialize(nullptr, {.threadNames = false});
-  app->onAppCmd = handle_cmd;
-  app->activity->callbacks->onNativeWindowResized = resize_callback;
-
-  // find the content folder
-  {
-    using namespace std::filesystem;
-    if (const char* externalStorage = std::getenv("EXTERNAL_STORAGE")) {
-      folderThirdParty = (std::filesystem::path(externalStorage) / "LVK" / "deps" / "src").string() + "/";
-      folderContentRoot = (std::filesystem::path(externalStorage) / "LVK" / "content").string() + "/";
-      if (!exists(folderThirdParty) || !exists(folderContentRoot)) {
-        LLOGW("Cannot find the content directory. Run `deploy_content_android.py` before running this app.\n");
-        LVK_ASSERT(false);
-        std::terminate();
-      }
-    } else {
-      LLOGW("Cannot find EXTERNAL_STORAGE.\n");
-      LVK_ASSERT(false);
-      std::terminate();
-    }
-  }
-
-  fps_.printFPS_ = false;
-
-  double prevTime = getCurrentTimestamp();
-  uint32_t frameIndex = 0;
-
-  int events = 0;
-  android_poll_source* source = nullptr;
-  do {
-    double newTime = getCurrentTimestamp();
-    double delta = newTime - prevTime;
-    if (fps_.tick(delta)) {
-      LLOGL("FPS: %.1f\n", fps_.getFPS());
-    }
-    prevTime = newTime;
-    if (ctx_) {
-      render(delta, frameIndex);
-    }
-    if (ALooper_pollOnce(0, nullptr, &events, (void**)&source) >= 0) {
-      if (source) {
-        source->process(app, source);
-      }
-    }
-    frameIndex = (frameIndex + 1) % kNumBufferedFrames;
-  } while (!app->destroyRequested);
-}
-} // extern "C"
-#endif
