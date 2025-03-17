@@ -40,7 +40,7 @@ double glfwGetTime();
 #if defined(ANDROID)
 #  define VULKAN_APP_MAIN void android_main(android_app* androidApp)
 #  define VULKAN_APP_DECLARE(app, config) VulkanApp app(androidApp, config)
-#  define VULKAN_APP_EXIT()
+#  define VULKAN_APP_EXIT() return
 #else
 #  define VULKAN_APP_MAIN int main(int argc, char* argv[])
 #  define VULKAN_APP_DECLARE(app, config) VulkanApp app(config)
