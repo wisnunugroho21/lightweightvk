@@ -59,6 +59,11 @@ using DrawFrameFunc = std::function<void(uint32_t width, uint32_t height, float 
 struct VulkanAppConfig {
   int width = -95; // 95% horizontally
   int height = -90; // 90% vertically
+#if defined(ANDROID)
+  int framebufferScalar = 2;
+#else
+  int framebufferScalar = 1;
+#endif // ANDROID
   bool resizable = false;
   vec3 initialCameraPos = vec3(0.0f, 0.0f, -2.5f);
   vec3 initialCameraTarget = vec3(0.0f, 0.0f, 0.0f);

@@ -58,8 +58,8 @@ static void handle_cmd(android_app* androidApp, int32_t cmd) {
   switch (cmd) {
   case APP_CMD_INIT_WINDOW:
     if (androidApp->window) {
-      app->width_ = ANativeWindow_getWidth(androidApp->window);
-      app->height_ = ANativeWindow_getHeight(androidApp->window);
+      app->width_ = ANativeWindow_getWidth(androidApp->window) / app->cfg_.framebufferScalar;
+      app->height_ = ANativeWindow_getHeight(androidApp->window) / app->cfg_.framebufferScalar;
       if (!app->ctx_)
         app->ctx_ = lvk::createVulkanContextWithSwapchain(androidApp->window, app->width_, app->height_, app->cfg_.contextConfig);
       app->canRender_ = true;
@@ -81,8 +81,8 @@ static void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
   LLOGD("resize_callback()");
 
   VulkanApp* app = (VulkanApp*)activity->instance;
-  const int w = ANativeWindow_getWidth(window);
-  const int h = ANativeWindow_getHeight(window);
+  const int w = ANativeWindow_getWidth(window) / app->cfg_.framebufferScalar;
+  const int h = ANativeWindow_getHeight(window) / app->cfg_.framebufferScalar;
   if (app->width_ != w || app->height_ != h) {
     app->width_ = w;
     app->height_ = h;
