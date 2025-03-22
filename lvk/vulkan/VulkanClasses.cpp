@@ -1090,7 +1090,8 @@ VkImageView lvk::VulkanImage::getOrCreateVkImageViewForFramebuffer(VulkanContext
 
 lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32_t height) :
   ctx_(ctx), device_(ctx.vkDevice_), graphicsQueue_(ctx.deviceQueues_.graphicsQueue), width_(width), height_(height) {
-  surfaceFormat_ = chooseSwapSurfaceFormat(ctx.deviceSurfaceFormats_, ctx.config_.swapchainRequestedColorSpace, ctx.has_EXT_swapchain_colorspace_);
+  surfaceFormat_ =
+      chooseSwapSurfaceFormat(ctx.deviceSurfaceFormats_, ctx.config_.swapchainRequestedColorSpace, ctx.has_EXT_swapchain_colorspace_);
 
   LVK_ASSERT_MSG(ctx.vkSurface_ != VK_NULL_HANDLE,
                  "You are trying to create a swapchain but your OS surface is empty. Did you want to "
@@ -1142,28 +1143,43 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
   const VkImageUsageFlags usageFlags = chooseUsageFlags(ctx.getVkPhysicalDevice(), ctx.vkSurface_, surfaceFormat_.format);
   const bool isCompositeAlphaOpaqueSupported = (ctx.deviceSurfaceCaps_.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) != 0;
   const VkSwapchainCreateInfoKHR ci = {
-    .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-    .surface = ctx.vkSurface_,
-    .minImageCount = chooseSwapImageCount(ctx.deviceSurfaceCaps_),
-    .imageFormat = surfaceFormat_.format,
-    .imageColorSpace = surfaceFormat_.colorSpace,
-    .imageExtent = {.width = width, .height = height},
-    .imageArrayLayers = 1,
-    .imageUsage = usageFlags,
-    .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    .queueFamilyIndexCount = 1,
-    .pQueueFamilyIndices = &ctx.deviceQueues_.graphicsQueueFamilyIndex,
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .surface = ctx.vkSurface_,
+      .minImageCount = chooseSwapImageCount(ctx.deviceSurfaceCaps_),
+      .imageFormat = surfaceFormat_.format,
+      .imageColorSpace = surfaceFormat_.colorSpace,
+      .imageExtent = {.width = width, .height = height},
+      .imageArrayLayers = 1,
+      .imageUsage = usageFlags,
+      .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .queueFamilyIndexCount = 1,
+      .pQueueFamilyIndices = &ctx.deviceQueues_.graphicsQueueFamilyIndex,
 #if defined(ANDROID)
-    .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+      .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 #else
-    .preTransform = ctx.deviceSurfaceCaps_.currentTransform,
+      .preTransform = ctx.deviceSurfaceCaps_.currentTransform,
 #endif
-    .compositeAlpha = isCompositeAlphaOpaqueSupported ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR : VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
-    .presentMode = chooseSwapPresentMode(ctx.devicePresentModes_),
-    .clipped = VK_TRUE,
-    .oldSwapchain = VK_NULL_HANDLE,
+      .compositeAlpha = isCompositeAlphaOpaqueSupported ? VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR : VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
+      .presentMode = chooseSwapPresentMode(ctx.devicePresentModes_),
+      .clipped = VK_TRUE,
+      .oldSwapchain = VK_NULL_HANDLE,
   };
   VK_ASSERT(vkCreateSwapchainKHR(device_, &ci, nullptr, &swapchain_));
+
+  if (ctx_.has_EXT_hdr_metadata_) {
+    const VkHdrMetadataEXT metadata = {
+        .sType = VK_STRUCTURE_TYPE_HDR_METADATA_EXT,
+        .displayPrimaryRed = {.x = 0.680f, .y = 0.320f},
+        .displayPrimaryGreen = {.x = 0.265f, .y = 0.690f},
+        .displayPrimaryBlue = {.x = 0.150f, .y = 0.060f},
+        .whitePoint = {.x = 0.3127f, .y = 0.3290f},
+        .maxLuminance = 80.0f,
+        .minLuminance = 0.001f,
+        .maxContentLightLevel = 2000.0f,
+        .maxFrameAverageLightLevel = 500.0f,
+    };
+    vkSetHdrMetadataEXT(device_, 1, &swapchain_, &metadata);
+  }
 
   VkImage swapchainImages[LVK_MAX_SWAPCHAIN_IMAGES];
   VK_ASSERT(vkGetSwapchainImagesKHR(device_, swapchain_, &numSwapchainImages_, nullptr));
@@ -6435,6 +6451,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   {
     addOptionalExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, has_8BitIndices_, &indexTypeUint8Features);
   }
+  addOptionalExtension(VK_EXT_HDR_METADATA_EXTENSION_NAME, has_EXT_hdr_metadata_);
 
   // check extensions
   {

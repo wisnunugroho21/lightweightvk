@@ -723,6 +723,7 @@ class VulkanContext final : public IContext {
   bool has_8BitIndices_ = false; // VK_KHR_index_type_uint8 or VK_EXT_index_type_uint8
   bool has_EXT_calibrated_timestamps_ = false;
   bool has_EXT_swapchain_colorspace_ = false;
+  bool has_EXT_hdr_metadata_ = false;
 
   TextureHandle dummyTexture_;
 
