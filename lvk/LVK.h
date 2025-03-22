@@ -1151,7 +1151,7 @@ struct ContextConfig {
   VulkanVersion vulkanVersion = VulkanVersion_1_3;
   bool terminateOnValidationError = false; // invoke std::terminate() on any validation error
   bool enableValidation = true;
-  lvk::ColorSpace swapChainColorSpace = lvk::ColorSpace_SRGB_LINEAR;
+  lvk::ColorSpace swapchainRequestedColorSpace = lvk::ColorSpace_SRGB_LINEAR;
   // owned by the application - should be alive until createVulkanContextWithSwapchain() returns
   const void* pipelineCacheData = nullptr;
   size_t pipelineCacheDataSize = 0;
