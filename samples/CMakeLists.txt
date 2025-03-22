@@ -138,13 +138,13 @@ if(WIN32 OR UNIX AND NOT (APPLE))
   # Windows and Linux
   ADD_DEMO("005_MeshShaders")
 endif()
+ADD_DEMO("009_TriplanarMapping")
 if((WIN32 OR UNIX AND NOT (APPLE)) OR LVK_WITH_SAMPLES_ANDROID)
   # Windows, Linux and Android
-  ADD_DEMO("006_RayTracingHello")
-  ADD_DEMO("007_RayTracingAO")
-  ADD_DEMO("008_RayTracingMesh")
+  ADD_DEMO("RTX_001_Hello")
+  ADD_DEMO("RTX_002_AO")
+  ADD_DEMO("RTX_003_Pipeline")
 endif()
-ADD_DEMO("009_TriplanarMapping")
 
 ADD_DEMO("Tiny_MeshLarge")
 ADD_DEMO_SOURCES("Tiny_MeshLarge"
