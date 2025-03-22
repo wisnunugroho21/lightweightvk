@@ -79,7 +79,7 @@ void main() {
 namespace lvk {
 
 lvk::Holder<lvk::RenderPipelineHandle> ImGuiRenderer::createNewPipelineState(const lvk::Framebuffer& desc) {
-  const uint32_t nonLinearColorSpace = ctx_.getSwapChainColorSpace() == ColorSpace_SRGB_NONLINEAR ? 1u : 0u;
+  const uint32_t nonLinearColorSpace = ctx_.getSwapchainColorSpace() == ColorSpace_SRGB_NONLINEAR ? 1u : 0u;
   return ctx_.createRenderPipeline(
       {
           .smVert = vert_,

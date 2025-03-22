@@ -1112,7 +1112,7 @@ class IContext {
 
   virtual TextureHandle getCurrentSwapchainTexture() = 0;
   virtual Format getSwapchainFormat() const = 0;
-  virtual ColorSpace getSwapChainColorSpace() const = 0;
+  virtual ColorSpace getSwapchainColorSpace() const = 0;
   virtual uint32_t getNumSwapchainImages() const = 0;
   virtual void recreateSwapchain(int newWidth, int newHeight) = 0;
   

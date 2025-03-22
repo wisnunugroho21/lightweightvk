@@ -5644,8 +5644,12 @@ lvk::Format lvk::VulkanContext::getSwapchainFormat() const {
   return vkFormatToFormat(swapchain_->getSurfaceFormat().format);
 }
 
-lvk::ColorSpace lvk::VulkanContext::getSwapChainColorSpace() const {
-  return config_.swapChainColorSpace;
+lvk::ColorSpace lvk::VulkanContext::getSwapchainColorSpace() const {
+  if (!hasSwapchain()) {
+    return ColorSpace_SRGB_NONLINEAR;
+  }
+
+  return vkColorSpaceToColorSpace(swapchain_->getSurfaceFormat().colorSpace);
 }
 
 uint32_t lvk::VulkanContext::getNumSwapchainImages() const {
