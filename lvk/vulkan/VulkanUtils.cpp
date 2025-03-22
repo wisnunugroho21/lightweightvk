@@ -197,6 +197,20 @@ VkFormat lvk::formatToVkFormat(lvk::Format format) {
 #endif // _MSC_VER
 }
 
+lvk::ColorSpace lvk::vkColorSpaceToColorSpace(VkColorSpaceKHR colorSpace) {
+  switch (colorSpace) {
+  case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+    return ColorSpace_SRGB_NONLINEAR;
+  case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+    return ColorSpace_SRGB_LINEAR;
+  case VK_COLOR_SPACE_HDR10_ST2084_EXT:
+    return ColorSpace_HDR10;
+  default:
+    LVK_ASSERT_MSG(false, "Unsupported color space");
+    return ColorSpace_SRGB_NONLINEAR;
+  }
+}
+
 lvk::Format lvk::vkFormatToFormat(VkFormat format) {
   switch (format) {
   case VK_FORMAT_UNDEFINED:

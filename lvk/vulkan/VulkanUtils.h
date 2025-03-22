@@ -114,6 +114,7 @@ const char* getVulkanResultString(VkResult result);
 uint32_t getBytesPerPixel(VkFormat format);
 uint32_t getNumImagePlanes(VkFormat format);
 lvk::Format vkFormatToFormat(VkFormat format);
+lvk::ColorSpace vkColorSpaceToColorSpace(VkColorSpaceKHR colorSpace);
 VkFormat formatToVkFormat(lvk::Format format);
 VkCompareOp compareOpToVkCompareOp(lvk::CompareOp func);
 VkExtent2D getImagePlaneExtent(VkExtent2D plane0, lvk::Format format, uint32_t plane);
