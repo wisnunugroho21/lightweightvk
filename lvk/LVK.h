@@ -497,6 +497,9 @@ enum Format : uint8_t {
   Format_BGRA_UN8,
   Format_BGRA_SRGB8,
 
+  Format_A2B10G10R10_UN,
+  Format_A2R10G10B10_UN,
+
   Format_ETC2_RGB8,
   Format_ETC2_SRGB8,
   Format_BC7_RGBA,
