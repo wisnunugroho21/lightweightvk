@@ -657,7 +657,9 @@ bool isDepthOrStencilVkFormat(VkFormat format) {
   return false;
 }
 
-VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats, lvk::ColorSpace colorSpace) {
+VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats,
+                                           lvk::ColorSpace requestedColorSpace,
+                                           bool hasSwapchainColorspaceExt) {
   LVK_ASSERT(!formats.empty());
 
   auto isNativeSwapChainBGR = [](const std::vector<VkSurfaceFormatKHR>& formats) -> bool {
@@ -677,11 +679,20 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
     return false;
   };
 
-  auto colorSpaceToVkSurfaceFormat = [](lvk::ColorSpace colorSpace, bool isBGR) -> VkSurfaceFormatKHR {
+  auto colorSpaceToVkSurfaceFormat = [](lvk::ColorSpace colorSpace, bool isBGR, bool hasSwapchainColorspaceExt) -> VkSurfaceFormatKHR {
     switch (colorSpace) {
     case lvk::ColorSpace_SRGB_LINEAR:
       // the closest thing to sRGB linear
       return VkSurfaceFormatKHR{isBGR ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_BT709_LINEAR_EXT};
+    case lvk::ColorSpace_SRGB_EXTENDED_LINEAR:
+      if (hasSwapchainColorspaceExt)
+        return VkSurfaceFormatKHR{VK_FORMAT_R16G16B16A16_SFLOAT, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT};
+      [[fallthrough]];
+    case lvk::ColorSpace_HDR10:
+      if (hasSwapchainColorspaceExt)
+        return VkSurfaceFormatKHR{isBGR ? VK_FORMAT_A2B10G10R10_UNORM_PACK32 : VK_FORMAT_A2R10G10B10_UNORM_PACK32,
+                                  VK_COLOR_SPACE_HDR10_ST2084_EXT};
+      [[fallthrough]];
     case lvk::ColorSpace_SRGB_NONLINEAR:
       [[fallthrough]];
     default:
@@ -690,7 +701,8 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
     }
   };
 
-  const VkSurfaceFormatKHR preferred = colorSpaceToVkSurfaceFormat(colorSpace, isNativeSwapChainBGR(formats));
+  const VkSurfaceFormatKHR preferred =
+      colorSpaceToVkSurfaceFormat(requestedColorSpace, isNativeSwapChainBGR(formats), hasSwapchainColorspaceExt);
 
   for (const VkSurfaceFormatKHR& fmt : formats) {
     if (fmt.format == preferred.format && fmt.colorSpace == preferred.colorSpace) {
@@ -1078,7 +1090,7 @@ VkImageView lvk::VulkanImage::getOrCreateVkImageViewForFramebuffer(VulkanContext
 
 lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32_t height) :
   ctx_(ctx), device_(ctx.vkDevice_), graphicsQueue_(ctx.deviceQueues_.graphicsQueue), width_(width), height_(height) {
-  surfaceFormat_ = chooseSwapSurfaceFormat(ctx.deviceSurfaceFormats_, ctx.config_.swapchainRequestedColorSpace);
+  surfaceFormat_ = chooseSwapSurfaceFormat(ctx.deviceSurfaceFormats_, ctx.config_.swapchainRequestedColorSpace, ctx.has_EXT_swapchain_colorspace_);
 
   LVK_ASSERT_MSG(ctx.vkSurface_ != VK_NULL_HANDLE,
                  "You are trying to create a swapchain but your OS surface is empty. Did you want to "
@@ -5810,6 +5822,11 @@ void lvk::VulkanContext::createInstance() {
 
   if (config_.enableHeadlessSurface) {
     instanceExtensionNames.push_back(VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME);
+  }
+
+  if (hasExtension(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME, allInstanceExtensions)) {
+    has_EXT_swapchain_colorspace_ = true;
+    instanceExtensionNames.push_back(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
   }
 
   for (const char* ext : config_.extensionsInstance) {
