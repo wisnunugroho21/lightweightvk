@@ -717,11 +717,11 @@ class VulkanContext final : public IContext {
   mutable bool awaitingNewImmutableSamplers_ = false;
 
   lvk::ContextConfig config_;
-  bool hasAccelerationStructure_ = false;
-  bool hasRayQuery_ = false;
-  bool hasRayTracingPipeline_ = false;
-  bool has8BitIndices_ = false;
-  bool hasCalibratedTimestamps_ = false;
+  bool has_KHR_acceleration_structure_ = false;
+  bool has_KHR_ray_query_ = false;
+  bool has_KHR_ray_tracing_pipeline_ = false;
+  bool has_8BitIndices_ = false; // VK_KHR_index_type_uint8 or VK_EXT_index_type_uint8
+  bool has_EXT_calibrated_timestamps_ = false;
 
   TextureHandle dummyTexture_;
 
