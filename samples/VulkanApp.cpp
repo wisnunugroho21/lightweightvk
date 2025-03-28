@@ -228,7 +228,7 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
     app->positioner_.movement_.fastSpeed_ = (mods & GLFW_MOD_SHIFT) != 0;
 
     if (key == GLFW_KEY_SPACE) {
-      app->positioner_.lookAt(app->cfg_.initialCameraPos, app->cfg_.initialCameraTarget, vec3(0.0f, 1.0f, 0.0f));
+      app->positioner_.lookAt(app->cfg_.initialCameraPos, app->cfg_.initialCameraTarget, app->cfg_.initialCameraUpVector);
     }
     for (auto& cb : app->callbacksKey) {
       cb(window, key, scancode, action, mods);

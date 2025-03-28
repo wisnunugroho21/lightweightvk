@@ -67,6 +67,7 @@ struct VulkanAppConfig {
   bool resizable = false;
   vec3 initialCameraPos = vec3(0.0f, 0.0f, -2.5f);
   vec3 initialCameraTarget = vec3(0.0f, 0.0f, 0.0f);
+  vec3 initialCameraUpVector = vec3(0.0f, 1.0f, 0.0f);
   lvk::ContextConfig contextConfig;
 };
 
@@ -110,7 +111,7 @@ class VulkanApp {
 
   const VulkanAppConfig cfg_ = {};
 
-  CameraPositioner_FirstPerson positioner_ = {cfg_.initialCameraPos, cfg_.initialCameraTarget, vec3(0.0f, 1.0f, 0.0f)};
+  CameraPositioner_FirstPerson positioner_ = {cfg_.initialCameraPos, cfg_.initialCameraTarget, cfg_.initialCameraUpVector};
   Camera camera_ = Camera(positioner_);
 
   struct MouseState {
