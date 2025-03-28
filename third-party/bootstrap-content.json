@@ -78,5 +78,126 @@
         "url": "https://github.com/jimmiebergmann/Sponza.git",
         "revision": "222338979d32f4f4818466291bdbc29f192b86ba"
     }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_mercury.jpg",
+        "sha1": "6f832f061a9c5689a0bd5bd68ff29f49ffc65d29"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_venus_surface.jpg",
+        "sha1": "1549a36da4bb9bb6c99430dc1a8e7cc7ba07df96"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_mars.jpg",
+        "sha1": "4dbaccfc147c10b70b9905683498fcd24a11af8e"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_jupiter.jpg",
+        "sha1": "11ebb1d50e85505005cd5f13309c0bd6ee16b268"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_saturn.jpg",
+        "sha1": "26b1ded029fabdd7e98dc607ecc17abcc96dd03e"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/c1827fcd-9fde-48eb-8da3-489166bd8542/d6xt63j-169c5f5a-9033-417c-a48a-496ec8d05f77.jpg",
+        "sha1": "b5f95fa2480822a5b7058ae30b08d532d4374825"
+    },
+    "postprocess": {
+       "type": "script",
+       "file": "saturn_rings.py"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_uranus.jpg",
+        "sha1": "39fba155ca70e51da9224b9653cbc598b0c41be1"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_neptune.jpg",
+        "sha1": "4ff333c5cccc045dca033bdf1ae24719b26f053b"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_earth_daymap.jpg",
+        "sha1": "67397b2a33b1c6673ea50af3bfda4244b078b820"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_sun.jpg",
+        "sha1": "0833ed7cb52d4e0e3d7174e1d26f73d21fcb8a10"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://corporate.dukehealth.org/sites/default/files/api/images/aspect:1.0-width:768-position:center/ThinkstockPhotos-517462556.web_.jpg",
+        "sha1": "68ae86dbbe76700d863591b60d222fc603cd8cf1",
+        "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/48.0.2564.116 Safari/537.36"
+    },
+    "postprocess": {
+       "type": "script",
+       "file": "sun_corona.py"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_moon.jpg",
+        "sha1": "456ef7331c9230955de3b7c22346af6c613f7d3a"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://www.solarsystemscope.com/textures/download/2k_makemake_fictional.jpg",
+        "sha1": "5e931975712dedb8ed394dbea3adde2491d03a9b"
+    }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://raw.githubusercontent.com/corporateshark/Mastering-Android-NDK/refs/heads/master/Chapter10/1_Asteroids/assets/deimos.obj",
+        "sha1": "872aa578ec8a922da7bad31867394eea02516fcc"
+    }
 }
 ]
