@@ -24,6 +24,7 @@ struct Planet {
   const char* textureName;
 };
 
+bool g_Paused = false;
 bool g_DrawPlanetOrbits = true;
 
 // overall scale of the planetary system
@@ -201,6 +202,45 @@ struct SceneNode final {
   }
 };
 
+struct OrbitAnimator final {
+  OrbitAnimator(const vec3& axis, const float angle, const float speed, float radius = 0.0f) :
+    rotationAxis(axis),
+    normalizedRotationAxis(glm::normalize(axis)),
+    orbitalRadius(radius),
+    rotationSpeed(speed),
+    rotationAngle(angle) {}
+
+  void update(float deltaSeconds) {
+    rotationAngle = fmodf(rotationAngle + rotationSpeed * deltaSeconds, 360.0f);
+    transform = glm::rotate(mat4(1.0f), glm::radians(rotationAngle), normalizedRotationAxis);
+  }
+
+  const vec3 rotationAxis = vec3(0.0f);
+  const vec3 normalizedRotationAxis = glm::normalize(vec3(1.0f));
+  const float orbitalRadius = 0.0f;
+  const float rotationSpeed = 0.0f;
+  float rotationAngle = 0.0f;
+  mat4 transform = mat4(1.0f);
+};
+
+struct OrbitAnimationGroup final {
+  SceneNode* targetNode = nullptr;
+  std::vector<OrbitAnimator> animationGroup_;
+
+  void update(float deltaSeconds) {
+    mat4 transform = mat4(1.0f);
+
+    for (OrbitAnimator& anim : animationGroup_) {
+      anim.update(deltaSeconds);
+      const bool applyTranslation = (anim.orbitalRadius != 0.0f) ? true : false;
+      const mat4 translation = applyTranslation ? glm::translate(mat4(1.0f), vec3(0.0f, anim.orbitalRadius, 0.0f)) : mat4(1.0f);
+      transform = translation * anim.transform * transform;
+    }
+
+    targetNode->local = transform;
+  }
+};
+
 // shared mesh
 struct Mesh final {
   std::vector<GeometryShapes::Vertex> vertices;
@@ -235,7 +275,14 @@ struct Scene final {
 
   std::vector<MeshComponent> meshes;
   std::vector<Material> materials;
+  std::vector<OrbitAnimationGroup> animators;
   SceneNode root = SceneNode{nullptr, mat4(1.0f)};
+
+  void updateAnimations(float deltaSeconds) {
+    for (OrbitAnimationGroup& animator : animators) {
+      animator.update(deltaSeconds);
+    }
+  }
 
   void createMesh(SceneNode* node, const std::shared_ptr<Mesh> mesh) {
     meshes.push_back(MeshComponent{node, mesh});
@@ -325,6 +372,14 @@ Scene createSolarSystemScene(VulkanApp& app) {
 
   lvk::IContext* ctx = app.ctx_.get();
 
+#if !defined(ANDROID)
+  app.addKeyCallback([](GLFWwindow* window, int key, int, int action, int) {
+    if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+      g_Paused = !g_Paused;
+    }
+  });
+#endif // !ANDROID
+
   Scene scene;
 
   SceneNode* allPlanets[TotalPlanets];
@@ -342,6 +397,13 @@ Scene createSolarSystemScene(VulkanApp& app) {
         .pipeline = vulkanState.materialDefault,
     };
     allPlanets[i] = allPlanets[Sun]->createNode(glm::translate(mat4(1.0f), vec3(0.0f, planets[i].orbitalRadius, 0.0f)));
+    scene.animators.push_back(OrbitAnimationGroup{allPlanets[i],
+                                                  std::vector<OrbitAnimator>{
+                                                      {Z, 0.0f, planets[i].localOrbitalSpeed, 0.0f},
+                                                      {X, planets[i].axialTilt, 0.0f, planets[i].orbitalRadius},
+                                                      {Z, 0.0f, planets[i].globalOrbitalSpeed, 0.0f},
+                                                      {X, planets[i].orbitalInclination, 0.0f, 0.0f},
+                                                  }});
     scene.createMaterial(allPlanets[i], planetMaterial);
     scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 3)}));
   }
@@ -362,6 +424,9 @@ Scene createSolarSystemScene(VulkanApp& app) {
     scene.createMaterial(orbit, orbitMaterial);
     scene.createMesh(orbit, std::make_shared<Mesh>(Mesh{GeometryShapes::createOrbit(planets[Moon].orbitalRadius, 64)}));
   }
+
+  // adjust initial position
+  scene.updateAnimations(150.0);
 
   return scene;
 }
@@ -508,6 +573,7 @@ VULKAN_APP_MAIN {
   app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
     LVK_PROFILER_FUNCTION();
 
+    scene.updateAnimations(g_Paused ? 0.0 : deltaSeconds);
     scene.root.updateGlobalFromLocal(mat4(1.0f));
 
     // update model matrices
@@ -578,7 +644,9 @@ VULKAN_APP_MAIN {
     ImGui::Text("1/2 - camera up/down");
     ImGui::Text("Shift - fast movement");
     ImGui::Text("Space - reset camera");
+    ImGui::Separator();
 #endif
+    ImGui::Checkbox("Pause animation (P)", &g_Paused);
     ImGui::End();
     app.drawFPS();
     app.imgui_->endFrame(buf);
