@@ -147,6 +147,9 @@ if((WIN32 OR UNIX AND NOT (APPLE)) OR LVK_WITH_SAMPLES_ANDROID)
   ADD_DEMO("RTX_003_Pipeline")
 endif()
 
+ADD_DEMO("DEMO_001_SolarSystem")
+ADD_DEMO_LINK_LIBRARIES("DEMO_001_SolarSystem" LUtils)
+
 ADD_DEMO("Tiny_MeshLarge")
 ADD_DEMO_SOURCES("Tiny_MeshLarge"
   "${LVK_ROOT_DIR}/third-party/deps/src/3D-Graphics-Rendering-Cookbook/shared/UtilsCubemap.cpp")
