@@ -30,6 +30,9 @@ struct Planet {
 
 bool g_Paused = false;
 bool g_DrawPlanetOrbits = true;
+bool g_UseTrackball = false;
+
+VirtualTrackball g_Trackball;
 
 // overall scale of the planetary system
 const float g_Scale = 0.001f;
@@ -788,7 +791,16 @@ VULKAN_APP_MAIN {
     }
     ctx->upload(vulkanState.bufModelMatrices, modelMatrices.data(), sizeof(mat4) * modelMatrices.size());
 
-    const mat4 view = app.camera_.getViewMatrix();
+    const mat4 view = [&app, mouse = app.mouseState_]() -> mat4 {
+      if (g_UseTrackball) {
+        if (!ImGui::GetIO().WantCaptureMouse) {
+          g_Trackball.dragTo(vec2(1.0f - mouse.pos.x, mouse.pos.y), 10.0f, mouse.pressedLeft);
+        }
+        return glm::lookAt(vec3(0.0f, 0.0f, 4.0f), vec3(0.0f, 0.0f, 0.0f), vec3(0.0f, -1.0f, 0.0f)) * g_Trackball.getRotationMatrix();
+      } else {
+        return app.camera_.getViewMatrix();
+      }
+    }();
     const mat4 proj = glm::perspective(glm::radians(45.0f), aspectRatio, 0.01f, 100.0f);
 
     lvk::ICommandBuffer& buf = ctx->acquireCommandBuffer();
@@ -854,6 +866,7 @@ VULKAN_APP_MAIN {
     ImGui::Separator();
 #endif
     ImGui::Checkbox("Pause animation (P)", &g_Paused);
+    ImGui::Checkbox("Use trackball navigation", &g_UseTrackball);
     ImGui::End();
     app.drawFPS();
     app.imgui_->endFrame(buf);
