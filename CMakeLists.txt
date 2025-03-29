@@ -263,6 +263,8 @@ if(LVK_WITH_SAMPLES)
   set(KTX_FEATURE_TOOLS          OFF CACHE BOOL "")
   set(KTX_FEATURE_VK_UPLOAD      OFF CACHE BOOL "")
   # cmake-format: on
+  add_subdirectory(third-party/deps/src/ldrutils)
+  lvk_set_folder(LUtils "third-party")
   add_subdirectory(third-party/deps/src/ktx-software)
   lvk_set_folder(ktx "third-party/ktx-software")
   lvk_set_folder(ktx_read "third-party/ktx-software")
