@@ -24,6 +24,8 @@ struct Planet {
   const char* textureName;
 };
 
+bool g_DrawPlanetOrbits = true;
+
 // overall scale of the planetary system
 const float g_Scale = 0.001f;
 
@@ -141,6 +143,37 @@ void main() {
 }
 )";
 
+const char* codeOrbitVS = R"(
+layout (location=0) in vec4 in_Vertex;
+
+layout(std430, buffer_reference) readonly buffer PerFrame {
+  mat4 proj;
+  mat4 view;
+};
+
+layout(std430, buffer_reference) readonly buffer ModelMatrices {
+  mat4 m[];
+};
+
+layout(push_constant) uniform constants {
+  ModelMatrices bufModelMatrices;
+  PerFrame bufPerFrame;
+  vec2 padding;
+};
+
+void main() {
+  gl_Position = bufPerFrame.proj * bufPerFrame.view * bufModelMatrices.m[gl_BaseInstance] * in_Vertex;
+}
+)";
+
+const char* codeOrbitFS = R"(
+layout (location=0) out vec4 out_FragColor;
+
+void main() {
+  out_FragColor = vec4(1.0, 1.0, 1.0, 0.2);
+}
+)";
+
 struct SceneNode final {
   SceneNode* parent = nullptr;
   mat4 local = mat4(1.0f);
@@ -227,6 +260,7 @@ struct VulkanState final {
   lvk::Holder<lvk::BufferHandle> bufMaterials;
   lvk::Holder<lvk::BufferHandle> bufVertices; // one large vertex buffer for everything
   lvk::Holder<lvk::RenderPipelineHandle> materialDefault;
+  lvk::Holder<lvk::RenderPipelineHandle> materialOrbit;
 } vulkanState;
 
 lvk::TextureHandle loadTextureFromFile(VulkanApp& app, const std::string& fileName) {
@@ -312,6 +346,23 @@ Scene createSolarSystemScene(VulkanApp& app) {
     scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 3)}));
   }
 
+  // create orbits
+  if (g_DrawPlanetOrbits) {
+    const Material orbitMaterial = {
+        .pipeline = vulkanState.materialOrbit,
+    };
+    for (size_t i = 0; i < planets.size(); i++) {
+      SceneNode* orbit = allPlanets[Sun]->createNode(glm::rotate(mat4(1.0f), glm::radians(planets[i].orbitalInclination), X));
+      scene.createMaterial(orbit, orbitMaterial);
+      scene.createMesh(orbit, std::make_shared<Mesh>(Mesh{GeometryShapes::createOrbit(planets[i].orbitalRadius, 128)}));
+    }
+
+    // create orbit for the Moon
+    SceneNode* orbit = allPlanets[Earth]->createNode();
+    scene.createMaterial(orbit, orbitMaterial);
+    scene.createMesh(orbit, std::make_shared<Mesh>(Mesh{GeometryShapes::createOrbit(planets[Moon].orbitalRadius, 64)}));
+  }
+
   return scene;
 }
 
@@ -337,6 +388,7 @@ VULKAN_APP_MAIN {
   lvk::IContext* ctx = app.ctx_.get();
 
   ShaderModules smDefault = loadShaderProgram(ctx, codeDefaultVS, codeDefaultFS);
+  ShaderModules smOrbit = loadShaderProgram(ctx, codeOrbitVS, codeOrbitFS);
 
   vulkanState.materialDefault = ctx->createRenderPipeline({
       .vertexInput =
@@ -353,6 +405,24 @@ VULKAN_APP_MAIN {
       .cullMode = lvk::CullMode_None,
       .frontFaceWinding = lvk::WindingMode_CW,
       .debugName = "Pipeline: default",
+  });
+  vulkanState.materialOrbit = ctx->createRenderPipeline({
+      .topology = lvk::Topology_LineStrip,
+      .vertexInput =
+          {
+              .attributes = {{.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(GeometryShapes::Vertex, pos)}},
+              .inputBindings = {{.stride = sizeof(GeometryShapes::Vertex)}},
+          },
+      .smVert = smOrbit.vert,
+      .smFrag = smOrbit.frag,
+      .color = {{.format = ctx->getSwapchainFormat(),
+                 .blendEnabled = true,
+                 .srcRGBBlendFactor = lvk::BlendFactor_SrcAlpha,
+                 .dstRGBBlendFactor = lvk::BlendFactor_OneMinusSrcAlpha}},
+      .depthFormat = app.getDepthFormat(),
+      .cullMode = lvk::CullMode_None,
+      .frontFaceWinding = lvk::WindingMode_CW,
+      .debugName = "Pipeline: orbit",
   });
 
   vulkanState.bufPerFrame = ctx->createBuffer({
