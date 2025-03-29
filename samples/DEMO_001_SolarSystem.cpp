@@ -175,6 +175,72 @@ void main() {
 }
 )";
 
+const char* codeSunVS = R"(
+layout (location=0) in vec4 in_Vertex;
+layout (location=1) in vec2 in_TexCoord;
+layout (location=2) in vec3 in_Normal;
+
+layout(std430, buffer_reference) readonly buffer PerFrame {
+  mat4 proj;
+  mat4 view;
+  float u_Time;
+};
+
+struct Material {
+  vec4 emissive;
+  vec4 diffuse;
+  uint texEmissive;
+  uint texDiffuse;
+  uint padding[2];
+};
+
+layout(std430, buffer_reference) readonly buffer Materials {
+  Material m[];
+};
+
+layout(std430, buffer_reference) readonly buffer ModelMatrices {
+  mat4 m[];
+};
+
+layout(push_constant) uniform constants {
+  ModelMatrices bufModelMatrices;
+  PerFrame      bufPerFrame;
+  Materials     bufMaterials;
+};
+
+layout (location=0) out vec2 v_TexCoord;
+layout (location=1) out float v_Time;
+layout (location=2) flat out uint v_Texture0;
+layout (location=3) flat out uint v_Texture1;
+
+void main() {
+  gl_Position = bufPerFrame.proj * bufPerFrame.view * bufModelMatrices.m[gl_BaseInstance] * in_Vertex;
+
+  v_TexCoord = in_TexCoord;
+  v_Time     = bufPerFrame.u_Time;
+  v_Texture0 = bufMaterials.m[gl_BaseInstance].texEmissive;
+  v_Texture1 = bufMaterials.m[gl_BaseInstance].texDiffuse;
+}
+)";
+
+const char* codeSunFS = R"(
+layout (location=0) in vec2  v_TexCoord;
+layout (location=1) in float v_Time;
+layout (location=2) flat in uint v_Texture0;
+layout (location=3) flat in uint v_Texture1;
+
+layout (location=0) out vec4 out_FragColor;
+
+void main() {
+  vec2 t = cos(0.05 * vec2(v_Time));
+
+  vec3 K1 = textureBindless2D(v_Texture0, 0, sin(v_TexCoord + t)).rgb;
+  vec3 K2 = textureBindless2D(v_Texture1, 0, v_TexCoord - 2.0 * t).rgb;
+
+  out_FragColor = vec4(K1*K2, 1.0);
+}
+)";
+
 struct SceneNode final {
   SceneNode* parent = nullptr;
   mat4 local = mat4(1.0f);
@@ -256,6 +322,7 @@ struct MeshComponent final {
 struct PerFrameBuffer final {
   mat4 proj = mat4(1.0f);
   mat4 view = mat4(1.0f);
+  float time = 0.0f;
 };
 
 struct Material final {
@@ -308,6 +375,7 @@ struct VulkanState final {
   lvk::Holder<lvk::BufferHandle> bufVertices; // one large vertex buffer for everything
   lvk::Holder<lvk::RenderPipelineHandle> materialDefault;
   lvk::Holder<lvk::RenderPipelineHandle> materialOrbit;
+  lvk::Holder<lvk::RenderPipelineHandle> materialSun;
 } vulkanState;
 
 lvk::TextureHandle loadTextureFromFile(VulkanApp& app, const std::string& fileName) {
@@ -396,16 +464,26 @@ Scene createSolarSystemScene(VulkanApp& app) {
         .texDiffuse = loadTextureFromFile(app, planets[i].textureName),
         .pipeline = vulkanState.materialDefault,
     };
-    allPlanets[i] = allPlanets[Sun]->createNode(glm::translate(mat4(1.0f), vec3(0.0f, planets[i].orbitalRadius, 0.0f)));
-    scene.animators.push_back(OrbitAnimationGroup{allPlanets[i],
-                                                  std::vector<OrbitAnimator>{
-                                                      {Z, 0.0f, planets[i].localOrbitalSpeed, 0.0f},
-                                                      {X, planets[i].axialTilt, 0.0f, planets[i].orbitalRadius},
-                                                      {Z, 0.0f, planets[i].globalOrbitalSpeed, 0.0f},
-                                                      {X, planets[i].orbitalInclination, 0.0f, 0.0f},
-                                                  }});
-    scene.createMaterial(allPlanets[i], planetMaterial);
-    scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 3)}));
+    const bool isSun = strstr(planets[i].textureName, "_sun") != nullptr;
+    if (isSun) {
+      Material sunMaterial = planetMaterial;
+      sunMaterial.pipeline = vulkanState.materialSun;
+      allPlanets[i] = allPlanets[Sun];
+      scene.createMaterial(allPlanets[i], sunMaterial);
+      scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 4)}));
+    } else {
+      // all other planets
+      allPlanets[i] = allPlanets[Sun]->createNode(glm::translate(mat4(1.0f), vec3(0.0f, planets[i].orbitalRadius, 0.0f)));
+      scene.animators.push_back(OrbitAnimationGroup{allPlanets[i],
+                                                    std::vector<OrbitAnimator>{
+                                                        {Z, 0.0f, planets[i].localOrbitalSpeed, 0.0f},
+                                                        {X, planets[i].axialTilt, 0.0f, planets[i].orbitalRadius},
+                                                        {Z, 0.0f, planets[i].globalOrbitalSpeed, 0.0f},
+                                                        {X, planets[i].orbitalInclination, 0.0f, 0.0f},
+                                                    }});
+      scene.createMaterial(allPlanets[i], planetMaterial);
+      scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 3)}));
+    }
   }
 
   // create orbits
@@ -454,21 +532,22 @@ VULKAN_APP_MAIN {
 
   ShaderModules smDefault = loadShaderProgram(ctx, codeDefaultVS, codeDefaultFS);
   ShaderModules smOrbit = loadShaderProgram(ctx, codeOrbitVS, codeOrbitFS);
+  ShaderModules smSun = loadShaderProgram(ctx, codeSunVS, codeSunFS);
+
+  const lvk::VertexInput vinput = {
+      .attributes = {{.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(GeometryShapes::Vertex, pos)},
+                     {.location = 1, .format = lvk::VertexFormat::Float2, .offset = offsetof(GeometryShapes::Vertex, uv)},
+                     {.location = 2, .format = lvk::VertexFormat::Float3, .offset = offsetof(GeometryShapes::Vertex, normal)}},
+      .inputBindings = {{.stride = sizeof(GeometryShapes::Vertex)}},
+  };
 
   vulkanState.materialDefault = ctx->createRenderPipeline({
-      .vertexInput =
-          {
-              .attributes = {{.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(GeometryShapes::Vertex, pos)},
-                             {.location = 1, .format = lvk::VertexFormat::Float2, .offset = offsetof(GeometryShapes::Vertex, uv)},
-                             {.location = 2, .format = lvk::VertexFormat::Float3, .offset = offsetof(GeometryShapes::Vertex, normal)}},
-              .inputBindings = {{.stride = sizeof(GeometryShapes::Vertex)}},
-          },
+      .vertexInput = vinput,
       .smVert = smDefault.vert,
       .smFrag = smDefault.frag,
       .color = {{.format = ctx->getSwapchainFormat()}},
       .depthFormat = app.getDepthFormat(),
-      .cullMode = lvk::CullMode_None,
-      .frontFaceWinding = lvk::WindingMode_CW,
+      .cullMode = lvk::CullMode_Back,
       .debugName = "Pipeline: default",
   });
   vulkanState.materialOrbit = ctx->createRenderPipeline({
@@ -486,8 +565,16 @@ VULKAN_APP_MAIN {
                  .dstRGBBlendFactor = lvk::BlendFactor_OneMinusSrcAlpha}},
       .depthFormat = app.getDepthFormat(),
       .cullMode = lvk::CullMode_None,
-      .frontFaceWinding = lvk::WindingMode_CW,
       .debugName = "Pipeline: orbit",
+  });
+  vulkanState.materialSun = ctx->createRenderPipeline({
+      .vertexInput = vinput,
+      .smVert = smSun.vert,
+      .smFrag = smSun.frag,
+      .color = {{.format = ctx->getSwapchainFormat()}},
+      .depthFormat = app.getDepthFormat(),
+      .cullMode = lvk::CullMode_Back,
+      .debugName = "Pipeline: Sun",
   });
 
   vulkanState.bufPerFrame = ctx->createBuffer({
@@ -608,6 +695,7 @@ VULKAN_APP_MAIN {
                           PerFrameBuffer{
                               .proj = proj,
                               .view = view,
+                              .time = (float)glfwGetTime(),
                           });
       buf.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Clear, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
                              .depth = {.loadOp = lvk::LoadOp_Clear, .clearDepth = 1.0f}},
