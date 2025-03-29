@@ -101,7 +101,7 @@ layout (location=4) flat in uint v_MaterialIndex;
 
 struct Material {
   vec4 emissive;
-  vec4 diffuse;
+  vec4 diffuse; // w - two-sided
   uint texEmissive;
   uint texDiffuse;
   uint padding[2];
@@ -122,7 +122,9 @@ layout (location=0) out vec4 out_FragColor;
 float getDiffuseFactor(vec3 toLight, vec3 normal) {
   float d = dot(toLight, normal);
 
-  return clamp(d, 0.0, 1.0);
+  bool twoSided = bufMaterials.m[v_MaterialIndex].diffuse.w > 0.5;
+
+  return clamp( twoSided ? max(d, -d) : d, 0.0, 1.0);
 }
 
 float pointLight(vec3 lightPos, float lightRadius) {
@@ -195,7 +197,7 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
 
 struct Material {
   vec4 emissive;
-  vec4 diffuse;
+  vec4 diffuse; // w - two-sided
   uint texEmissive;
   uint texDiffuse;
   uint padding[2];
@@ -337,6 +339,8 @@ struct Material final {
   vec4 diffuse = vec4(0.8f, 0.8f, 0.8f, 1.0f);
   lvk::TextureHandle texEmissive;
   lvk::TextureHandle texDiffuse;
+  bool isTransparent = false;
+  bool twoSided = false;
   lvk::RenderPipelineHandle pipeline;
 };
 
@@ -381,6 +385,7 @@ struct VulkanState final {
   lvk::Holder<lvk::BufferHandle> bufMaterials;
   lvk::Holder<lvk::BufferHandle> bufVertices; // one large vertex buffer for everything
   lvk::Holder<lvk::RenderPipelineHandle> materialDefault;
+  lvk::Holder<lvk::RenderPipelineHandle> materialSaturnRings;
   lvk::Holder<lvk::RenderPipelineHandle> materialOrbit;
   lvk::Holder<lvk::RenderPipelineHandle> materialSun;
 } vulkanState;
@@ -512,6 +517,7 @@ Scene createSolarSystemScene(VulkanApp& app) {
     const bool isMoon = strstr(planets[i].textureName, "_moon") != nullptr;
     if (isSun) {
       Material sunMaterial = planetMaterial;
+      sunMaterial.twoSided = true;
       sunMaterial.pipeline = vulkanState.materialSun;
       allPlanets[i] = allPlanets[Sun];
       scene.createMaterial(allPlanets[i], sunMaterial);
@@ -558,6 +564,21 @@ Scene createSolarSystemScene(VulkanApp& app) {
     SceneNode* orbit = allPlanets[Earth]->createNode();
     scene.createMaterial(orbit, orbitMaterial);
     scene.createMesh(orbit, std::make_shared<Mesh>(Mesh{GeometryShapes::createOrbit(planets[Moon].orbitalRadius, 64)}));
+  }
+
+  // attach the Saturn disk
+  {
+    const Material diskMaterial = {
+        .emissive = vec4(0.7f, 0.7f, 0.7f, 0.3f),
+        .diffuse = vec4(1.0f, 1.0f, 1.0f, 0.3f),
+        .texEmissive = loadTextureFromFile(app, "1k_saturn_rings.jpg"),
+        .texDiffuse = loadTextureFromFile(app, "1k_saturn_rings.jpg"),
+        .isTransparent = true,
+        .pipeline = vulkanState.materialSaturnRings,
+    };
+    SceneNode* disk = allPlanets[Saturn]->createNode();
+    scene.createMaterial(disk, diskMaterial);
+    scene.createMesh(disk, std::make_shared<Mesh>(Mesh{GeometryShapes::createDisk(1.5f * g_Scale * 70.0f, 1.5f * g_Scale * 130.0f, 100)}));
   }
 
   // create inner and outer asteroid belts
@@ -672,6 +693,19 @@ VULKAN_APP_MAIN {
       .cullMode = lvk::CullMode_Back,
       .debugName = "Pipeline: default",
   });
+  vulkanState.materialSaturnRings = ctx->createRenderPipeline({
+      .topology = lvk::Topology::Topology_TriangleStrip,
+      .vertexInput = vinput,
+      .smVert = smDefault.vert,
+      .smFrag = smDefault.frag,
+      .color = {{.format = ctx->getSwapchainFormat(),
+                 .blendEnabled = true,
+                 .srcRGBBlendFactor = lvk::BlendFactor_SrcAlpha,
+                 .dstRGBBlendFactor = lvk::BlendFactor_OneMinusSrcAlpha}},
+      .depthFormat = app.getDepthFormat(),
+      .cullMode = lvk::CullMode_None,
+      .debugName = "Pipeline: Saturn rings",
+  });
   vulkanState.materialOrbit = ctx->createRenderPipeline({
       .topology = lvk::Topology_LineStrip,
       .vertexInput =
@@ -718,7 +752,7 @@ VULKAN_APP_MAIN {
   {
     struct MaterialBuffer {
       vec4 emissive;
-      vec4 diffuse;
+      vec4 diffuse; // w - two-sided
       uint32_t texEmissive;
       uint32_t texDiffuse;
       uint32_t padding[2] = {};
@@ -727,7 +761,7 @@ VULKAN_APP_MAIN {
     for (const Material& m : scene.materials) {
       materials.push_back({
           .emissive = m.emissive,
-          .diffuse = m.diffuse,
+          .diffuse = vec4(vec3(m.diffuse), m.twoSided ? 1.0f : 0.0f),
           .texEmissive = m.texEmissive.index(),
           .texDiffuse = m.texDiffuse.index(),
       });
