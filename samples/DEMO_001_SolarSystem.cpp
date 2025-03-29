@@ -12,7 +12,11 @@
 #include "ldrutils/lmath/GeometryShapes.h"
 #include <ldrutils/lutils/ScopeExit.h>
 
+#include <fast_obj.h>
 #include <stb_image.h>
+
+const size_t numAsteroidsInner = 1500;
+const size_t numAsteroidsOuter = 500;
 
 struct Planet {
   float radius;
@@ -434,6 +438,43 @@ ShaderModules loadShaderProgram(lvk::IContext* ctx, const char* codeVS, const ch
   return sm;
 }
 
+std::vector<GeometryShapes::Vertex> loadMeshFromFile(VulkanApp& app, const char* fileName) {
+  fastObjMesh* mesh = fast_obj_read((std::filesystem::path(app.folderContentRoot_) / "src/solarsystem" / fileName).string().c_str());
+
+  SCOPE_EXIT {
+    if (mesh)
+      fast_obj_destroy(mesh);
+  };
+
+  uint32_t vertexCount = 0;
+
+  for (uint32_t i = 0; i < mesh->face_count; ++i)
+    vertexCount += mesh->face_vertices[i];
+
+  std::vector<GeometryShapes::Vertex> result;
+  result.reserve(vertexCount);
+
+  uint32_t vertexIndex = 0;
+
+  for (uint32_t face = 0; face < mesh->face_count; face++) {
+    for (uint32_t v = 0; v < mesh->face_vertices[face]; v++) {
+      const fastObjIndex gi = mesh->indices[vertexIndex++];
+
+      const float* p = &mesh->positions[gi.p * 3];
+      const float* n = &mesh->normals[gi.n * 3];
+      const float* t = &mesh->texcoords[gi.t * 2];
+
+      result.emplace_back(GeometryShapes::Vertex{
+          .pos = vec3(p[0], p[1], p[2]),
+          .uv = vec2(t[0], t[1]),
+          .normal = vec3(n[0], n[1], n[2]),
+      });
+    }
+  }
+
+  return result;
+}
+
 Scene createSolarSystemScene(VulkanApp& app) {
   const vec3 X = vec3(1.0f, 0.0f, 0.0f);
   const vec3 Z = vec3(0.0f, 0.0f, 1.0f);
@@ -514,6 +555,71 @@ Scene createSolarSystemScene(VulkanApp& app) {
     SceneNode* orbit = allPlanets[Earth]->createNode();
     scene.createMaterial(orbit, orbitMaterial);
     scene.createMesh(orbit, std::make_shared<Mesh>(Mesh{GeometryShapes::createOrbit(planets[Moon].orbitalRadius, 64)}));
+  }
+
+  // create inner and outer asteroid belts
+  {
+    const Material asteroidMat1 = {
+        .emissive = vec4(0.3, 0.3, 0.3, 1.0),
+        .diffuse = vec4(0.5, 0.5, 0.5, 1.0),
+        .texEmissive = loadTextureFromFile(app, "2k_makemake_fictional.jpg"),
+        .texDiffuse = loadTextureFromFile(app, "2k_makemake_fictional.jpg"),
+        .pipeline = vulkanState.materialDefault,
+    };
+    const Material asteroidMat2 = {
+        .emissive = vec4(0.4, 0.3, 0.3, 1.0),
+        .diffuse = vec4(0.45, 0.45, 0.55, 1.0),
+        .texEmissive = loadTextureFromFile(app, "2k_makemake_fictional.jpg"),
+        .texDiffuse = loadTextureFromFile(app, "2k_makemake_fictional.jpg"),
+        .pipeline = vulkanState.materialDefault,
+    };
+    SceneNode* g_ParentAsteroid = allPlanets[Sun]->createNode();
+
+    const std::shared_ptr<Mesh> asteroidMesh = std::make_shared<Mesh>(Mesh{loadMeshFromFile(app, "deimos.obj")});
+
+    assert(asteroidMesh);
+
+    for (size_t i = 0; i < numAsteroidsInner; i++) {
+      const float radius = randomFloat(g_Scale * 900.0f, g_Scale * 1250.0f);
+      const float globalSpeed = randomFloat(0.5f, 2.5f);
+      const float localSpeed = randomFloat(1.0f, 5.5f);
+      const float gRotAngle = randomFloat(0.0f, 360.0f);
+      const float lRotAngle = randomFloat(0.0f, 360.0f);
+      const vec3 randomRotAxis = glm::normalize(randomVec(vec3(0), vec3(1)));
+
+      SceneNode* node = g_ParentAsteroid->createNode();
+      scene.animators.push_back(OrbitAnimationGroup{node,
+                                                    std::vector<OrbitAnimator>{
+                                                        {randomRotAxis, lRotAngle, 20.0f * localSpeed, 0.0f},
+                                                        {Z, 0.0f, 0.0f, radius},
+                                                        {Z, gRotAngle, globalSpeed, 0.0f},
+                                                        {Z, 0.0f, 0.0f, 0.0f},
+                                                    }});
+      SceneNode* subNode = node->createNode(glm::scale(mat4(1.0f), g_Scale * glm::vec3(randomFloat(0.05f, 0.15f))));
+      scene.createMesh(subNode, asteroidMesh);
+      scene.createMaterial(subNode, randomFloat(0, 1) < 0.75f ? asteroidMat1 : asteroidMat2);
+    }
+
+    for (size_t i = 0; i < numAsteroidsOuter; i++) {
+      const float radius = randomFloat(g_Scale * 1700.0f, g_Scale * 1900.0f);
+      const float globalSpeed = randomFloat(0.7f, 3.4f);
+      const float localSpeed = randomFloat(0.5f, 2.5f);
+      const float gRotAngle = randomFloat(0.0f, 360.0f);
+      const float lRotAngle = randomFloat(0.0f, 360.0f);
+      const vec3 randomRotAxis = glm::normalize(randomVec(vec3(0), vec3(1)));
+
+      SceneNode* node = g_ParentAsteroid->createNode();
+      scene.animators.push_back(OrbitAnimationGroup{node,
+                                                    std::vector<OrbitAnimator>{
+                                                        {randomRotAxis, lRotAngle, 10.0f * localSpeed, 0.0f},
+                                                        {Z, 0.0f, 0.0f, radius},
+                                                        {Z, gRotAngle, globalSpeed, 0.0f},
+                                                        {Z, 0.0f, 0.0f, 0.0f},
+                                                    }});
+      SceneNode* subNode = node->createNode(glm::scale(mat4(1.0f), g_Scale * glm::vec3(randomFloat(0.1f, 0.3f))));
+      scene.createMesh(subNode, asteroidMesh);
+      scene.createMaterial(subNode, randomFloat(0, 1) < 0.25f ? asteroidMat1 : asteroidMat2);
+    }
   }
 
   // adjust initial position
