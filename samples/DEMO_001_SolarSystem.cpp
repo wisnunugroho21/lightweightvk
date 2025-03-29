@@ -465,12 +465,25 @@ Scene createSolarSystemScene(VulkanApp& app) {
         .pipeline = vulkanState.materialDefault,
     };
     const bool isSun = strstr(planets[i].textureName, "_sun") != nullptr;
+    const bool isMoon = strstr(planets[i].textureName, "_moon") != nullptr;
     if (isSun) {
       Material sunMaterial = planetMaterial;
       sunMaterial.pipeline = vulkanState.materialSun;
       allPlanets[i] = allPlanets[Sun];
       scene.createMaterial(allPlanets[i], sunMaterial);
       scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 4)}));
+    } else if (isMoon) {
+      // attach the Moon to the Earth
+      allPlanets[i] = allPlanets[Earth]->createNode();
+      scene.animators.push_back(OrbitAnimationGroup{allPlanets[i],
+                                                    std::vector<OrbitAnimator>{
+                                                        {Z, 0.0f, planets[i].globalOrbitalSpeed, planets[i].orbitalRadius},
+                                                        {Z, 0.0f, planets[i].localOrbitalSpeed, 0.0f},
+                                                        {X, planets[i].axialTilt, 0.0f, 0.0f},
+                                                        {X, planets[i].orbitalInclination, 0.0f, 0.0f},
+                                                    }});
+      scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 3)}));
+      scene.createMaterial(allPlanets[i], planetMaterial);
     } else {
       // all other planets
       allPlanets[i] = allPlanets[Sun]->createNode(glm::translate(mat4(1.0f), vec3(0.0f, planets[i].orbitalRadius, 0.0f)));
