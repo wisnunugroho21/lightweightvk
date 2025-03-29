@@ -29,6 +29,7 @@ struct Planet {
 };
 
 bool g_Paused = false;
+bool g_Wireframe = false;
 bool g_DrawPlanetOrbits = true;
 bool g_UseTrackball = false;
 
@@ -342,6 +343,7 @@ struct Material final {
   bool isTransparent = false;
   bool twoSided = false;
   lvk::RenderPipelineHandle pipeline;
+  lvk::RenderPipelineHandle pipelineW;
 };
 
 struct Scene final {
@@ -385,9 +387,11 @@ struct VulkanState final {
   lvk::Holder<lvk::BufferHandle> bufMaterials;
   lvk::Holder<lvk::BufferHandle> bufVertices; // one large vertex buffer for everything
   lvk::Holder<lvk::RenderPipelineHandle> materialDefault;
+  lvk::Holder<lvk::RenderPipelineHandle> materialDefaultW;
   lvk::Holder<lvk::RenderPipelineHandle> materialSaturnRings;
   lvk::Holder<lvk::RenderPipelineHandle> materialOrbit;
   lvk::Holder<lvk::RenderPipelineHandle> materialSun;
+  lvk::Holder<lvk::RenderPipelineHandle> materialSunW;
 } vulkanState;
 
 lvk::TextureHandle loadTextureFromFile(VulkanApp& app, const std::string& fileName) {
@@ -491,7 +495,9 @@ Scene createSolarSystemScene(VulkanApp& app) {
 
 #if !defined(ANDROID)
   app.addKeyCallback([](GLFWwindow* window, int key, int, int action, int) {
-    if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+    if (key == GLFW_KEY_X && action == GLFW_PRESS) {
+      g_Wireframe = !g_Wireframe;
+    } else if (key == GLFW_KEY_P && action == GLFW_PRESS) {
       g_Paused = !g_Paused;
     }
   });
@@ -512,6 +518,7 @@ Scene createSolarSystemScene(VulkanApp& app) {
         .texEmissive = loadTextureFromFile(app, planets[i].textureName),
         .texDiffuse = loadTextureFromFile(app, planets[i].textureName),
         .pipeline = vulkanState.materialDefault,
+        .pipelineW = vulkanState.materialDefaultW,
     };
     const bool isSun = strstr(planets[i].textureName, "_sun") != nullptr;
     const bool isMoon = strstr(planets[i].textureName, "_moon") != nullptr;
@@ -519,6 +526,7 @@ Scene createSolarSystemScene(VulkanApp& app) {
       Material sunMaterial = planetMaterial;
       sunMaterial.twoSided = true;
       sunMaterial.pipeline = vulkanState.materialSun;
+      sunMaterial.pipelineW = vulkanState.materialSunW;
       allPlanets[i] = allPlanets[Sun];
       scene.createMaterial(allPlanets[i], sunMaterial);
       scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 4)}));
@@ -589,6 +597,7 @@ Scene createSolarSystemScene(VulkanApp& app) {
         .texEmissive = loadTextureFromFile(app, "2k_makemake_fictional.jpg"),
         .texDiffuse = loadTextureFromFile(app, "2k_makemake_fictional.jpg"),
         .pipeline = vulkanState.materialDefault,
+        .pipelineW = vulkanState.materialDefaultW,
     };
     const Material asteroidMat2 = {
         .emissive = vec4(0.4, 0.3, 0.3, 1.0),
@@ -596,6 +605,7 @@ Scene createSolarSystemScene(VulkanApp& app) {
         .texEmissive = loadTextureFromFile(app, "2k_makemake_fictional.jpg"),
         .texDiffuse = loadTextureFromFile(app, "2k_makemake_fictional.jpg"),
         .pipeline = vulkanState.materialDefault,
+        .pipelineW = vulkanState.materialDefaultW,
     };
     SceneNode* g_ParentAsteroid = allPlanets[Sun]->createNode();
 
@@ -654,6 +664,7 @@ Scene createSolarSystemScene(VulkanApp& app) {
 
 struct RenderOp final {
   lvk::RenderPipelineHandle pipeline;
+  lvk::RenderPipelineHandle pipelineW;
   uint32_t firstVertex = 0;
   uint32_t numVertices = 0;
   uint32_t materialIndex = 0;
@@ -684,15 +695,25 @@ VULKAN_APP_MAIN {
       .inputBindings = {{.stride = sizeof(GeometryShapes::Vertex)}},
   };
 
-  vulkanState.materialDefault = ctx->createRenderPipeline({
-      .vertexInput = vinput,
-      .smVert = smDefault.vert,
-      .smFrag = smDefault.frag,
-      .color = {{.format = ctx->getSwapchainFormat()}},
-      .depthFormat = app.getDepthFormat(),
-      .cullMode = lvk::CullMode_Back,
-      .debugName = "Pipeline: default",
-  });
+  auto createPipelines = [ctx](lvk::Holder<lvk::RenderPipelineHandle>& solid,
+                               lvk::Holder<lvk::RenderPipelineHandle>& wireframe,
+                               lvk::RenderPipelineDesc desc) {
+    solid = ctx->createRenderPipeline(desc);
+    desc.polygonMode = lvk::PolygonMode_Line;
+    wireframe = ctx->createRenderPipeline(desc);
+  };
+
+  createPipelines(vulkanState.materialDefault,
+                  vulkanState.materialDefaultW,
+                  {
+                      .vertexInput = vinput,
+                      .smVert = smDefault.vert,
+                      .smFrag = smDefault.frag,
+                      .color = {{.format = ctx->getSwapchainFormat()}},
+                      .depthFormat = app.getDepthFormat(),
+                      .cullMode = lvk::CullMode_Back,
+                      .debugName = "Pipeline: default",
+                  });
   vulkanState.materialSaturnRings = ctx->createRenderPipeline({
       .topology = lvk::Topology::Topology_TriangleStrip,
       .vertexInput = vinput,
@@ -723,15 +744,17 @@ VULKAN_APP_MAIN {
       .cullMode = lvk::CullMode_None,
       .debugName = "Pipeline: orbit",
   });
-  vulkanState.materialSun = ctx->createRenderPipeline({
-      .vertexInput = vinput,
-      .smVert = smSun.vert,
-      .smFrag = smSun.frag,
-      .color = {{.format = ctx->getSwapchainFormat()}},
-      .depthFormat = app.getDepthFormat(),
-      .cullMode = lvk::CullMode_Back,
-      .debugName = "Pipeline: Sun",
-  });
+  createPipelines(vulkanState.materialSun,
+                  vulkanState.materialSunW,
+                  {
+                      .vertexInput = vinput,
+                      .smVert = smSun.vert,
+                      .smFrag = smSun.frag,
+                      .color = {{.format = ctx->getSwapchainFormat()}},
+                      .depthFormat = app.getDepthFormat(),
+                      .cullMode = lvk::CullMode_Back,
+                      .debugName = "Pipeline: Sun",
+                  });
 
   vulkanState.bufPerFrame = ctx->createBuffer({
       .usage = lvk::BufferUsageBits_Uniform,
@@ -796,8 +819,11 @@ VULKAN_APP_MAIN {
       allVertices.insert(allVertices.end(), mesh.mesh->vertices.begin(), mesh.mesh->vertices.end());
     }
 
+    const Material& m = scene.materials[materialIdx];
+
     flatRenderQueue.push_back(RenderOp{
-        .pipeline = scene.materials[materialIdx].pipeline,
+        .pipeline = m.pipeline,
+        .pipelineW = m.pipelineW ? m.pipelineW : m.pipeline,
         .firstVertex = (uint32_t)mesh.mesh->firstVertex,
         .numVertices = (uint32_t)mesh.mesh->vertices.size(),
         .materialIndex = (uint32_t)materialIdx,
@@ -872,7 +898,7 @@ VULKAN_APP_MAIN {
 
       buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = true});
       for (const RenderOp& ROP : flatRenderQueue) {
-        buf.cmdBindRenderPipeline(ROP.pipeline);
+        buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
         buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
       }
 
@@ -900,6 +926,7 @@ VULKAN_APP_MAIN {
     ImGui::Separator();
 #endif
     ImGui::Checkbox("Pause animation (P)", &g_Paused);
+    ImGui::Checkbox("Wireframe (X)", &g_Wireframe);
     ImGui::Checkbox("Use trackball navigation", &g_UseTrackball);
     ImGui::End();
     app.drawFPS();
