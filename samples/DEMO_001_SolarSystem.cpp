@@ -251,6 +251,77 @@ void main() {
 }
 )";
 
+const char* codeSunCoronaVS = R"(
+layout (location=0) in vec4 in_Vertex;
+layout (location=1) in vec2 in_TexCoord;
+layout (location=2) in vec3 in_Normal;
+
+layout(std430, buffer_reference) readonly buffer PerFrame {
+  mat4 proj;
+  mat4 view;
+};
+
+struct Material {
+  vec4 emissive;
+  vec4 diffuse; // w - two-sided
+  uint texEmissive;
+  uint texDiffuse;
+  uint padding[2];
+};
+
+layout(std430, buffer_reference) readonly buffer Materials {
+  Material m[];
+};
+
+layout(std430, buffer_reference) readonly buffer ModelMatrices {
+  mat4 m[];
+};
+
+layout(push_constant) uniform constants {
+  ModelMatrices bufModelMatrices;
+  PerFrame      bufPerFrame;
+  Materials     bufMaterials;
+};
+
+layout (location=0) out vec2 v_TexCoord;
+layout (location=1) flat out uint v_Texture0;
+
+vec3 getBillboardOffset(mat4 mv, vec2 uv, vec2 sizeXY) {
+  // check out http://www.geeks3d.com/20140807/billboarding-vertex-shader-glsl/
+  vec3 x = vec3(mv[0][0], mv[1][0], mv[2][0]);
+  vec3 y = vec3(mv[0][1], mv[1][1], mv[2][1]);
+
+  vec2 coef = vec2(2.0) * (uv - vec2(0.5)) * sizeXY;
+
+  return coef.x * x + coef.y * y;
+}
+
+void main() {
+  mat4 mv = bufPerFrame.view * bufModelMatrices.m[gl_BaseInstance];
+  vec3 v  = getBillboardOffset(mv, in_TexCoord, vec2(0.28, 0.28));
+
+  gl_Position = bufPerFrame.proj * mv * vec4(v, 1.0);
+
+  v_TexCoord = in_TexCoord;
+  v_Texture0 = bufMaterials.m[gl_BaseInstance].texEmissive;
+}
+)";
+
+const char* codeSunCoronaFS = R"(
+layout (location=0) in vec2 v_TexCoord;
+layout (location=1) flat in uint v_Texture0;
+
+layout (location=0) out vec4 out_FragColor;
+
+void main() {
+  vec4 K1 = textureBindless2D(v_Texture0, 0, v_TexCoord);
+
+  K1.a = dot( K1.xyz, vec3(0.333, 0.333, 0.333) );
+
+  out_FragColor = K1;
+}
+)";
+
 struct SceneNode final {
   SceneNode* parent = nullptr;
   mat4 local = mat4(1.0f);
@@ -392,6 +463,7 @@ struct VulkanState final {
   lvk::Holder<lvk::RenderPipelineHandle> materialOrbit;
   lvk::Holder<lvk::RenderPipelineHandle> materialSun;
   lvk::Holder<lvk::RenderPipelineHandle> materialSunW;
+  lvk::Holder<lvk::RenderPipelineHandle> materialSunCorona;
 } vulkanState;
 
 lvk::TextureHandle loadTextureFromFile(VulkanApp& app, const std::string& fileName) {
@@ -530,6 +602,14 @@ Scene createSolarSystemScene(VulkanApp& app) {
       allPlanets[i] = allPlanets[Sun];
       scene.createMaterial(allPlanets[i], sunMaterial);
       scene.createMesh(allPlanets[i], std::make_shared<Mesh>(Mesh{GeometryShapes::createIcoSphere(vec3(0), planets[i].radius, 4)}));
+      auto sunCorona = allPlanets[i]->createNode(glm::rotate(mat4(1.0f), glm::radians(90.0f), vec3(1.0f, 0.0f, 0.0f)));
+      scene.createMesh(sunCorona, std::make_shared<Mesh>(Mesh{GeometryShapes::createQuad2D(vec2(-0.8f), vec2(+0.8f), 0.0f)}));
+      scene.createMaterial(sunCorona,
+                           Material{
+                               .texEmissive = loadTextureFromFile(app, "768_sun_corona.jpg"),
+                               .isTransparent = true,
+                               .pipeline = vulkanState.materialSunCorona,
+                           });
     } else if (isMoon) {
       // attach the Moon to the Earth
       allPlanets[i] = allPlanets[Earth]->createNode();
@@ -688,6 +768,7 @@ VULKAN_APP_MAIN {
   ShaderModules smDefault = loadShaderProgram(ctx, codeDefaultVS, codeDefaultFS);
   ShaderModules smOrbit = loadShaderProgram(ctx, codeOrbitVS, codeOrbitFS);
   ShaderModules smSun = loadShaderProgram(ctx, codeSunVS, codeSunFS);
+  ShaderModules smSunCorona = loadShaderProgram(ctx, codeSunCoronaVS, codeSunCoronaFS);
 
   const lvk::VertexInput vinput = {
       .attributes = {{.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(GeometryShapes::Vertex, pos)},
@@ -756,6 +837,18 @@ VULKAN_APP_MAIN {
                       .cullMode = lvk::CullMode_Back,
                       .debugName = "Pipeline: Sun",
                   });
+  vulkanState.materialSunCorona = ctx->createRenderPipeline({
+      .topology = lvk::Topology_TriangleStrip,
+      .vertexInput = vinput,
+      .smVert = smSunCorona.vert,
+      .smFrag = smSunCorona.frag,
+      .color = {{.format = ctx->getSwapchainFormat(),
+                 .blendEnabled = true,
+                 .srcRGBBlendFactor = lvk::BlendFactor_SrcAlpha,
+                 .dstRGBBlendFactor = lvk::BlendFactor_OneMinusSrcAlpha}},
+      .depthFormat = app.getDepthFormat(),
+      .debugName = "Pipeline: Sun corona",
+  });
 
   vulkanState.bufPerFrame = ctx->createBuffer({
       .usage = lvk::BufferUsageBits_Uniform,
