@@ -763,7 +763,7 @@ VULKAN_APP_MAIN {
       .width = -80,
       .height = -80,
       .initialCameraPos = vec3(0.8, -1.6, 0.6),
-      .initialCameraTarget = vec3(0, 0, 0),
+      .initialCameraTarget = vec3(-1.5, 1.2, -0.6),
       .initialCameraUpVector = vec3(0, 0, 1),
   };
   VULKAN_APP_DECLARE(app, cfg);
