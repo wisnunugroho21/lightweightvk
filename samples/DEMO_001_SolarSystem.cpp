@@ -560,6 +560,7 @@ Scene createSolarSystemScene(VulkanApp& app) {
   // create orbits
   if (g_DrawPlanetOrbits) {
     const Material orbitMaterial = {
+        .isTransparent = true,
         .pipeline = vulkanState.materialOrbit,
     };
     for (size_t i = 0; i < planets.size(); i++) {
@@ -839,6 +840,20 @@ VULKAN_APP_MAIN {
       .debugName = "Buffer: vertex",
   });
 
+  auto selectROPs = [](const std::vector<RenderOp>& ROPs, const std::function<bool(const RenderOp&)>& pred) -> std::vector<RenderOp> {
+    std::vector<RenderOp> outROPs;
+    outROPs.reserve(ROPs.size());
+    for (const RenderOp& i : ROPs)
+      if (pred(i))
+        outROPs.push_back(i);
+    return outROPs;
+  };
+
+  const std::vector<RenderOp> renderQueueOpaque =
+      selectROPs(flatRenderQueue, [&scene](const RenderOp& ROP) { return !scene.materials[ROP.materialIndex].isTransparent; });
+  const std::vector<RenderOp> renderQueueTransparent =
+      selectROPs(flatRenderQueue, [&scene](const RenderOp& ROP) { return scene.materials[ROP.materialIndex].isTransparent; });
+
   app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
     LVK_PROFILER_FUNCTION();
 
@@ -891,13 +906,20 @@ VULKAN_APP_MAIN {
       buf.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Clear, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
                              .depth = {.loadOp = lvk::LoadOp_Clear, .clearDepth = 1.0f}},
                             fb);
-
       // all pipelines share the same push constants - bind them up front
-      buf.cmdBindRenderPipeline(flatRenderQueue[0].pipeline);
+      buf.cmdBindRenderPipeline(renderQueueOpaque[0].pipeline);
       buf.cmdPushConstants(pc);
 
+      // 1. Render opaque objects
       buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = true});
-      for (const RenderOp& ROP : flatRenderQueue) {
+      for (const RenderOp& ROP : renderQueueOpaque) {
+        buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
+        buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
+      }
+
+      // 2. Render transparent objects
+      buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = false});
+      for (const RenderOp& ROP : renderQueueTransparent) {
         buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
         buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
       }
