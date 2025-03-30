@@ -6319,6 +6319,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
       .pNext = config_.extensionsDeviceFeatures,
       .storageBuffer16BitAccess = VK_TRUE,
+      .multiview = vkFeatures11_.multiview, // enable if supported
       .samplerYcbcrConversion = vkFeatures11_.samplerYcbcrConversion, // enable if supported
       .shaderDrawParameters = VK_TRUE,
   };
