@@ -240,6 +240,7 @@ class VulkanPipelineBuilder final {
   VulkanPipelineBuilder& frontFace(VkFrontFace mode);
   VulkanPipelineBuilder& polygonMode(VkPolygonMode mode);
   VulkanPipelineBuilder& vertexInputState(const VkPipelineVertexInputStateCreateInfo& state);
+  VulkanPipelineBuilder& viewMask(uint32_t mask);
   VulkanPipelineBuilder& colorAttachments(const VkPipelineColorBlendAttachmentState* states,
                                           const VkFormat* formats,
                                           uint32_t numColorAttachments);
@@ -272,6 +273,7 @@ class VulkanPipelineBuilder final {
   VkPipelineDepthStencilStateCreateInfo depthStencilState_;
   VkPipelineTessellationStateCreateInfo tessellationState_;
 
+  uint32_t viewMask_ = 0;
   uint32_t numColorAttachments_ = 0;
   VkPipelineColorBlendAttachmentState colorBlendAttachmentStates_[LVK_MAX_COLOR_ATTACHMENTS] = {};
   VkFormat colorAttachmentFormats_[LVK_MAX_COLOR_ATTACHMENTS] = {};

@@ -1721,6 +1721,11 @@ lvk::VulkanPipelineBuilder& lvk::VulkanPipelineBuilder::vertexInputState(const V
   return *this;
 }
 
+lvk::VulkanPipelineBuilder& lvk::VulkanPipelineBuilder::viewMask(uint32_t mask) {
+  viewMask_ = mask;
+  return *this;
+}
+
 lvk::VulkanPipelineBuilder& lvk::VulkanPipelineBuilder::colorAttachments(const VkPipelineColorBlendAttachmentState* states,
                                                                          const VkFormat* formats,
                                                                          uint32_t numColorAttachments) {
@@ -1837,6 +1842,7 @@ VkResult lvk::VulkanPipelineBuilder::build(VkDevice device,
   const VkPipelineRenderingCreateInfo renderingInfo = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
       .pNext = nullptr,
+      .viewMask = viewMask_,
       .colorAttachmentCount = numColorAttachments_,
       .pColorAttachmentFormats = colorAttachmentFormats_,
       .depthAttachmentFormat = depthAttachmentFormat_,
