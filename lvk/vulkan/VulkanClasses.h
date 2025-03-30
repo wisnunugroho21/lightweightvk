@@ -431,6 +431,7 @@ class CommandBuffer final : public ICommandBuffer {
   VkPipeline lastPipelineBound_ = VK_NULL_HANDLE;
 
   bool isRendering_ = false;
+  uint32_t viewMask_ = 0;
 
   lvk::RenderPipelineHandle currentPipelineGraphics_ = {};
   lvk::ComputePipelineHandle currentPipelineCompute_ = {};

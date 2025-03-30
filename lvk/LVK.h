@@ -667,6 +667,7 @@ struct RenderPipelineDesc final {
   StencilState backFaceStencil = {};
   StencilState frontFaceStencil = {};
 
+  uint32_t viewMask = 0;
   uint32_t samplesCount = 1u;
   uint32_t patchControlPoints = 0;
   float minSampleShading = 0.0f;
@@ -731,6 +732,9 @@ struct RenderPass final {
   AttachmentDesc color[LVK_MAX_COLOR_ATTACHMENTS] = {};
   AttachmentDesc depth = {.loadOp = LoadOp_DontCare, .storeOp = StoreOp_DontCare};
   AttachmentDesc stencil = {.loadOp = LoadOp_Invalid, .storeOp = StoreOp_DontCare};
+
+  uint32_t layerCount = 1;
+  uint32_t viewMask = 0;
 
   uint32_t getNumColorAttachments() const {
     uint32_t n = 0;

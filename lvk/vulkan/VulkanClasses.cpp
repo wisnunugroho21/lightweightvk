@@ -2092,6 +2092,7 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
   LVK_ASSERT(!isRendering_);
 
   isRendering_ = true;
+  viewMask_ = renderPass.viewMask;
 
   for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.textures[i]; i++) {
     transitionToShaderReadOnly(deps.textures[i]);
@@ -2255,8 +2256,8 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
       .pNext = nullptr,
       .flags = 0,
       .renderArea = {VkOffset2D{(int32_t)scissor.x, (int32_t)scissor.y}, VkExtent2D{scissor.width, scissor.height}},
-      .layerCount = 1,
-      .viewMask = 0,
+      .layerCount = renderPass.layerCount,
+      .viewMask = renderPass.viewMask,
       .colorAttachmentCount = numFbColorAttachments,
       .pColorAttachments = colorAttachments,
       .pDepthAttachment = depthTex ? &depthAttachment : nullptr,
@@ -2316,6 +2317,11 @@ void lvk::CommandBuffer::cmdBindRenderPipeline(lvk::RenderPipelineHandle handle)
   currentPipelineRayTracing_ = {};
 
   const lvk::RenderPipelineState* rps = ctx_->renderPipelinesPool_.get(handle);
+
+  if (viewMask_ != rps->desc_.viewMask) {
+    LVK_ASSERT(false);
+    LLOGW("Make sure cmdBeginRendering() and render pipeline both have identical view mask");
+  }
 
   LVK_ASSERT(rps);
 
@@ -4629,6 +4635,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
       .cullMode(cullModeToVkCullMode(desc.cullMode))
       .frontFace(windingModeToVkFrontFace(desc.frontFaceWinding))
       .vertexInputState(ciVertexInputState)
+      .viewMask(desc.viewMask)
       .colorAttachments(colorBlendAttachmentStates, colorAttachmentFormats, numColorAttachments)
       .depthAttachmentFormat(formatToVkFormat(desc.depthFormat))
       .stencilAttachmentFormat(formatToVkFormat(desc.stencilFormat))
