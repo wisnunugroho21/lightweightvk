@@ -31,6 +31,7 @@ struct Planet {
 bool g_Paused = false;
 bool g_Wireframe = false;
 bool g_DrawPlanetOrbits = true;
+bool g_SplitScreenStereo = false;
 bool g_UseTrackball = false;
 
 VirtualTrackball g_Trackball;
@@ -743,6 +744,12 @@ Scene createSolarSystemScene(VulkanApp& app) {
   return scene;
 }
 
+struct RenderView final {
+  mat4 proj;
+  mat4 view;
+  lvk::Viewport viewport;
+};
+
 struct RenderOp final {
   lvk::RenderPipelineHandle pipeline;
   lvk::RenderPipelineHandle pipelineW;
@@ -969,7 +976,22 @@ VULKAN_APP_MAIN {
         return app.camera_.getViewMatrix();
       }
     }();
-    const mat4 proj = glm::perspective(glm::radians(45.0f), aspectRatio, 0.01f, 100.0f);
+
+    const std::vector<RenderView> views = [](int w, int h, float aspectRatio, const mat4& view) -> std::vector<RenderView> {
+      const float fov = glm::radians(45.0f);
+      const float nearPlane = 0.01f;
+      const float farPlane = 100.0f;
+      if (g_SplitScreenStereo) {
+        const mat4 projStereo = glm::perspective(fov, aspectRatio / 2.0f, nearPlane, farPlane); // TODO: implement a stereo projection
+        const float halfW = float(w) / 2.0f;
+        return {
+            {projStereo, view, lvk::Viewport{0, 0, halfW,float(h)}},
+            {projStereo, view, lvk::Viewport{halfW, 0, halfW, float(h)}},
+        };
+      }
+      const mat4 proj = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
+      return {{proj, view, lvk::Viewport{0, 0, float(w), float(h)}}};
+    }(app.width_, app.height_, aspectRatio, view);
 
     lvk::ICommandBuffer& buf = ctx->acquireCommandBuffer();
     const lvk::Framebuffer fb = {
@@ -989,35 +1011,41 @@ VULKAN_APP_MAIN {
       };
 
       buf.cmdBindVertexBuffer(0, vulkanState.bufVertices, 0);
+      buf.cmdClearColorImage(fb.color[0].texture, {0, 0, 0, 1});
 
-      buf.cmdUpdateBuffer(vulkanState.bufPerFrame,
-                          PerFrameBuffer{
-                              .proj = proj,
-                              .view = view,
-                              .time = (float)glfwGetTime(),
-                          });
-      buf.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Clear, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
-                             .depth = {.loadOp = lvk::LoadOp_Clear, .clearDepth = 1.0f}},
-                            fb);
-      // all pipelines share the same push constants - bind them up front
-      buf.cmdBindRenderPipeline(renderQueueOpaque[0].pipeline);
-      buf.cmdPushConstants(pc);
+      for (const RenderView& v : views) {
+        buf.cmdUpdateBuffer(vulkanState.bufPerFrame,
+                            PerFrameBuffer{
+                                .proj = v.proj,
+                                .view = v.view,
+                                .time = (float)glfwGetTime(),
+                            });
+        buf.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Load, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
+                               .depth = {.loadOp = lvk::LoadOp_Clear, .clearDepth = 1.0f}},
+                              fb);
+        buf.cmdBindViewport(v.viewport);
+        buf.cmdBindScissorRect({(uint32_t)v.viewport.x, (uint32_t)v.viewport.y, (uint32_t)v.viewport.width, (uint32_t)v.viewport.height});
 
-      // 1. Render opaque objects
-      buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = true});
-      for (const RenderOp& ROP : renderQueueOpaque) {
-        buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
-        buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
+        // all pipelines share the same push constants - bind them up front
+        buf.cmdBindRenderPipeline(renderQueueOpaque[0].pipeline);
+        buf.cmdPushConstants(pc);
+
+        // 1. Render opaque objects
+        buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = true});
+        for (const RenderOp& ROP : renderQueueOpaque) {
+          buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
+          buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
+        }
+
+        // 2. Render transparent objects
+        buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = false});
+        for (const RenderOp& ROP : renderQueueTransparent) {
+          buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
+          buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
+        }
+
+        buf.cmdEndRendering();
       }
-
-      // 2. Render transparent objects
-      buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = false});
-      for (const RenderOp& ROP : renderQueueTransparent) {
-        buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
-        buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
-      }
-
-      buf.cmdEndRendering();
     }
     // ImGui pass
     buf.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Load}}, .depth = {.loadOp = lvk::LoadOp_DontCare}}, fb);
@@ -1042,6 +1070,7 @@ VULKAN_APP_MAIN {
 #endif
     ImGui::Checkbox("Pause animation (P)", &g_Paused);
     ImGui::Checkbox("Wireframe (X)", &g_Wireframe);
+    ImGui::Checkbox("Split screen", &g_SplitScreenStereo);
     ImGui::Checkbox("Use trackball navigation", &g_UseTrackball);
     ImGui::End();
     app.drawFPS();
