@@ -2318,11 +2318,6 @@ void lvk::CommandBuffer::cmdBindRenderPipeline(lvk::RenderPipelineHandle handle)
 
   const lvk::RenderPipelineState* rps = ctx_->renderPipelinesPool_.get(handle);
 
-  if (viewMask_ != rps->desc_.viewMask) {
-    LVK_ASSERT(false);
-    LLOGW("Make sure cmdBeginRendering() and render pipeline both have identical view mask");
-  }
-
   LVK_ASSERT(rps);
 
   const bool hasDepthAttachmentPipeline = rps->desc_.depthFormat != Format_Invalid;
@@ -2333,7 +2328,7 @@ void lvk::CommandBuffer::cmdBindRenderPipeline(lvk::RenderPipelineHandle handle)
     LLOGW("Make sure your render pass and render pipeline both have matching depth attachments");
   }
 
-  VkPipeline pipeline = ctx_->getVkPipeline(handle);
+  VkPipeline pipeline = ctx_->getVkPipeline(handle, viewMask_);
 
   LVK_ASSERT(pipeline != VK_NULL_HANDLE);
 
@@ -4450,20 +4445,21 @@ const VkSamplerYcbcrConversionInfo* lvk::VulkanContext::getOrCreateYcbcrConversi
   return &pimpl_->ycbcrConversionData_[format].info;
 }
 
-VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
+VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle, uint32_t viewMask) {
   lvk::RenderPipelineState* rps = renderPipelinesPool_.get(handle);
 
   if (!rps) {
     return VK_NULL_HANDLE;
   }
 
-  if (rps->lastVkDescriptorSetLayout_ != vkDSL_) {
+  if (rps->lastVkDescriptorSetLayout_ != vkDSL_ || rps->viewMask_ != viewMask) {
     deferredTask(std::packaged_task<void()>(
         [device = getVkDevice(), pipeline = rps->pipeline_]() { vkDestroyPipeline(device, pipeline, nullptr); }));
     deferredTask(std::packaged_task<void()>(
         [device = getVkDevice(), layout = rps->pipelineLayout_]() { vkDestroyPipelineLayout(device, layout, nullptr); }));
     rps->pipeline_ = VK_NULL_HANDLE;
     rps->lastVkDescriptorSetLayout_ = vkDSL_;
+    rps->viewMask_ = viewMask;
   }
 
   if (rps->pipeline_ != VK_NULL_HANDLE) {
@@ -4635,7 +4631,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle) {
       .cullMode(cullModeToVkCullMode(desc.cullMode))
       .frontFace(windingModeToVkFrontFace(desc.frontFaceWinding))
       .vertexInputState(ciVertexInputState)
-      .viewMask(desc.viewMask)
+      .viewMask(viewMask)
       .colorAttachments(colorBlendAttachmentStates, colorAttachmentFormats, numColorAttachments)
       .depthAttachmentFormat(formatToVkFormat(desc.depthFormat))
       .stencilAttachmentFormat(formatToVkFormat(desc.stencilFormat))

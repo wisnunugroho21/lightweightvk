@@ -219,6 +219,8 @@ struct RenderPipelineState final {
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 
   void* specConstantDataStorage_ = nullptr;
+
+  uint32_t viewMask_ = 0;
 };
 
 class VulkanPipelineBuilder final {
@@ -555,7 +557,7 @@ class VulkanContext final : public IContext {
   ///////////////
 
   VkPipeline getVkPipeline(ComputePipelineHandle handle);
-  VkPipeline getVkPipeline(RenderPipelineHandle handle);
+  VkPipeline getVkPipeline(RenderPipelineHandle handle, uint32_t viewMask);
   VkPipeline getVkPipeline(RayTracingPipelineHandle handle);
 
   uint32_t queryDevices(HWDeviceType deviceType, HWDeviceDesc* outDevices, uint32_t maxOutDevices = 1);

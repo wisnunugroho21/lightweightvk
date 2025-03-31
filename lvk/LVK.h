@@ -667,7 +667,6 @@ struct RenderPipelineDesc final {
   StencilState backFaceStencil = {};
   StencilState frontFaceStencil = {};
 
-  uint32_t viewMask = 0;
   uint32_t samplesCount = 1u;
   uint32_t patchControlPoints = 0;
   float minSampleShading = 0.0f;
