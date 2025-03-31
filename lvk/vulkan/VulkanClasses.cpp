@@ -1292,6 +1292,10 @@ uint32_t lvk::VulkanSwapchain::getNumSwapchainImages() const {
   return numSwapchainImages_;
 }
 
+uint32_t lvk::VulkanSwapchain::getSwapchainCurrentImageIndex() const {
+  return currentImageIndex_;
+}
+
 lvk::Result lvk::VulkanSwapchain::present(VkSemaphore waitSemaphore) {
   LVK_PROFILER_FUNCTION();
 
@@ -5710,6 +5714,15 @@ lvk::TextureHandle lvk::VulkanContext::getCurrentSwapchainTexture() {
   LVK_ASSERT_MSG(texturesPool_.get(tex)->vkImageFormat_ != VK_FORMAT_UNDEFINED, "Invalid image format");
 
   return tex;
+}
+
+uint32_t lvk::VulkanContext::getSwapchainCurrentImageIndex() const {
+  if (hasSwapchain()) {
+    // make sure we do not use a stale image
+    (void)swapchain_->getCurrentTexture();
+  }
+
+  return hasSwapchain() ? swapchain_->getSwapchainCurrentImageIndex() : 0;
 }
 
 void lvk::VulkanContext::recreateSwapchain(int newWidth, int newHeight) {

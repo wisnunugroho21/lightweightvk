@@ -128,6 +128,7 @@ class VulkanSwapchain final {
   VkImageView getCurrentVkImageView() const;
   TextureHandle getCurrentTexture();
   const VkSurfaceFormatKHR& getSurfaceFormat() const;
+  uint32_t getSwapchainCurrentImageIndex() const;
   uint32_t getNumSwapchainImages() const;
 
  public:
@@ -543,6 +544,7 @@ class VulkanContext final : public IContext {
   TextureHandle getCurrentSwapchainTexture() override;
   Format getSwapchainFormat() const override;
   ColorSpace getSwapchainColorSpace() const override;
+  uint32_t getSwapchainCurrentImageIndex() const override;
   uint32_t getNumSwapchainImages() const override;
   void recreateSwapchain(int newWidth, int newHeight) override;
 
