@@ -18,6 +18,16 @@
 const size_t numAsteroidsInner = 1500;
 const size_t numAsteroidsOuter = 500;
 
+bool g_Paused = false;
+bool g_Wireframe = false;
+bool g_DrawPlanetOrbits = true;
+bool g_MultiViewStereo = false;
+bool g_UseTrackball = false;
+
+float IoD = 0.01f; // adjustable interocular distance
+
+VirtualTrackball g_Trackball;
+
 struct Planet {
   float radius;
   float orbitalRadius;
@@ -27,14 +37,6 @@ struct Planet {
   float orbitalInclination;
   const char* textureName;
 };
-
-bool g_Paused = false;
-bool g_Wireframe = false;
-bool g_DrawPlanetOrbits = true;
-bool g_SplitScreenStereo = false;
-bool g_UseTrackball = false;
-
-VirtualTrackball g_Trackball;
 
 // overall scale of the planetary system
 const float g_Scale = 0.001f;
@@ -55,13 +57,15 @@ const std::vector<Planet> planets = {
 enum { Sun, Mercury, Venus, Earth, Mars, Jupiter, Saturn, Uranus, Neptune, Moon, TotalPlanets };
 
 const char* codeDefaultVS = R"(
+#extension GL_EXT_multiview : enable
+
 layout (location=0) in vec4 in_Vertex;
 layout (location=1) in vec2 in_TexCoord;
 layout (location=2) in vec3 in_Normal;
 
 layout(std430, buffer_reference) readonly buffer PerFrame {
-  mat4 proj;
-  mat4 view;
+  mat4 proj[2];
+  mat4 view[2];
 };
 
 layout(std430, buffer_reference) readonly buffer ModelMatrices {
@@ -85,10 +89,12 @@ void main() {
   v_WorldPos = (model * in_Vertex).xyz;
   v_WorldNormal = transpose(inverse(mat3(model))) * in_Normal;
 
-  gl_Position = bufPerFrame.proj * bufPerFrame.view * model * in_Vertex;
+  gl_Position = bufPerFrame.proj[gl_ViewIndex] *
+                bufPerFrame.view[gl_ViewIndex] *
+                model * in_Vertex;
 
   v_TexCoord  = in_TexCoord;
-  v_CameraPos = (inverse(bufPerFrame.view) * vec4( 0.0, 0.0, 0.0, 1.0 )).xyz;
+  v_CameraPos = (inverse(bufPerFrame.view[gl_ViewIndex]) * vec4( 0.0, 0.0, 0.0, 1.0 )).xyz;
 
   v_MaterialIndex = gl_BaseInstance;
 }
@@ -156,11 +162,13 @@ void main() {
 )";
 
 const char* codeOrbitVS = R"(
+#extension GL_EXT_multiview : enable
+
 layout (location=0) in vec4 in_Vertex;
 
 layout(std430, buffer_reference) readonly buffer PerFrame {
-  mat4 proj;
-  mat4 view;
+  mat4 proj[2];
+  mat4 view[2];
 };
 
 layout(std430, buffer_reference) readonly buffer ModelMatrices {
@@ -174,7 +182,9 @@ layout(push_constant) uniform constants {
 };
 
 void main() {
-  gl_Position = bufPerFrame.proj * bufPerFrame.view * bufModelMatrices.m[gl_BaseInstance] * in_Vertex;
+  gl_Position = bufPerFrame.proj[gl_ViewIndex] *
+                bufPerFrame.view[gl_ViewIndex] *
+                bufModelMatrices.m[gl_BaseInstance] * in_Vertex;
 }
 )";
 
@@ -187,13 +197,15 @@ void main() {
 )";
 
 const char* codeSunVS = R"(
+#extension GL_EXT_multiview : enable
+
 layout (location=0) in vec4 in_Vertex;
 layout (location=1) in vec2 in_TexCoord;
 layout (location=2) in vec3 in_Normal;
 
 layout(std430, buffer_reference) readonly buffer PerFrame {
-  mat4 proj;
-  mat4 view;
+  mat4 proj[2];
+  mat4 view[2];
   float u_Time;
 };
 
@@ -225,7 +237,9 @@ layout (location=2) flat out uint v_Texture0;
 layout (location=3) flat out uint v_Texture1;
 
 void main() {
-  gl_Position = bufPerFrame.proj * bufPerFrame.view * bufModelMatrices.m[gl_BaseInstance] * in_Vertex;
+  gl_Position = bufPerFrame.proj[gl_ViewIndex] *
+                bufPerFrame.view[gl_ViewIndex] *
+                bufModelMatrices.m[gl_BaseInstance] * in_Vertex;
 
   v_TexCoord = in_TexCoord;
   v_Time     = bufPerFrame.u_Time;
@@ -253,13 +267,15 @@ void main() {
 )";
 
 const char* codeSunCoronaVS = R"(
+#extension GL_EXT_multiview : enable
+
 layout (location=0) in vec4 in_Vertex;
 layout (location=1) in vec2 in_TexCoord;
 layout (location=2) in vec3 in_Normal;
 
 layout(std430, buffer_reference) readonly buffer PerFrame {
-  mat4 proj;
-  mat4 view;
+  mat4 proj[2];
+  mat4 view[2];
 };
 
 struct Material {
@@ -298,10 +314,10 @@ vec3 getBillboardOffset(mat4 mv, vec2 uv, vec2 sizeXY) {
 }
 
 void main() {
-  mat4 mv = bufPerFrame.view * bufModelMatrices.m[gl_BaseInstance];
+  mat4 mv = bufPerFrame.view[gl_ViewIndex] * bufModelMatrices.m[gl_BaseInstance];
   vec3 v  = getBillboardOffset(mv, in_TexCoord, vec2(0.28, 0.28));
 
-  gl_Position = bufPerFrame.proj * mv * vec4(v, 1.0);
+  gl_Position = bufPerFrame.proj[gl_ViewIndex] * mv * vec4(v, 1.0);
 
   v_TexCoord = in_TexCoord;
   v_Texture0 = bufMaterials.m[gl_BaseInstance].texEmissive;
@@ -402,8 +418,8 @@ struct MeshComponent final {
 };
 
 struct PerFrameBuffer final {
-  mat4 proj = mat4(1.0f);
-  mat4 view = mat4(1.0f);
+  mat4 proj[2] = {};
+  mat4 view[2] = {};
   float time = 0.0f;
 };
 
@@ -455,7 +471,7 @@ struct VulkanState final {
   std::unordered_map<std::string, lvk::Holder<lvk::TextureHandle>> textures;
   std::vector<lvk::Holder<lvk::ShaderModuleHandle>> shaderModules;
   lvk::Holder<lvk::BufferHandle> bufPerFrame;
-  lvk::Holder<lvk::BufferHandle> bufModelMatrices;
+  std::vector<lvk::Holder<lvk::BufferHandle>> bufModelMatrices;
   lvk::Holder<lvk::BufferHandle> bufMaterials;
   lvk::Holder<lvk::BufferHandle> bufVertices; // one large vertex buffer for everything
   lvk::Holder<lvk::RenderPipelineHandle> materialDefault;
@@ -465,6 +481,8 @@ struct VulkanState final {
   lvk::Holder<lvk::RenderPipelineHandle> materialSun;
   lvk::Holder<lvk::RenderPipelineHandle> materialSunW;
   lvk::Holder<lvk::RenderPipelineHandle> materialSunCorona;
+  std::vector<lvk::Holder<lvk::TextureHandle>> texColor;
+  lvk::Holder<lvk::TextureHandle> texDepth;
 } vulkanState;
 
 lvk::TextureHandle loadTextureFromFile(VulkanApp& app, const std::string& fileName) {
@@ -866,12 +884,16 @@ VULKAN_APP_MAIN {
 
   Scene scene = createSolarSystemScene(app);
 
-  vulkanState.bufModelMatrices = ctx->createBuffer({
-      .usage = lvk::BufferUsageBits_Storage,
-      .storage = lvk::StorageType_Device,
-      .size = sizeof(mat4) * scene.meshes.size(),
-      .debugName = "Buffer: bufModelMatrices",
-  });
+  for (uint32_t i = 0; i != ctx->getNumSwapchainImages(); i++) {
+    char debugName[256] = {0};
+    snprintf(debugName, sizeof(debugName) - 1, "Buffer: bufModelMatrices #%u", i);
+    vulkanState.bufModelMatrices.emplace_back(ctx->createBuffer({
+        .usage = lvk::BufferUsageBits_Storage,
+        .storage = lvk::StorageType_HostVisible,
+        .size = sizeof(mat4) * scene.meshes.size(),
+        .debugName = debugName,
+    }));
+  }
   // all materials are static - upload them once
   {
     struct MaterialBuffer {
@@ -932,12 +954,38 @@ VULKAN_APP_MAIN {
     modelMatrices.push_back(mesh.sceneNode->global);
   }
 
+  // sort by pipeline
+  std::sort(
+      flatRenderQueue.begin(), flatRenderQueue.end(), [](const auto& a, const auto& b) { return a.pipeline.index() < b.pipeline.index(); });
+
   vulkanState.bufVertices = ctx->createBuffer({
       .usage = lvk::BufferUsageBits_Vertex,
       .storage = lvk::StorageType_Device,
       .size = sizeof(GeometryShapes::Vertex) * allVertices.size(),
       .data = allVertices.data(),
       .debugName = "Buffer: vertex",
+  });
+
+  // we need multi-layered framebuffer textures for multiview rendering
+  for (uint32_t i = 0; i != ctx->getNumSwapchainImages(); i++) {
+    char debugName[256] = {0};
+    snprintf(debugName, sizeof(debugName) - 1, "Offscreen (color #%u)", i);
+    vulkanState.texColor.emplace_back(app.ctx_->createTexture({
+        .type = lvk::TextureType_2D,
+        .format = ctx->getSwapchainFormat(),
+        .dimensions = {uint32_t(app.width_) / 2, uint32_t(app.height_)},
+        .numLayers = 2,
+        .usage = lvk::TextureUsageBits_Attachment,
+        .debugName = debugName,
+    }));
+  }
+  vulkanState.texDepth = app.ctx_->createTexture({
+      .type = lvk::TextureType_2D,
+      .format = app.getDepthFormat(),
+      .dimensions = {uint32_t(app.width_) / 2, uint32_t(app.height_)},
+      .numLayers = 2,
+      .usage = lvk::TextureUsageBits_Attachment,
+      .debugName = "Offscreen (depth)",
   });
 
   auto selectROPs = [](const std::vector<RenderOp>& ROPs, const std::function<bool(const RenderOp&)>& pred) -> std::vector<RenderOp> {
@@ -964,7 +1012,8 @@ VULKAN_APP_MAIN {
     for (size_t i = 0; i != scene.meshes.size(); i++) {
       modelMatrices[i] = scene.meshes[i].sceneNode->global;
     }
-    ctx->upload(vulkanState.bufModelMatrices, modelMatrices.data(), sizeof(mat4) * modelMatrices.size());
+    ctx->upload(
+        vulkanState.bufModelMatrices[ctx->getSwapchainCurrentImageIndex()], modelMatrices.data(), sizeof(mat4) * modelMatrices.size());
 
     const mat4 view = [&app, mouse = app.mouseState_]() -> mat4 {
       if (g_UseTrackball) {
@@ -981,12 +1030,21 @@ VULKAN_APP_MAIN {
       const float fov = glm::radians(45.0f);
       const float nearPlane = 0.01f;
       const float farPlane = 100.0f;
-      if (g_SplitScreenStereo) {
-        const mat4 projStereo = glm::perspective(fov, aspectRatio / 2.0f, nearPlane, farPlane); // TODO: implement a stereo projection
+      if (g_MultiViewStereo) {
+        // asymmetric frustum - stereoscopic
+        // https://paulbourke.net/stereographics/stereorender/
+        const float focalLength = 0.5f;
+        const float aspect = aspectRatio * 0.5f;
+        const float wd2 = nearPlane * tan(fov / 2.0f);
+        const float D = 0.5f * IoD * nearPlane / focalLength;
+        const mat4 proj0 = glm::frustum(-aspect * wd2 - D, aspect * wd2 - D, -wd2, wd2, nearPlane, farPlane); // left
+        const mat4 proj1 = glm::frustum(-aspect * wd2 + D, aspect * wd2 + D, -wd2, wd2, nearPlane, farPlane); // right
+        const mat4 T0 = glm::translate(glm::mat4(1.0f), vec3(+1, 0, 0) * IoD * 0.5f);
+        const mat4 T1 = glm::translate(glm::mat4(1.0f), vec3(-1, 0, 0) * IoD * 0.5f);
         const float halfW = float(w) / 2.0f;
         return {
-            {projStereo, view, lvk::Viewport{0, 0, halfW,float(h)}},
-            {projStereo, view, lvk::Viewport{halfW, 0, halfW, float(h)}},
+            {proj0, view * T0, lvk::Viewport{0, 0, halfW, float(h)}},
+            {proj1, view * T1, lvk::Viewport{0, 0, halfW, float(h)}},
         };
       }
       const mat4 proj = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
@@ -995,34 +1053,35 @@ VULKAN_APP_MAIN {
 
     lvk::ICommandBuffer& buf = ctx->acquireCommandBuffer();
     const lvk::Framebuffer fb = {
-        .color = {{.texture = ctx->getCurrentSwapchainTexture()}},
-        .depthStencil = {.texture = app.getDepthTexture()},
+        .color = {{.texture = g_MultiViewStereo ? vulkanState.texColor[ctx->getSwapchainCurrentImageIndex()]
+                                                : ctx->getCurrentSwapchainTexture()}},
+        .depthStencil = {.texture = g_MultiViewStereo ? vulkanState.texDepth : app.getDepthTexture()},
     };
-    // render
+    // render scene
     {
       const struct {
         uint64_t bufModelMatrices;
         uint64_t bufPerFrame;
         uint64_t bufMaterials;
       } pc = {
-          .bufModelMatrices = ctx->gpuAddress(vulkanState.bufModelMatrices),
+          .bufModelMatrices = ctx->gpuAddress(vulkanState.bufModelMatrices[ctx->getSwapchainCurrentImageIndex()]),
           .bufPerFrame = ctx->gpuAddress(vulkanState.bufPerFrame),
           .bufMaterials = ctx->gpuAddress(vulkanState.bufMaterials),
       };
-
+      // update per-frame buffers for all render views - we should do it outside of a render pass
+      const PerFrameBuffer perFrame =
+          g_MultiViewStereo
+              ? PerFrameBuffer{.proj = {views[0].proj, views[1].proj}, .view = {views[0].view, views[1].view}, .time = (float)glfwGetTime()}
+              : PerFrameBuffer{.proj = {views[0].proj}, .view = {views[0].view}, .time = (float)glfwGetTime()};
+      buf.cmdUpdateBuffer(vulkanState.bufPerFrame, perFrame);
       buf.cmdBindVertexBuffer(0, vulkanState.bufVertices, 0);
-      buf.cmdClearColorImage(fb.color[0].texture, {0, 0, 0, 1});
 
+      buf.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Clear, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
+                             .depth = {.loadOp = lvk::LoadOp_Clear, .clearDepth = 1.0f},
+                             .layerCount = (uint32_t)views.size(),
+                             .viewMask = g_MultiViewStereo ? 0b11 : 0u},
+                            fb);
       for (const RenderView& v : views) {
-        buf.cmdUpdateBuffer(vulkanState.bufPerFrame,
-                            PerFrameBuffer{
-                                .proj = v.proj,
-                                .view = v.view,
-                                .time = (float)glfwGetTime(),
-                            });
-        buf.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Load, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
-                               .depth = {.loadOp = lvk::LoadOp_Clear, .clearDepth = 1.0f}},
-                              fb);
         buf.cmdBindViewport(v.viewport);
         buf.cmdBindScissorRect({(uint32_t)v.viewport.x, (uint32_t)v.viewport.y, (uint32_t)v.viewport.width, (uint32_t)v.viewport.height});
 
@@ -1043,13 +1102,32 @@ VULKAN_APP_MAIN {
           buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
           buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
         }
-
-        buf.cmdEndRendering();
       }
     }
+    buf.cmdEndRendering();
+    if (g_MultiViewStereo) {
+      // combine 2 layers from our offscreen image into a single swapchain image, displayed side by side
+      buf.cmdCopyImage(fb.color[0].texture,
+                       ctx->getCurrentSwapchainTexture(),
+                       ctx->getDimensions(fb.color[0].texture),
+                       {},
+                       {},
+                       lvk::TextureLayers{.layer = 0},
+                       lvk::TextureLayers{.layer = 0});
+      buf.cmdCopyImage(fb.color[0].texture,
+                       ctx->getCurrentSwapchainTexture(),
+                       ctx->getDimensions(fb.color[0].texture),
+                       {},
+                       {.x = app.width_ / 2},
+                       lvk::TextureLayers{.layer = 1},
+                       lvk::TextureLayers{.layer = 0});
+    }
     // ImGui pass
-    buf.cmdBeginRendering({.color = {{.loadOp = lvk::LoadOp_Load}}, .depth = {.loadOp = lvk::LoadOp_DontCare}}, fb);
-    app.imgui_->beginFrame(fb);
+    const lvk::Framebuffer fbImGui = {
+        .color = {{.texture = ctx->getCurrentSwapchainTexture()}},
+    };
+    buf.cmdBeginRendering(lvk::RenderPass{.color = {{.loadOp = lvk::LoadOp_Load}}}, fbImGui);
+    app.imgui_->beginFrame(fbImGui);
     auto imGuiPushFlagsAndStyles = [](bool value) {
       ImGui::BeginDisabled(!value);
       ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * (value ? 1.0f : 0.3f));
@@ -1058,7 +1136,6 @@ VULKAN_APP_MAIN {
       ImGui::PopStyleVar();
       ImGui::EndDisabled();
     };
-
     const float indentSize = 16.0f;
     ImGui::Begin("Keyboard hints:", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
 #if !defined(ANDROID)
@@ -1070,8 +1147,11 @@ VULKAN_APP_MAIN {
 #endif
     ImGui::Checkbox("Pause animation (P)", &g_Paused);
     ImGui::Checkbox("Wireframe (X)", &g_Wireframe);
-    ImGui::Checkbox("Split screen", &g_SplitScreenStereo);
     ImGui::Checkbox("Use trackball navigation", &g_UseTrackball);
+    ImGui::Checkbox("Multiview", &g_MultiViewStereo);
+    imGuiPushFlagsAndStyles(g_MultiViewStereo);
+    ImGui::SliderFloat("IoD", &IoD, 0, 0.1f);
+    imGuiPopFlagsAndStyles();
     ImGui::End();
     app.drawFPS();
     app.imgui_->endFrame(buf);
