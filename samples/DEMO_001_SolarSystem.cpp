@@ -72,9 +72,19 @@ layout(std430, buffer_reference) readonly buffer ModelMatrices {
   mat4 m[];
 };
 
+struct DrawData {
+  uint idModelMatrix;
+  uint idMaterial;
+};
+
+layout(std430, buffer_reference) readonly buffer BufDrawData {
+  DrawData dd[];
+};
+
 layout(push_constant) uniform constants {
   ModelMatrices bufModelMatrices;
   PerFrame      bufPerFrame;
+  BufDrawData   bufDrawData;
 };
 
 layout (location=0) out vec2 v_TexCoord;
@@ -84,7 +94,7 @@ layout (location=3) out vec3 v_CameraPos;
 layout (location=4) flat out uint v_MaterialIndex;
 
 void main() {
-  mat4 model = bufModelMatrices.m[gl_BaseInstance];
+  mat4 model = bufModelMatrices.m[bufDrawData.dd[gl_InstanceIndex].idModelMatrix];
 
   v_WorldPos = (model * in_Vertex).xyz;
   v_WorldNormal = transpose(inverse(mat3(model))) * in_Normal;
@@ -96,7 +106,7 @@ void main() {
   v_TexCoord  = in_TexCoord;
   v_CameraPos = (inverse(bufPerFrame.view[gl_ViewIndex]) * vec4( 0.0, 0.0, 0.0, 1.0 )).xyz;
 
-  v_MaterialIndex = gl_BaseInstance;
+  v_MaterialIndex = bufDrawData.dd[gl_InstanceIndex].idMaterial;
 }
 )";
 
@@ -120,8 +130,9 @@ layout(std430, buffer_reference) readonly buffer Materials {
 };
 
 layout(push_constant) uniform constants {
-  vec2 bufModelMatrices;
-  vec2 bufPerFrame;
+  vec2      bufModelMatrices;
+  vec2      bufPerFrame;
+  vec2      bufDrawData;
   Materials bufMaterials;
 };
 
@@ -175,16 +186,25 @@ layout(std430, buffer_reference) readonly buffer ModelMatrices {
   mat4 m[];
 };
 
+struct DrawData {
+  uint idModelMatrix;
+  uint idMaterial;
+};
+
+layout(std430, buffer_reference) readonly buffer BufDrawData {
+  DrawData dd[];
+};
+
 layout(push_constant) uniform constants {
   ModelMatrices bufModelMatrices;
-  PerFrame bufPerFrame;
-  vec2 padding;
+  PerFrame      bufPerFrame;
+  BufDrawData   bufDrawData;
 };
 
 void main() {
   gl_Position = bufPerFrame.proj[gl_ViewIndex] *
                 bufPerFrame.view[gl_ViewIndex] *
-                bufModelMatrices.m[gl_BaseInstance] * in_Vertex;
+                bufModelMatrices.m[bufDrawData.dd[gl_InstanceIndex].idModelMatrix] * in_Vertex;
 }
 )";
 
@@ -225,9 +245,19 @@ layout(std430, buffer_reference) readonly buffer ModelMatrices {
   mat4 m[];
 };
 
+struct DrawData {
+  uint idModelMatrix;
+  uint idMaterial;
+};
+
+layout(std430, buffer_reference) readonly buffer BufDrawData {
+  DrawData dd[];
+};
+
 layout(push_constant) uniform constants {
   ModelMatrices bufModelMatrices;
   PerFrame      bufPerFrame;
+  BufDrawData   bufDrawData;
   Materials     bufMaterials;
 };
 
@@ -239,12 +269,12 @@ layout (location=3) flat out uint v_Texture1;
 void main() {
   gl_Position = bufPerFrame.proj[gl_ViewIndex] *
                 bufPerFrame.view[gl_ViewIndex] *
-                bufModelMatrices.m[gl_BaseInstance] * in_Vertex;
+                bufModelMatrices.m[bufDrawData.dd[gl_InstanceIndex].idModelMatrix] * in_Vertex;
 
   v_TexCoord = in_TexCoord;
   v_Time     = bufPerFrame.u_Time;
-  v_Texture0 = bufMaterials.m[gl_BaseInstance].texEmissive;
-  v_Texture1 = bufMaterials.m[gl_BaseInstance].texDiffuse;
+  v_Texture0 = bufMaterials.m[bufDrawData.dd[gl_InstanceIndex].idModelMatrix].texEmissive;
+  v_Texture1 = bufMaterials.m[bufDrawData.dd[gl_InstanceIndex].idModelMatrix].texDiffuse;
 }
 )";
 
@@ -294,9 +324,19 @@ layout(std430, buffer_reference) readonly buffer ModelMatrices {
   mat4 m[];
 };
 
+struct DrawData {
+  uint idModelMatrix;
+  uint idMaterial;
+};
+
+layout(std430, buffer_reference) readonly buffer BufDrawData {
+  DrawData dd[];
+};
+
 layout(push_constant) uniform constants {
   ModelMatrices bufModelMatrices;
   PerFrame      bufPerFrame;
+  BufDrawData   bufDrawData;
   Materials     bufMaterials;
 };
 
@@ -314,13 +354,14 @@ vec3 getBillboardOffset(mat4 mv, vec2 uv, vec2 sizeXY) {
 }
 
 void main() {
-  mat4 mv = bufPerFrame.view[gl_ViewIndex] * bufModelMatrices.m[gl_BaseInstance];
+  mat4 mv = bufPerFrame.view[gl_ViewIndex] *
+            bufModelMatrices.m[bufDrawData.dd[gl_InstanceIndex].idModelMatrix];
   vec3 v  = getBillboardOffset(mv, in_TexCoord, vec2(0.28, 0.28));
 
   gl_Position = bufPerFrame.proj[gl_ViewIndex] * mv * vec4(v, 1.0);
 
   v_TexCoord = in_TexCoord;
-  v_Texture0 = bufMaterials.m[gl_BaseInstance].texEmissive;
+  v_Texture0 = bufMaterials.m[bufDrawData.dd[gl_InstanceIndex].idModelMatrix].texEmissive;
 }
 )";
 
@@ -467,6 +508,11 @@ struct ShaderModules final {
   lvk::ShaderModuleHandle frag;
 };
 
+struct DrawData final {
+  uint32_t idModelMatrix = 0;
+  uint32_t idMaterial = 0;
+};
+
 struct VulkanState final {
   std::unordered_map<std::string, lvk::Holder<lvk::TextureHandle>> textures;
   std::vector<lvk::Holder<lvk::ShaderModuleHandle>> shaderModules;
@@ -474,6 +520,7 @@ struct VulkanState final {
   std::vector<lvk::Holder<lvk::BufferHandle>> bufModelMatrices;
   lvk::Holder<lvk::BufferHandle> bufMaterials;
   lvk::Holder<lvk::BufferHandle> bufVertices; // one large vertex buffer for everything
+  lvk::Holder<lvk::BufferHandle> bufDrawData;
   lvk::Holder<lvk::RenderPipelineHandle> materialDefault;
   lvk::Holder<lvk::RenderPipelineHandle> materialDefaultW;
   lvk::Holder<lvk::RenderPipelineHandle> materialSaturnRings;
@@ -773,7 +820,9 @@ struct RenderOp final {
   lvk::RenderPipelineHandle pipelineW;
   uint32_t firstVertex = 0;
   uint32_t numVertices = 0;
-  uint32_t materialIndex = 0;
+  uint32_t numInstances = 1;
+  DrawData drawData = {};
+  uint32_t idDrawData = 0;
 };
 
 VULKAN_APP_MAIN {
@@ -949,14 +998,14 @@ VULKAN_APP_MAIN {
         .pipelineW = m.pipelineW ? m.pipelineW : m.pipeline,
         .firstVertex = (uint32_t)mesh.mesh->firstVertex,
         .numVertices = (uint32_t)mesh.mesh->vertices.size(),
-        .materialIndex = (uint32_t)materialIdx,
+        .drawData =
+            {
+                .idModelMatrix = (uint32_t)modelMatrices.size(),
+                .idMaterial = (uint32_t)materialIdx,
+            },
     });
     modelMatrices.push_back(mesh.sceneNode->global);
   }
-
-  // sort by pipeline
-  std::sort(
-      flatRenderQueue.begin(), flatRenderQueue.end(), [](const auto& a, const auto& b) { return a.pipeline.index() < b.pipeline.index(); });
 
   vulkanState.bufVertices = ctx->createBuffer({
       .usage = lvk::BufferUsageBits_Vertex,
@@ -997,10 +1046,73 @@ VULKAN_APP_MAIN {
     return outROPs;
   };
 
-  const std::vector<RenderOp> renderQueueOpaque =
-      selectROPs(flatRenderQueue, [&scene](const RenderOp& ROP) { return !scene.materials[ROP.materialIndex].isTransparent; });
-  const std::vector<RenderOp> renderQueueTransparent =
-      selectROPs(flatRenderQueue, [&scene](const RenderOp& ROP) { return scene.materials[ROP.materialIndex].isTransparent; });
+  // sort ROPs by pipeline and transparency
+  std::sort(flatRenderQueue.begin(), flatRenderQueue.end(), [&mm = scene.materials](const auto& a, const auto& b) {
+    if (mm[a.drawData.idMaterial].isTransparent != mm[b.drawData.idMaterial].isTransparent) {
+      return mm[a.drawData.idMaterial].isTransparent > mm[b.drawData.idMaterial].isTransparent;
+    }
+    return a.pipeline.index() < b.pipeline.index();
+  });
+
+  std::vector<RenderOp> renderQueueOpaque =
+      selectROPs(flatRenderQueue, [&scene](const RenderOp& ROP) { return !scene.materials[ROP.drawData.idMaterial].isTransparent; });
+  std::vector<RenderOp> renderQueueTransparent =
+      selectROPs(flatRenderQueue, [&scene](const RenderOp& ROP) { return scene.materials[ROP.drawData.idMaterial].isTransparent; });
+
+  // as the render queues are static now, we can create immutable DrawData
+  {
+    std::vector<DrawData> drawData;
+
+    for (RenderOp& ROP : renderQueueOpaque) {
+      ROP.idDrawData = (uint32_t)drawData.size();
+      drawData.push_back(ROP.drawData);
+    }
+    for (RenderOp& ROP : renderQueueTransparent) {
+      ROP.idDrawData = (uint32_t)drawData.size();
+      drawData.push_back(ROP.drawData);
+    }
+    vulkanState.bufDrawData = ctx->createBuffer({
+        .usage = lvk::BufferUsageBits_Storage,
+        .storage = lvk::StorageType_Device,
+        .size = sizeof(DrawData) * drawData.size(),
+        .data = drawData.data(),
+        .debugName = "Buffer: drawData",
+    });
+  }
+
+  auto createBatches = [](const std::vector<RenderOp>& ROPs) -> std::vector<RenderOp> {
+    const size_t size = ROPs.size();
+
+    if (size < 2)
+      return ROPs;
+
+    std::vector<RenderOp> batchedROPs;
+    batchedROPs.reserve(size);
+
+    // always store the 1st ROP
+    batchedROPs.emplace_back(ROPs[0]);
+
+    const RenderOp* prevROP = &ROPs[0];
+    const RenderOp* ROP = &ROPs[1];
+
+    for (size_t i = 1; i != size; i++, ROP++, prevROP++) {
+      const bool samePipeline = prevROP->pipeline == ROP->pipeline;
+      const bool sameMesh = prevROP->firstVertex == ROP->firstVertex;
+      const bool sequentialDrawData = prevROP->idDrawData + 1 == ROP->idDrawData;
+      if (samePipeline && sameMesh && sequentialDrawData) {
+        batchedROPs.back().numInstances++;
+      } else {
+        batchedROPs.emplace_back(*ROP);
+      }
+    }
+
+    LLOGL("Batched ROPs: %u -> %u\n", ROPs.size(), batchedROPs.size());
+
+    return batchedROPs;
+  };
+
+  renderQueueOpaque = createBatches(renderQueueOpaque);
+  renderQueueTransparent = createBatches(renderQueueTransparent);
 
   app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
     LVK_PROFILER_FUNCTION();
@@ -1062,10 +1174,12 @@ VULKAN_APP_MAIN {
       const struct {
         uint64_t bufModelMatrices;
         uint64_t bufPerFrame;
+        uint64_t bufDrawData;
         uint64_t bufMaterials;
       } pc = {
           .bufModelMatrices = ctx->gpuAddress(vulkanState.bufModelMatrices[ctx->getSwapchainCurrentImageIndex()]),
           .bufPerFrame = ctx->gpuAddress(vulkanState.bufPerFrame),
+          .bufDrawData = ctx->gpuAddress(vulkanState.bufDrawData),
           .bufMaterials = ctx->gpuAddress(vulkanState.bufMaterials),
       };
       // update per-frame buffers for all render views - we should do it outside of a render pass
@@ -1093,14 +1207,14 @@ VULKAN_APP_MAIN {
         buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = true});
         for (const RenderOp& ROP : renderQueueOpaque) {
           buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
-          buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
+          buf.cmdDraw(ROP.numVertices, ROP.numInstances, ROP.firstVertex, ROP.idDrawData);
         }
 
         // 2. Render transparent objects
         buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = false});
         for (const RenderOp& ROP : renderQueueTransparent) {
           buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
-          buf.cmdDraw(ROP.numVertices, 1, ROP.firstVertex, ROP.materialIndex);
+          buf.cmdDraw(ROP.numVertices, ROP.numInstances, ROP.firstVertex, ROP.idDrawData);
         }
       }
     }
