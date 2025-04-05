@@ -4,7 +4,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/zeux/meshoptimizer.git",
-        "revision": "031ce806e71c7fd2ce41b0dfc5d201cc5927ff44"
+        "revision": "v0.23"
     }
 },
 {
