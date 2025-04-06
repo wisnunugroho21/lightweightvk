@@ -5798,8 +5798,10 @@ void lvk::VulkanContext::createInstance() {
     [this, &layerProperties]() -> void {
       for (const VkLayerProperties& props : layerProperties) {
         for (const char* layer : kDefaultValidationLayers) {
-          if (!strcmp(props.layerName, layer))
+          if (!strcmp(props.layerName, layer)) {
+            khronosValidationVersion_ = props.specVersion;
             return;
+          }
         }
       }
       config_.enableValidation = false; // no validation layers available
@@ -5814,36 +5816,36 @@ void lvk::VulkanContext::createInstance() {
     VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &count, allInstanceExtensions.data()));
   }
   // collect instance extensions from all validation layers
-    if (config_.enableValidation) {
-      for (const char* layer : kDefaultValidationLayers) {
-        uint32_t count = 0;
-        VK_ASSERT(vkEnumerateInstanceExtensionProperties(layer, &count, nullptr));
-        if (count > 0) {
-          const size_t sz = allInstanceExtensions.size();
-          allInstanceExtensions.resize(sz + count);
-          VK_ASSERT(vkEnumerateInstanceExtensionProperties(layer, &count, allInstanceExtensions.data() + sz));
-        }
+  if (config_.enableValidation) {
+    for (const char* layer : kDefaultValidationLayers) {
+      uint32_t count = 0;
+      VK_ASSERT(vkEnumerateInstanceExtensionProperties(layer, &count, nullptr));
+      if (count > 0) {
+        const size_t sz = allInstanceExtensions.size();
+        allInstanceExtensions.resize(sz + count);
+        VK_ASSERT(vkEnumerateInstanceExtensionProperties(layer, &count, allInstanceExtensions.data() + sz));
       }
     }
+  }
 
   std::vector<const char*> instanceExtensionNames = {
-    VK_KHR_SURFACE_EXTENSION_NAME,
+      VK_KHR_SURFACE_EXTENSION_NAME,
 #if defined(_WIN32)
-    VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+      VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-    VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
+      VK_KHR_ANDROID_SURFACE_EXTENSION_NAME,
 #elif defined(__linux__)
 #if defined(VK_USE_PLATFORM_WAYLAND_KHR)
-    VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
+      VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
 #else
-    VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+      VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
 #endif
 #elif defined(__APPLE__)
-    VK_EXT_LAYER_SETTINGS_EXTENSION_NAME,
-    VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
+      VK_EXT_LAYER_SETTINGS_EXTENSION_NAME,
+      VK_MVK_MACOS_SURFACE_EXTENSION_NAME,
 #endif
 #if defined(LVK_WITH_VULKAN_PORTABILITY)
-    VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
+      VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME,
 #endif
   };
 
@@ -5892,15 +5894,15 @@ void lvk::VulkanContext::createInstance() {
 #endif // __APPLE__
 
   const VkValidationFeaturesEXT features = {
-    .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
-    .pNext = nullptr,
+      .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
+      .pNext = nullptr,
 #if !defined(ANDROID)
-    .enabledValidationFeatureCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(validationFeaturesEnabled) : 0u,
-    .pEnabledValidationFeatures = config_.enableValidation ? validationFeaturesEnabled : nullptr,
+      .enabledValidationFeatureCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(validationFeaturesEnabled) : 0u,
+      .pEnabledValidationFeatures = config_.enableValidation ? validationFeaturesEnabled : nullptr,
 #endif
 #if defined(__APPLE__)
-    .disabledValidationFeatureCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(validationFeaturesDisabled) : 0u,
-    .pDisabledValidationFeatures = config_.enableValidation ? validationFeaturesDisabled : nullptr,
+      .disabledValidationFeatureCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(validationFeaturesDisabled) : 0u,
+      .pDisabledValidationFeatures = config_.enableValidation ? validationFeaturesDisabled : nullptr,
 #endif
   };
 
@@ -5949,18 +5951,18 @@ void lvk::VulkanContext::createInstance() {
   flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 #endif
   const VkInstanceCreateInfo ci = {
-    .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
 #if defined(VK_EXT_layer_settings) && VK_EXT_layer_settings
-    .pNext = &layerSettingsCreateInfo,
+      .pNext = &layerSettingsCreateInfo,
 #else
-    .pNext = config_.enableValidation ? &features : nullptr,
+      .pNext = config_.enableValidation ? &features : nullptr,
 #endif // defined(VK_EXT_layer_settings) && VK_EXT_layer_settings
-    .flags = flags,
-    .pApplicationInfo = &appInfo,
-    .enabledLayerCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(kDefaultValidationLayers) : 0u,
-    .ppEnabledLayerNames = config_.enableValidation ? kDefaultValidationLayers : nullptr,
-    .enabledExtensionCount = (uint32_t)instanceExtensionNames.size(),
-    .ppEnabledExtensionNames = instanceExtensionNames.data(),
+      .flags = flags,
+      .pApplicationInfo = &appInfo,
+      .enabledLayerCount = config_.enableValidation ? (uint32_t)LVK_ARRAY_NUM_ELEMENTS(kDefaultValidationLayers) : 0u,
+      .ppEnabledLayerNames = config_.enableValidation ? kDefaultValidationLayers : nullptr,
+      .enabledExtensionCount = (uint32_t)instanceExtensionNames.size(),
+      .ppEnabledExtensionNames = instanceExtensionNames.data(),
   };
   VK_ASSERT(vkCreateInstance(&ci, nullptr, &vkInstance_));
 
@@ -5979,6 +5981,12 @@ void lvk::VulkanContext::createInstance() {
     };
     VK_ASSERT(vkCreateDebugUtilsMessengerEXT(vkInstance_, &ci, nullptr, &vkDebugUtilsMessenger_));
   }
+
+  LLOGL("%s layer version: %u.%u.%u\n",
+        kDefaultValidationLayers[0],
+        VK_VERSION_MAJOR(khronosValidationVersion_),
+        VK_VERSION_MINOR(khronosValidationVersion_),
+        VK_VERSION_PATCH(khronosValidationVersion_));
 
   // log available instance extensions
   LLOGL("\nVulkan instance extensions:\n");
