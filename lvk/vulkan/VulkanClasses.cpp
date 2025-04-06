@@ -225,6 +225,24 @@ VkAttachmentStoreOp storeOpToVkAttachmentStoreOp(lvk::StoreOp a) {
   return VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
 
+
+VkResolveModeFlagBits resolveModeToVkResolveModeFlagBits(lvk::ResolveMode mode, VkResolveModeFlags supported) {
+  switch (mode) {
+  case lvk::ResolveMode_None:
+    return VK_RESOLVE_MODE_NONE;
+  case lvk::ResolveMode_SampleZero:
+    return VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+  case lvk::ResolveMode_Average:
+    return supported & VK_RESOLVE_MODE_AVERAGE_BIT ? VK_RESOLVE_MODE_AVERAGE_BIT : VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+  case lvk::ResolveMode_Min:
+    return supported & VK_RESOLVE_MODE_MIN_BIT ? VK_RESOLVE_MODE_MIN_BIT : VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+  case lvk::ResolveMode_Max:
+    return supported & VK_RESOLVE_MODE_MAX_BIT ? VK_RESOLVE_MODE_MAX_BIT : VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+  }
+  LVK_ASSERT(false);
+  return VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
+}
+
 VkShaderStageFlagBits shaderStageToVkShaderStage(lvk::ShaderStage stage) {
   switch (stage) {
   case lvk::Stage_Vert:
@@ -2188,7 +2206,8 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
         .pNext = nullptr,
         .imageView = colorTexture.getOrCreateVkImageViewForFramebuffer(*ctx_, descColor.level, descColor.layer),
         .imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .resolveMode = (samples > 1) ? VK_RESOLVE_MODE_AVERAGE_BIT : VK_RESOLVE_MODE_NONE,
+        .resolveMode = (samples > 1) ? resolveModeToVkResolveModeFlagBits(descColor.resolveMode, VK_RESOLVE_MODE_FLAG_BITS_MAX_ENUM)
+                                     : VK_RESOLVE_MODE_NONE,
         .resolveImageView = VK_NULL_HANDLE,
         .resolveImageLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .loadOp = loadOpToVkAttachmentLoadOp(descColor.loadOp),
@@ -2232,7 +2251,8 @@ void lvk::CommandBuffer::cmdBeginRendering(const lvk::RenderPass& renderPass, co
       lvk::VulkanImage& depthResolveTexture = *ctx_->texturesPool_.get(attachment.resolveTexture);
       depthAttachment.resolveImageView = depthResolveTexture.getOrCreateVkImageViewForFramebuffer(*ctx_, descDepth.level, descDepth.layer);
       depthAttachment.resolveImageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-      depthAttachment.resolveMode = ctx_->depthResolveMode_;
+      depthAttachment.resolveMode =
+          resolveModeToVkResolveModeFlagBits(descDepth.resolveMode, ctx_->vkPhysicalDeviceVulkan12Properties_.supportedDepthResolveModes);
     }
     const VkExtent3D dim = depthTexture.vkExtent_;
     if (fbWidth) {
@@ -6684,15 +6704,6 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   vkGetDeviceQueue(vkDevice_, deviceQueues_.computeQueueFamilyIndex, 0, &deviceQueues_.computeQueue);
 
   VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_DEVICE, (uint64_t)vkDevice_, "Device: VulkanContext::vkDevice_"));
-
-  // select a depth-resolve mode
-  depthResolveMode_ = [this]() -> VkResolveModeFlagBits {
-    const VkResolveModeFlags modes = vkPhysicalDeviceDepthStencilResolveProperties_.supportedDepthResolveModes;
-    if (modes & VK_RESOLVE_MODE_AVERAGE_BIT)
-      return VK_RESOLVE_MODE_AVERAGE_BIT;
-    // this mode is always available
-    return VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
-  }();
 
   immediate_ =
       std::make_unique<lvk::VulkanImmediateCommands>(vkDevice_, deviceQueues_.graphicsQueueFamilyIndex, "VulkanContext::immediate_");

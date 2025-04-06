@@ -531,6 +531,14 @@ enum StoreOp : uint8_t {
   StoreOp_None,
 };
 
+enum ResolveMode : uint8_t {
+  ResolveMode_None = 0,
+  ResolveMode_SampleZero, // always supported
+  ResolveMode_Average,
+  ResolveMode_Min,
+  ResolveMode_Max,
+};
+
 enum ShaderStage : uint8_t {
   Stage_Vert,
   Stage_Tesc,
@@ -721,6 +729,7 @@ struct RenderPass final {
   struct AttachmentDesc final {
     LoadOp loadOp = LoadOp_Invalid;
     StoreOp storeOp = StoreOp_Store;
+    ResolveMode resolveMode = ResolveMode_Average;
     uint8_t layer = 0;
     uint8_t level = 0;
     ClearColorValue clearColor = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
