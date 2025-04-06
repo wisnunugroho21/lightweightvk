@@ -87,7 +87,7 @@ jobs:
               cc: "cl",
               cxx: "cl",
               generators: "Visual Studio 17 2022",
-              cmake_args: "-DLVK_WITH_TRACY=ON"
+              cmake_args: "-DLVK_WITH_TRACY=ON -DLVK_WITH_TRACY_GPU=ON"
             }
 #          - {
 #              name: "Windows - MSVC 2022 (Slang)",
