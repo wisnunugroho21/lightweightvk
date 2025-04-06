@@ -286,7 +286,7 @@ VULKAN_APP_MAIN {
 
     lvk::Framebuffer framebuffer = {
         .color = {{.texture = ctx->getCurrentSwapchainTexture()}},
-        .depthStencil = app.getDepthTexture(),
+        .depthStencil = {app.getDepthTexture()},
     };
     buffer.cmdBeginRendering(
         lvk::RenderPass{.color = {{.loadOp = lvk::LoadOp_Clear, .storeOp = lvk::StoreOp_Store, .clearColor = {1.0f, 1.0f, 1.0f, 1.0f}}},
