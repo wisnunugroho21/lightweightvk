@@ -6782,7 +6782,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 #if defined(LVK_WITH_TRACY_GPU)
   std::vector<VkTimeDomainEXT> timeDomains;
 
-  if (hasCalibratedTimestamps_) {
+  if (has_EXT_calibrated_timestamps_) {
     uint32_t numTimeDomains = 0;
     VK_ASSERT(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(vkPhysicalDevice_, &numTimeDomains, nullptr));
     timeDomains.resize(numTimeDomains);
@@ -6815,7 +6815,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
         .commandBufferCount = 1,
     };
     VK_ASSERT(vkAllocateCommandBuffers(vkDevice_, &aiCommandBuffer, &pimpl_->tracyCommandBuffer_));
-    if (hasCalibratedTimestamps_) {
+    if (has_EXT_calibrated_timestamps_) {
       pimpl_->tracyVkCtx_ = TracyVkContextCalibrated(vkPhysicalDevice_,
                                                      vkDevice_,
                                                      deviceQueues_.graphicsQueue,
