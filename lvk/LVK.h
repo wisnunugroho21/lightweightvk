@@ -10,7 +10,6 @@
 #include <cstdarg>
 #include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <utility>
 
@@ -229,8 +228,6 @@ enum Topology : uint8_t {
 enum ColorSpace : uint8_t {
   ColorSpace_SRGB_LINEAR,
   ColorSpace_SRGB_NONLINEAR,
-  ColorSpace_SRGB_EXTENDED_LINEAR,
-  ColorSpace_HDR10,
 };
 
 enum TextureType : uint8_t {
@@ -500,9 +497,6 @@ enum Format : uint8_t {
   Format_BGRA_UN8,
   Format_BGRA_SRGB8,
 
-  Format_A2B10G10R10_UN,
-  Format_A2R10G10B10_UN,
-
   Format_ETC2_RGB8,
   Format_ETC2_SRGB8,
   Format_BC7_RGBA,
@@ -530,14 +524,6 @@ enum StoreOp : uint8_t {
   StoreOp_Store,
   StoreOp_MsaaResolve,
   StoreOp_None,
-};
-
-enum ResolveMode : uint8_t {
-  ResolveMode_None = 0,
-  ResolveMode_SampleZero, // always supported
-  ResolveMode_Average,
-  ResolveMode_Min,
-  ResolveMode_Max,
 };
 
 enum ShaderStage : uint8_t {
@@ -730,7 +716,6 @@ struct RenderPass final {
   struct AttachmentDesc final {
     LoadOp loadOp = LoadOp_Invalid;
     StoreOp storeOp = StoreOp_Store;
-    ResolveMode resolveMode = ResolveMode_Average;
     uint8_t layer = 0;
     uint8_t level = 0;
     ClearColorValue clearColor = {.float32 = {0.0f, 0.0f, 0.0f, 0.0f}};
@@ -741,9 +726,6 @@ struct RenderPass final {
   AttachmentDesc color[LVK_MAX_COLOR_ATTACHMENTS] = {};
   AttachmentDesc depth = {.loadOp = LoadOp_DontCare, .storeOp = StoreOp_DontCare};
   AttachmentDesc stencil = {.loadOp = LoadOp_Invalid, .storeOp = StoreOp_DontCare};
-
-  uint32_t layerCount = 1;
-  uint32_t viewMask = 0;
 
   uint32_t getNumColorAttachments() const {
     uint32_t n = 0;
@@ -1127,8 +1109,7 @@ class IContext {
 
   virtual TextureHandle getCurrentSwapchainTexture() = 0;
   virtual Format getSwapchainFormat() const = 0;
-  virtual ColorSpace getSwapchainColorSpace() const = 0;
-  virtual uint32_t getSwapchainCurrentImageIndex() const = 0;
+  virtual ColorSpace getSwapChainColorSpace() const = 0;
   virtual uint32_t getNumSwapchainImages() const = 0;
   virtual void recreateSwapchain(int newWidth, int newHeight) = 0;
   
@@ -1167,7 +1148,7 @@ struct ContextConfig {
   VulkanVersion vulkanVersion = VulkanVersion_1_3;
   bool terminateOnValidationError = false; // invoke std::terminate() on any validation error
   bool enableValidation = true;
-  lvk::ColorSpace swapchainRequestedColorSpace = lvk::ColorSpace_SRGB_LINEAR;
+  lvk::ColorSpace swapChainColorSpace = lvk::ColorSpace_SRGB_LINEAR;
   // owned by the application - should be alive until createVulkanContextWithSwapchain() returns
   const void* pipelineCacheData = nullptr;
   size_t pipelineCacheDataSize = 0;
