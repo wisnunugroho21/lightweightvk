@@ -166,6 +166,10 @@ VkFormat lvk::formatToVkFormat(lvk::Format format) {
     return VK_FORMAT_R32G32B32A32_UINT;
   case lvk::Format_RGBA_F32:
     return VK_FORMAT_R32G32B32A32_SFLOAT;
+  case lvk::Format_A2B10G10R10_UN:
+    return VK_FORMAT_A2B10G10R10_UNORM_PACK32;
+  case lvk::Format_A2R10G10B10_UN:
+    return VK_FORMAT_A2R10G10B10_UNORM_PACK32;
   case lvk::Format_ETC2_RGB8:
     return VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
   case lvk::Format_ETC2_SRGB8:
@@ -191,6 +195,20 @@ VkFormat lvk::formatToVkFormat(lvk::Format format) {
   LVK_ASSERT_MSG(false, "TextureFormat value not handled: %d", (int)format);
   return VK_FORMAT_UNDEFINED;
 #endif // _MSC_VER
+}
+
+lvk::ColorSpace lvk::vkColorSpaceToColorSpace(VkColorSpaceKHR colorSpace) {
+  switch (colorSpace) {
+  case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+    return ColorSpace_SRGB_NONLINEAR;
+  case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+    return ColorSpace_SRGB_LINEAR;
+  case VK_COLOR_SPACE_HDR10_ST2084_EXT:
+    return ColorSpace_HDR10;
+  default:
+    LVK_ASSERT_MSG(false, "Unsupported color space");
+    return ColorSpace_SRGB_NONLINEAR;
+  }
 }
 
 lvk::Format lvk::vkFormatToFormat(VkFormat format) {
@@ -231,6 +249,10 @@ lvk::Format lvk::vkFormatToFormat(VkFormat format) {
     return Format_RGBA_UI32;
   case VK_FORMAT_R32G32B32A32_SFLOAT:
     return Format_RGBA_F32;
+  case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+    return Format_A2B10G10R10_UN;
+  case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+    return Format_A2R10G10B10_UN;
   case VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK:
     return Format_ETC2_RGB8;
   case VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK:
