@@ -76,6 +76,8 @@ static constexpr TextureFormatProperties properties[] = {
     PROPS(RGBA_SRGB8, 4),
     PROPS(BGRA_UN8, 4),
     PROPS(BGRA_SRGB8, 4),
+    PROPS(A2B10G10R10_UN, 4),
+    PROPS(A2R10G10B10_UN, 4),
     PROPS(ETC2_RGB8, 8, .blockWidth = 4, .blockHeight = 4, .compressed = true),
     PROPS(ETC2_SRGB8, 8, .blockWidth = 4, .blockHeight = 4, .compressed = true),
     PROPS(BC7_RGBA, 16, .blockWidth = 4, .blockHeight = 4, .compressed = true),

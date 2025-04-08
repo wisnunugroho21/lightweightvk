@@ -128,6 +128,7 @@ class VulkanSwapchain final {
   VkImageView getCurrentVkImageView() const;
   TextureHandle getCurrentTexture();
   const VkSurfaceFormatKHR& getSurfaceFormat() const;
+  uint32_t getSwapchainCurrentImageIndex() const;
   uint32_t getNumSwapchainImages() const;
 
  public:
@@ -219,6 +220,8 @@ struct RenderPipelineState final {
   VkPipeline pipeline_ = VK_NULL_HANDLE;
 
   void* specConstantDataStorage_ = nullptr;
+
+  uint32_t viewMask_ = 0;
 };
 
 class VulkanPipelineBuilder final {
@@ -240,6 +243,7 @@ class VulkanPipelineBuilder final {
   VulkanPipelineBuilder& frontFace(VkFrontFace mode);
   VulkanPipelineBuilder& polygonMode(VkPolygonMode mode);
   VulkanPipelineBuilder& vertexInputState(const VkPipelineVertexInputStateCreateInfo& state);
+  VulkanPipelineBuilder& viewMask(uint32_t mask);
   VulkanPipelineBuilder& colorAttachments(const VkPipelineColorBlendAttachmentState* states,
                                           const VkFormat* formats,
                                           uint32_t numColorAttachments);
@@ -272,6 +276,7 @@ class VulkanPipelineBuilder final {
   VkPipelineDepthStencilStateCreateInfo depthStencilState_;
   VkPipelineTessellationStateCreateInfo tessellationState_;
 
+  uint32_t viewMask_ = 0;
   uint32_t numColorAttachments_ = 0;
   VkPipelineColorBlendAttachmentState colorBlendAttachmentStates_[LVK_MAX_COLOR_ATTACHMENTS] = {};
   VkFormat colorAttachmentFormats_[LVK_MAX_COLOR_ATTACHMENTS] = {};
@@ -429,6 +434,7 @@ class CommandBuffer final : public ICommandBuffer {
   VkPipeline lastPipelineBound_ = VK_NULL_HANDLE;
 
   bool isRendering_ = false;
+  uint32_t viewMask_ = 0;
 
   lvk::RenderPipelineHandle currentPipelineGraphics_ = {};
   lvk::ComputePipelineHandle currentPipelineCompute_ = {};
@@ -537,7 +543,8 @@ class VulkanContext final : public IContext {
 
   TextureHandle getCurrentSwapchainTexture() override;
   Format getSwapchainFormat() const override;
-  ColorSpace getSwapChainColorSpace() const override;
+  ColorSpace getSwapchainColorSpace() const override;
+  uint32_t getSwapchainCurrentImageIndex() const override;
   uint32_t getNumSwapchainImages() const override;
   void recreateSwapchain(int newWidth, int newHeight) override;
 
@@ -552,7 +559,7 @@ class VulkanContext final : public IContext {
   ///////////////
 
   VkPipeline getVkPipeline(ComputePipelineHandle handle);
-  VkPipeline getVkPipeline(RenderPipelineHandle handle);
+  VkPipeline getVkPipeline(RenderPipelineHandle handle, uint32_t viewMask);
   VkPipeline getVkPipeline(RayTracingPipelineHandle handle);
 
   uint32_t queryDevices(HWDeviceType deviceType, HWDeviceDesc* outDevices, uint32_t maxOutDevices = 1);
@@ -637,6 +644,8 @@ class VulkanContext final : public IContext {
   VkPhysicalDevice vkPhysicalDevice_ = VK_NULL_HANDLE;
   VkDevice vkDevice_ = VK_NULL_HANDLE;
 
+  uint32_t khronosValidationVersion_ = 0;
+
   VkPhysicalDeviceVulkan13Features vkFeatures13_ = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
   VkPhysicalDeviceVulkan12Features vkFeatures12_ = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
                                                     .pNext = &vkFeatures13_};
@@ -671,14 +680,10 @@ class VulkanContext final : public IContext {
       &vkPhysicalDeviceVulkan13Properties_,
 #endif // __APPLE__
   };
-  VkPhysicalDeviceDepthStencilResolveProperties vkPhysicalDeviceDepthStencilResolveProperties_ = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES,
-      &vkPhysicalDeviceVulkan12Properties_,
-  };
   // provided by Vulkan 1.1
   VkPhysicalDeviceVulkan11Properties vkPhysicalDeviceVulkan11Properties_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES,
-      &vkPhysicalDeviceDepthStencilResolveProperties_,
+      &vkPhysicalDeviceVulkan12Properties_,
   };
   VkPhysicalDeviceProperties2 vkPhysicalDeviceProperties2_ = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
@@ -690,8 +695,6 @@ class VulkanContext final : public IContext {
   std::vector<VkSurfaceFormatKHR> deviceSurfaceFormats_;
   VkSurfaceCapabilitiesKHR deviceSurfaceCaps_;
   std::vector<VkPresentModeKHR> devicePresentModes_;
-
-  VkResolveModeFlagBits depthResolveMode_ = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT;
 
  public:
   DeviceQueues deviceQueues_;
@@ -717,11 +720,13 @@ class VulkanContext final : public IContext {
   mutable bool awaitingNewImmutableSamplers_ = false;
 
   lvk::ContextConfig config_;
-  bool hasAccelerationStructure_ = false;
-  bool hasRayQuery_ = false;
-  bool hasRayTracingPipeline_ = false;
-  bool has8BitIndices_ = false;
-  bool hasCalibratedTimestamps_ = false;
+  bool has_KHR_acceleration_structure_ = false;
+  bool has_KHR_ray_query_ = false;
+  bool has_KHR_ray_tracing_pipeline_ = false;
+  bool has_8BitIndices_ = false; // VK_KHR_index_type_uint8 or VK_EXT_index_type_uint8
+  bool has_EXT_calibrated_timestamps_ = false;
+  bool has_EXT_swapchain_colorspace_ = false;
+  bool has_EXT_hdr_metadata_ = false;
 
   TextureHandle dummyTexture_;
 
