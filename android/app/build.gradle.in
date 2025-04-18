@@ -8,7 +8,7 @@ android {
 
   defaultConfig {
     applicationId "org.lvk.samples.lvk_@APP_NAME@"
-    minSdk 24
+    minSdk 30
     targetSdk 34
     versionCode 1
     versionName "1.0"
