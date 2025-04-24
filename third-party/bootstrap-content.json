@@ -199,5 +199,13 @@
         "url": "https://raw.githubusercontent.com/corporateshark/Mastering-Android-NDK/refs/heads/master/Chapter10/1_Asteroids/assets/deimos.obj",
         "sha1": "872aa578ec8a922da7bad31867394eea02516fcc"
     }
+},
+{
+    "name": "solarsystem",
+    "source": {
+        "type": "sourcefile",
+        "url": "https://svs.gsfc.nasa.gov/vis/a000000/a003800/a003895/starmap_4k.jpg",
+        "sha1": "2fb7d68ecd93d5dd1f69d8339e007f3b5886e33e"
+    }
 }
 ]
