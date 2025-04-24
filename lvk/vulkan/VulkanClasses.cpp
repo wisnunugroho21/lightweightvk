@@ -2368,7 +2368,7 @@ void lvk::CommandBuffer::cmdBindDepthState(const DepthState& desc) {
 
   const VkCompareOp op = compareOpToVkCompareOp(desc.compareOp);
   vkCmdSetDepthWriteEnable(wrapper_->cmdBuf_, desc.isDepthWriteEnabled ? VK_TRUE : VK_FALSE);
-  vkCmdSetDepthTestEnable(wrapper_->cmdBuf_, op != VK_COMPARE_OP_ALWAYS || desc.isDepthWriteEnabled);
+  vkCmdSetDepthTestEnable(wrapper_->cmdBuf_, (op != VK_COMPARE_OP_ALWAYS || desc.isDepthWriteEnabled) ? VK_TRUE : VK_FALSE);
 
 #if defined(ANDROID)
   // This is a workaround for the issue.
