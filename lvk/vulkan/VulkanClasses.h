@@ -646,6 +646,9 @@ class VulkanContext final : public IContext {
 
   uint32_t khronosValidationVersion_ = 0;
 
+#if defined(VK_API_VERSION_1_4)
+  VkPhysicalDeviceVulkan14Features vkFeatures14_ = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES};
+#endif // VK_API_VERSION_1_4
   VkPhysicalDeviceVulkan13Features vkFeatures13_ = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
   VkPhysicalDeviceVulkan12Features vkFeatures12_ = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
                                                     .pNext = &vkFeatures13_};

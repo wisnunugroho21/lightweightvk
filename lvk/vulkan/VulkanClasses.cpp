@@ -6266,6 +6266,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 #if defined(VK_API_VERSION_1_4)
   if (config_.vulkanVersion >= VulkanVersion_1_4) {
     addNextPhysicalDeviceProperties(&vkPhysicalDeviceVulkan14Properties_);
+    vkFeatures13_.pNext = &vkFeatures14_;
   }
 #else
   LVK_ASSERT_MSG(config_.vulkanVersion == VulkanVersion_1_3, "Only Vulkan 1.3 is supported on this platform");
@@ -6502,11 +6503,13 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
                         &accelerationStructureFeatures);
   addOptionalExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME, has_KHR_ray_query_, &rayQueryFeatures);
   addOptionalExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, has_KHR_ray_tracing_pipeline_, &rayTracingFeatures);
+  if (config_.vulkanVersion <= lvk::VulkanVersion_1_3) {
 #if defined(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME)
-  if (!addOptionalExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME, has_8BitIndices_, &indexTypeUint8Features))
+    if (!addOptionalExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME, has_8BitIndices_, &indexTypeUint8Features))
 #endif // VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME
-  {
-    addOptionalExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, has_8BitIndices_, &indexTypeUint8Features);
+    {
+      addOptionalExtension(VK_EXT_INDEX_TYPE_UINT8_EXTENSION_NAME, has_8BitIndices_, &indexTypeUint8Features);
+    }
   }
   addOptionalExtension(VK_EXT_HDR_METADATA_EXTENSION_NAME, has_EXT_hdr_metadata_);
 
