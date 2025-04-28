@@ -120,6 +120,7 @@ A comprehensive set of examples can be found in this repository [3D Graphics Ren
 
 [![Vulkan 3D Graphics Rendering Cookbook](.github/screenshot01.jpg)](https://github.com/PacktPublishing/3D-Graphics-Rendering-Cookbook-Second-Edition/tree/main/Chapter11/06_FinalDemo/src)
 ![image](.github/samples/007_RayTracingAO.jpg)
+[![Solar System Demo](.github/screenshot02.jpg)](https://github.com/corporateshark/lightweightvk/blob/master/samples/DEMO_001_SolarSystem.cpp)
 
 ## Interop with raw Vulkan API calls
 
