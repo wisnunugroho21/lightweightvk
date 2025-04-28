@@ -149,6 +149,9 @@ endif()
 
 ADD_DEMO("DEMO_001_SolarSystem")
 ADD_DEMO_LINK_LIBRARIES("DEMO_001_SolarSystem" LUtils)
+ADD_DEMO_LINK_LIBRARIES("DEMO_001_SolarSystem" ktx)
+ADD_DEMO_SOURCES("DEMO_001_SolarSystem"
+  "${LVK_ROOT_DIR}/third-party/deps/src/3D-Graphics-Rendering-Cookbook/shared/UtilsCubemap.cpp")
 
 ADD_DEMO("Tiny_MeshLarge")
 ADD_DEMO_SOURCES("Tiny_MeshLarge"

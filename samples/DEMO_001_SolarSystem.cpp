@@ -9,11 +9,19 @@
 
 #include "VulkanApp.h"
 
+#include "lvk/vulkan/VulkanUtils.h"
+
 #include "ldrutils/lmath/GeometryShapes.h"
 #include <ldrutils/lutils/ScopeExit.h>
 
+#include <shared/UtilsCubemap.h>
+
 #include <fast_obj.h>
 #include <stb_image.h>
+
+#include <ktx-software/lib/gl_format.h>
+#include <ktx-software/lib/vkformat_enum.h>
+#include <ktx.h>
 
 const size_t numAsteroidsInner = 1500;
 const size_t numAsteroidsOuter = 500;
@@ -380,6 +388,63 @@ void main() {
 }
 )";
 
+const char* codeSkyBoxVS = R"(
+#extension GL_EXT_multiview : enable
+
+layout(std430, buffer_reference) readonly buffer PerFrame {
+  mat4 proj[2];
+  mat4 view[2];
+};
+
+layout(push_constant) uniform PushConstants {
+  PerFrame bufPerFrame;
+  uint texSkyBox;
+};
+
+layout (location=0) out vec3 v_Dir;
+layout (location=1) flat out uint v_TextureSkybox;
+
+const vec3 pos[8] = vec3[8](
+  vec3(-1.0,-1.0, 1.0),
+  vec3( 1.0,-1.0, 1.0),
+  vec3( 1.0, 1.0, 1.0),
+  vec3(-1.0, 1.0, 1.0),
+
+  vec3(-1.0,-1.0,-1.0),
+  vec3( 1.0,-1.0,-1.0),
+  vec3( 1.0, 1.0,-1.0),
+  vec3(-1.0, 1.0,-1.0)
+);
+
+const int indices[36] = int[36](
+  0, 1, 2, 2, 3, 0,	// front
+  1, 5, 6, 6, 2, 1,	// right
+  7, 6, 5, 5, 4, 7,	// back
+  4, 0, 3, 3, 7, 4,	// left
+  4, 5, 1, 1, 0, 4,	// bottom
+  3, 2, 6, 6, 7, 3	// top
+);
+
+void main() {
+  int idx = indices[gl_VertexIndex];
+  gl_Position = bufPerFrame.proj[gl_ViewIndex] *
+                mat4(mat3(bufPerFrame.view[gl_ViewIndex])) * vec4(50.0 * pos[idx], 1.0);
+  v_Dir = pos[idx].zxy; // rotate the sky box
+  v_TextureSkybox = texSkyBox;
+}
+)";
+
+const char* codeSkyBoxFS = R"(
+layout (location=0) in vec3 v_Dir;
+layout (location=1) flat in uint v_TextureSkybox;
+
+layout (location=0) out vec4 out_FragColor;
+
+void main() {
+  out_FragColor = pow(textureBindlessCube(v_TextureSkybox, 0, v_Dir), vec4(1.5));
+};
+)";
+
 struct SceneNode final {
   SceneNode* parent = nullptr;
   mat4 local = mat4(1.0f);
@@ -528,9 +593,95 @@ struct VulkanState final {
   lvk::Holder<lvk::RenderPipelineHandle> materialSun;
   lvk::Holder<lvk::RenderPipelineHandle> materialSunW;
   lvk::Holder<lvk::RenderPipelineHandle> materialSunCorona;
+  lvk::Holder<lvk::RenderPipelineHandle> materialSkyBox;
   std::vector<lvk::Holder<lvk::TextureHandle>> texColor;
   lvk::Holder<lvk::TextureHandle> texDepth;
+  lvk::Holder<lvk::TextureHandle> texSkyBox;
 } vulkanState;
+
+void convertEquirectangularMapToKTX(const std::string& inFilename, const std::string& outFilename) {
+  int sourceWidth, sourceHeight;
+  uint8_t* pixels = stbi_load(inFilename.c_str(), &sourceWidth, &sourceHeight, nullptr, 4);
+  SCOPE_EXIT {
+    if (pixels) {
+      stbi_image_free(pixels);
+    }
+  };
+
+  if (!pixels) {
+    LVK_ASSERT_MSG(pixels, "Failed to load texture `%s`\n", inFilename.c_str());
+    return;
+  }
+
+  Bitmap bmp = convertEquirectangularMapToCubeMapFaces(Bitmap(sourceWidth, sourceHeight, 4, eBitmapFormat_UnsignedByte, pixels));
+
+  const uint32_t w = static_cast<uint32_t>(bmp.w_);
+  const uint32_t h = static_cast<uint32_t>(bmp.h_);
+
+  const ktxTextureCreateInfo createInfo = {
+      .glInternalformat = GL_RGBA8,
+      .vkFormat = VK_FORMAT_R8G8B8A8_UNORM,
+      .baseWidth = w,
+      .baseHeight = h,
+      .baseDepth = 1u,
+      .numDimensions = 2u,
+      .numLevels = 1u,
+      .numLayers = 1u,
+      .numFaces = 6u,
+      .generateMipmaps = KTX_FALSE,
+  };
+
+  ktxTexture1* cube = nullptr;
+  (void)LVK_VERIFY(ktxTexture1_Create(&createInfo, KTX_TEXTURE_CREATE_ALLOC_STORAGE, &cube) == KTX_SUCCESS);
+
+  const uint32_t faceSizeBytes = w * h * sizeof(uint32_t);
+
+  for (size_t face = 0; face != 6; face++) {
+    size_t offset = 0;
+    (void)LVK_VERIFY(ktxTexture_GetImageOffset(ktxTexture(cube), 0, 0, face, &offset) == KTX_SUCCESS);
+    memcpy(cube->pData + offset, bmp.data_.data() + face * faceSizeBytes, faceSizeBytes);
+  }
+
+  ktxTexture_WriteToNamedFile(ktxTexture(cube), outFilename.c_str());
+  ktxTexture_Destroy(ktxTexture(cube));
+}
+
+lvk::Holder<lvk::TextureHandle> loadTextureCubeFromFile(VulkanApp& app, const std::string& fileName) {
+  const std::string name = (std::filesystem::path(app.folderContentRoot_) / "src/solarsystem" / fileName).string();
+  const std::string fileNameKTX = name + ".ktx";
+
+  if (!std::filesystem::exists(fileNameKTX)) {
+    LLOGL("KTX cube map format not found.\nExtracting from `%s`...\n", name.c_str());
+    convertEquirectangularMapToKTX(name.c_str(), fileNameKTX);
+  }
+
+  ktxTexture1* texture = nullptr;
+  (void)LVK_VERIFY(ktxTexture1_CreateFromNamedFile(fileNameKTX.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture) == KTX_SUCCESS);
+  SCOPE_EXIT {
+    ktxTexture_Destroy(ktxTexture(texture));
+  };
+
+  if (!LVK_VERIFY(texture->glInternalformat == GL_RGBA8)) {
+    LVK_ASSERT_MSG(false, "Texture format not supported");
+    return {};
+  }
+
+  const uint32_t width = texture->baseWidth;
+  const uint32_t height = texture->baseHeight;
+
+  lvk::Holder<lvk::TextureHandle> tex = app.ctx_->createTexture({
+      .type = lvk::TextureType_Cube,
+      .format = lvk::Format_RGBA_UN8,
+      .dimensions = {width, height},
+      .usage = lvk::TextureUsageBits_Sampled,
+      .numMipLevels = lvk::calcNumMipLevels(width, height),
+      .data = texture->pData,
+      .generateMipmaps = true,
+      .debugName = fileName.c_str(),
+  });
+
+  return std::move(tex);
+}
 
 lvk::TextureHandle loadTextureFromFile(VulkanApp& app, const std::string& fileName) {
   auto it = vulkanState.textures.find(fileName);
@@ -843,6 +994,7 @@ VULKAN_APP_MAIN {
   ShaderModules smOrbit = loadShaderProgram(ctx, codeOrbitVS, codeOrbitFS);
   ShaderModules smSun = loadShaderProgram(ctx, codeSunVS, codeSunFS);
   ShaderModules smSunCorona = loadShaderProgram(ctx, codeSunCoronaVS, codeSunCoronaFS);
+  ShaderModules smSkyBox = loadShaderProgram(ctx, codeSkyBoxVS, codeSkyBoxFS);
 
   const lvk::VertexInput vinput = {
       .attributes = {{.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(GeometryShapes::Vertex, pos)},
@@ -923,6 +1075,15 @@ VULKAN_APP_MAIN {
       .depthFormat = app.getDepthFormat(),
       .debugName = "Pipeline: Sun corona",
   });
+  vulkanState.materialSkyBox = ctx->createRenderPipeline({
+      .smVert = smSkyBox.vert,
+      .smFrag = smSkyBox.frag,
+      .color = {{.format = ctx->getSwapchainFormat()}},
+      .depthFormat = app.getDepthFormat(),
+      .debugName = "Pipeline: sky box",
+  });
+
+  vulkanState.texSkyBox = loadTextureCubeFromFile(app, "starmap_4k.jpg");
 
   vulkanState.bufPerFrame = ctx->createBuffer({
       .usage = lvk::BufferUsageBits_Uniform,
@@ -1114,6 +1275,18 @@ VULKAN_APP_MAIN {
   renderQueueOpaque = createBatches(renderQueueOpaque);
   renderQueueTransparent = createBatches(renderQueueTransparent);
 
+  struct DrawIndirectCommand {
+    uint32_t vertexCount;
+    uint32_t instanceCount;
+    uint32_t firstVertex;
+    uint32_t firstInstance;
+  };
+
+  auto updateIndirectBuffer = [](const std::vector<RenderOp>& ROPs) -> std::vector<DrawIndirectCommand> {
+    for (const RenderOp& ROP : ROPs) {
+    }
+  };
+
   app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
     LVK_PROFILER_FUNCTION();
 
@@ -1199,7 +1372,7 @@ VULKAN_APP_MAIN {
         buf.cmdBindViewport(v.viewport);
         buf.cmdBindScissorRect({(uint32_t)v.viewport.x, (uint32_t)v.viewport.y, (uint32_t)v.viewport.width, (uint32_t)v.viewport.height});
 
-        // all pipelines share the same push constants - bind them up front
+        // all opaque/transparent pipelines share the same push constants - bind them up front
         buf.cmdBindRenderPipeline(renderQueueOpaque[0].pipeline);
         buf.cmdPushConstants(pc);
 
@@ -1210,7 +1383,22 @@ VULKAN_APP_MAIN {
           buf.cmdDraw(ROP.numVertices, ROP.numInstances, ROP.firstVertex, ROP.idDrawData);
         }
 
-        // 2. Render transparent objects
+        // 2. Render the sky box
+        buf.cmdBindRenderPipeline(vulkanState.materialSkyBox);
+        const struct {
+          uint64_t bufPerFrame;
+          uint32_t texCube;
+        } pcSkyBox = {
+            .bufPerFrame = ctx->gpuAddress(vulkanState.bufPerFrame),
+            .texCube = vulkanState.texSkyBox.index(),
+        };
+        buf.cmdPushConstants(pcSkyBox);
+        buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = false});
+        buf.cmdDraw(36);
+
+        // 3. Render transparent objects
+        buf.cmdBindRenderPipeline(renderQueueTransparent[0].pipeline);
+        buf.cmdPushConstants(pc);
         buf.cmdBindDepthState({.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = false});
         for (const RenderOp& ROP : renderQueueTransparent) {
           buf.cmdBindRenderPipeline(g_Wireframe ? ROP.pipelineW : ROP.pipeline);
