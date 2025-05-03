@@ -1341,8 +1341,11 @@ lvk::Result lvk::VulkanSwapchain::present(VkSemaphore waitSemaphore) {
   return Result();
 }
 
-lvk::VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, const char* debugName) :
-  device_(device), queueFamilyIndex_(queueFamilyIndex), debugName_(debugName) {
+lvk::VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device,
+                                                      uint32_t queueFamilyIndex,
+                                                      bool has_EXT_device_fault,
+                                                      const char* debugName) :
+  device_(device), queueFamilyIndex_(queueFamilyIndex), has_EXT_device_fault_(has_EXT_device_fault), debugName_(debugName) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
 
   vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue_);
@@ -1577,7 +1580,39 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::submit(const CommandBufferWrappe
       .signalSemaphoreInfoCount = numSignalSemaphores,
       .pSignalSemaphoreInfos = signalSemaphores,
   };
-  VK_ASSERT(vkQueueSubmit2(queue_, 1u, &si, wrapper.fence_));
+  const VkResult result = vkQueueSubmit2(queue_, 1u, &si, wrapper.fence_);
+  if (has_EXT_device_fault_ && result == VK_ERROR_DEVICE_LOST) {
+    VkDeviceFaultCountsEXT count = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT,
+    };
+    vkGetDeviceFaultInfoEXT(device_, &count, nullptr);
+    std::vector<VkDeviceFaultAddressInfoEXT> addressInfo(count.addressInfoCount);
+    std::vector<VkDeviceFaultVendorInfoEXT> vendorInfo(count.vendorInfoCount);
+    std::vector<uint8_t> binary(count.vendorBinarySize);
+    VkDeviceFaultInfoEXT info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT,
+        .pAddressInfos = addressInfo.data(),
+        .pVendorInfos = vendorInfo.data(),
+        .pVendorBinaryData = binary.data(),
+    };
+    vkGetDeviceFaultInfoEXT(device_, &count, &info);
+    LLOGW("VK_ERROR_DEVICE_LOST: %s\n", info.description);
+    for (const VkDeviceFaultAddressInfoEXT& info : addressInfo) {
+      VkDeviceSize lowerAddress = info.reportedAddress & ~(info.addressPrecision - 1);
+      VkDeviceSize upperAddress = info.reportedAddress | (info.addressPrecision - 1);
+      LLOGW("...address range [ %" PRIx64 ", %" PRIx64 " ]: %s\n",
+            lowerAddress,
+            upperAddress,
+            getVkDeviceFaultAddressTypeString(info.addressType));
+    }
+    for (const VkDeviceFaultVendorInfoEXT& info : vendorInfo) {
+      LLOGW("...caused by `%s` with error code %" PRIx64 " and data %" PRIx64 "\n",
+            info.description,
+            info.vendorFaultCode,
+            info.vendorFaultData);
+    }
+  }
+  VK_ASSERT(result);
   LVK_PROFILER_ZONE_END();
 
   lastSubmitSemaphore_.semaphore = wrapper.semaphore_;
@@ -6476,6 +6511,10 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT,
       .indexTypeUint8 = VK_TRUE,
   };
+  VkPhysicalDeviceFaultFeaturesEXT deviceFaultFeatures = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT,
+      .deviceFault = VK_TRUE,
+  };
 
   auto addOptionalExtension = [&allDeviceExtensions, &deviceExtensionNames, &createInfoNext](
                                   const char* name, bool& enabled, void* features = nullptr) mutable -> bool {
@@ -6522,6 +6561,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     }
   }
   addOptionalExtension(VK_EXT_HDR_METADATA_EXTENSION_NAME, has_EXT_hdr_metadata_);
+  addOptionalExtension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, has_EXT_device_fault_, &deviceFaultFeatures);
 
   // check extensions
   {
@@ -6727,8 +6767,8 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_DEVICE, (uint64_t)vkDevice_, "Device: VulkanContext::vkDevice_"));
 
-  immediate_ =
-      std::make_unique<lvk::VulkanImmediateCommands>(vkDevice_, deviceQueues_.graphicsQueueFamilyIndex, "VulkanContext::immediate_");
+  immediate_ = std::make_unique<lvk::VulkanImmediateCommands>(
+      vkDevice_, deviceQueues_.graphicsQueueFamilyIndex, has_EXT_device_fault_, "VulkanContext::immediate_");
 
   // create Vulkan pipeline cache
   {

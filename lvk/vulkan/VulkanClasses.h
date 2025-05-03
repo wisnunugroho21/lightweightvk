@@ -154,7 +154,7 @@ class VulkanImmediateCommands final {
   // an existing buffer becomes available
   static constexpr uint32_t kMaxCommandBuffers = 64;
 
-  VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, const char* debugName);
+  VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, bool has_EXT_device_fault, const char* debugName);
   ~VulkanImmediateCommands();
   VulkanImmediateCommands(const VulkanImmediateCommands&) = delete;
   VulkanImmediateCommands& operator=(const VulkanImmediateCommands&) = delete;
@@ -189,6 +189,7 @@ class VulkanImmediateCommands final {
   VkQueue queue_ = VK_NULL_HANDLE;
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   uint32_t queueFamilyIndex_ = 0;
+  bool has_EXT_device_fault_ = false;
   const char* debugName_ = "";
   CommandBufferWrapper buffers_[kMaxCommandBuffers];
   SubmitHandle lastSubmitHandle_ = SubmitHandle();
@@ -730,6 +731,7 @@ class VulkanContext final : public IContext {
   bool has_EXT_calibrated_timestamps_ = false;
   bool has_EXT_swapchain_colorspace_ = false;
   bool has_EXT_hdr_metadata_ = false;
+  bool has_EXT_device_fault_ = false;
 
   TextureHandle dummyTexture_;
 
