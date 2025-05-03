@@ -1621,8 +1621,6 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::submit(const CommandBufferWrappe
         uuid[i * 2 + 0] = hexDigits[(header->pipelineCacheUUID[i] >> 4) & 0xF];
         uuid[i * 2 + 1] = hexDigits[header->pipelineCacheUUID[i] & 0xF];
       }
-      const uint32_t appOffset = header->applicationNameOffset;
-      const uint32_t engineOffset = header->engineNameOffset;
       LLOGW("VkDeviceFaultVendorBinaryHeaderVersionOne:");
       LLOGW("   headerSize        : %u\n", header->headerSize);
       LLOGW("   headerVersion     : %u\n", (uint32_t)header->headerVersion);
@@ -1630,14 +1628,16 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::submit(const CommandBufferWrappe
       LLOGW("   deviceID          : %u\n", header->deviceID);
       LLOGW("   driverVersion     : %u\n", header->driverVersion);
       LLOGW("   pipelineCacheUUID : %s\n", uuid);
-      LLOGW("   applicationName   : %s\n",
-            (appOffset && appOffset < binarySize) ? (const char*)info.pVendorBinaryData + appOffset : "unknown app name");
+      if (header->applicationNameOffset && header->applicationNameOffset < binarySize) {
+        LLOGW("   applicationName   : %s\n", (const char*)info.pVendorBinaryData + header->applicationNameOffset);
+      }
       LLOGW("   applicationVersion: %i.%i.%i\n",
             VK_API_VERSION_MAJOR(header->applicationVersion),
             VK_API_VERSION_MINOR(header->applicationVersion),
             VK_API_VERSION_PATCH(header->applicationVersion));
-      LLOGW("   engineName        : %s\n",
-            (engineOffset && engineOffset < binarySize) ? (const char*)info.pVendorBinaryData + engineOffset : "unknown engine name");
+      if (header->engineNameOffset && header->engineNameOffset < binarySize) {
+        LLOGW("   engineName        : %s\n", (const char*)info.pVendorBinaryData + header->engineNameOffset);
+      }
       LLOGW("   engineVersion     : %i.%i.%i\n",
             VK_API_VERSION_MAJOR(header->engineVersion),
             VK_API_VERSION_MINOR(header->engineVersion),
