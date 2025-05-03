@@ -1597,19 +1597,56 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::submit(const CommandBufferWrappe
     };
     vkGetDeviceFaultInfoEXT(device_, &count, &info);
     LLOGW("VK_ERROR_DEVICE_LOST: %s\n", info.description);
-    for (const VkDeviceFaultAddressInfoEXT& info : addressInfo) {
-      VkDeviceSize lowerAddress = info.reportedAddress & ~(info.addressPrecision - 1);
-      VkDeviceSize upperAddress = info.reportedAddress | (info.addressPrecision - 1);
+    for (const VkDeviceFaultAddressInfoEXT& aInfo : addressInfo) {
+      VkDeviceSize lowerAddress = aInfo.reportedAddress & ~(aInfo.addressPrecision - 1);
+      VkDeviceSize upperAddress = aInfo.reportedAddress | (aInfo.addressPrecision - 1);
       LLOGW("...address range [ %" PRIx64 ", %" PRIx64 " ]: %s\n",
             lowerAddress,
             upperAddress,
-            getVkDeviceFaultAddressTypeString(info.addressType));
+            getVkDeviceFaultAddressTypeString(aInfo.addressType));
     }
-    for (const VkDeviceFaultVendorInfoEXT& info : vendorInfo) {
+    for (const VkDeviceFaultVendorInfoEXT& vInfo : vendorInfo) {
       LLOGW("...caused by `%s` with error code %" PRIx64 " and data %" PRIx64 "\n",
-            info.description,
-            info.vendorFaultCode,
-            info.vendorFaultData);
+            vInfo.description,
+            vInfo.vendorFaultCode,
+            vInfo.vendorFaultData);
+    }
+    const VkDeviceSize binarySize = count.vendorBinarySize;
+    if (info.pVendorBinaryData && binarySize >= sizeof(VkDeviceFaultVendorBinaryHeaderVersionOneEXT)) {
+      const VkDeviceFaultVendorBinaryHeaderVersionOneEXT* header =
+          std::launder(reinterpret_cast<const VkDeviceFaultVendorBinaryHeaderVersionOneEXT*>(info.pVendorBinaryData));
+      const char hexDigits[] = "0123456789abcdef";
+      char uuid[VK_UUID_SIZE * 2 + 1] = {};
+      for (uint32_t i = 0; i < VK_UUID_SIZE; ++i) {
+        uuid[i * 2 + 0] = hexDigits[(header->pipelineCacheUUID[i] >> 4) & 0xF];
+        uuid[i * 2 + 1] = hexDigits[header->pipelineCacheUUID[i] & 0xF];
+      }
+      const uint32_t appOffset = header->applicationNameOffset;
+      const uint32_t engineOffset = header->engineNameOffset;
+      LLOGW("VkDeviceFaultVendorBinaryHeaderVersionOne:");
+      LLOGW("   headerSize        : %u\n", header->headerSize);
+      LLOGW("   headerVersion     : %u\n", (uint32_t)header->headerVersion);
+      LLOGW("   vendorID          : %u\n", header->vendorID);
+      LLOGW("   deviceID          : %u\n", header->deviceID);
+      LLOGW("   driverVersion     : %u\n", header->driverVersion);
+      LLOGW("   pipelineCacheUUID : %s\n", uuid);
+      LLOGW("   applicationName   : %s\n",
+            (appOffset && appOffset < binarySize) ? (const char*)info.pVendorBinaryData + appOffset : "unknown app name");
+      LLOGW("   applicationVersion: %i.%i.%i\n",
+            VK_API_VERSION_MAJOR(header->applicationVersion),
+            VK_API_VERSION_MINOR(header->applicationVersion),
+            VK_API_VERSION_PATCH(header->applicationVersion));
+      LLOGW("   engineName        : %s\n",
+            (engineOffset && engineOffset < binarySize) ? (const char*)info.pVendorBinaryData + engineOffset : "unknown engine name");
+      LLOGW("   engineVersion     : %i.%i.%i\n",
+            VK_API_VERSION_MAJOR(header->engineVersion),
+            VK_API_VERSION_MINOR(header->engineVersion),
+            VK_API_VERSION_PATCH(header->engineVersion));
+      LLOGW("   apiVersion        : %i.%i.%i.%i\n",
+            VK_API_VERSION_MAJOR(header->apiVersion),
+            VK_API_VERSION_MINOR(header->apiVersion),
+            VK_API_VERSION_PATCH(header->apiVersion),
+            VK_API_VERSION_VARIANT(header->apiVersion));
     }
   }
   VK_ASSERT(result);
