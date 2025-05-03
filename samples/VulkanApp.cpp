@@ -1,4 +1,4 @@
-﻿/*
+/*
 * LightweightVK
 *
 * This source code is licensed under the MIT license found in the
@@ -106,6 +106,9 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
 #endif // ANDROID
   minilog::initialize(nullptr, {.threadNames = false});
 
+  // we use minilog
+  fpsCounter_.printFPS_ = false;
+
   // find the content folder
   {
     using namespace std::filesystem;
@@ -134,8 +137,6 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
 #if defined(ANDROID)
   androidApp_->userData = this;
   androidApp_->onAppCmd = handle_cmd;
-
-  fpsCounter_.printFPS_ = false;
 
   int events = 0;
   android_poll_source* source = nullptr;
