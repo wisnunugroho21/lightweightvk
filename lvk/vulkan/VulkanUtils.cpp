@@ -92,10 +92,28 @@ const char* lvk::getVulkanResultString(VkResult result) {
     // Provided by VK_KHR_deferred_host_operations
     RESULT_CASE(VK_OPERATION_NOT_DEFERRED_KHR);
   default:
-    return "Unknown VkResult Value";
+    return "Unknown VkResult value";
   }
 #undef RESULT_CASE
 }
+
+const char* lvk::getVkDeviceFaultAddressTypeString(VkDeviceFaultAddressTypeEXT type) {
+#define RESULT_CASE(res) \
+  case res:              \
+    return #res
+  switch (type) {
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_NONE_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_READ_INVALID_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_WRITE_INVALID_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_EXECUTE_INVALID_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_INSTRUCTION_POINTER_UNKNOWN_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_INSTRUCTION_POINTER_INVALID_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_INSTRUCTION_POINTER_FAULT_EXT);
+  default:
+    return "Unknown VkDeviceFaultAddressTypeEXT value";
+  };
+#undef RESULT_CASE
+};
 
 void lvk::setResultFrom(Result* outResult, VkResult result) {
   if (outResult) {

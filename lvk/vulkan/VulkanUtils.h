@@ -111,6 +111,7 @@ VkSampleCountFlagBits getVulkanSampleCountFlags(uint32_t numSamples, VkSampleCou
 void setResultFrom(Result* outResult, VkResult result);
 Result getResultFromVkResult(VkResult result);
 const char* getVulkanResultString(VkResult result);
+const char* getVkDeviceFaultAddressTypeString(VkDeviceFaultAddressTypeEXT type);
 uint32_t getBytesPerPixel(VkFormat format);
 uint32_t getNumImagePlanes(VkFormat format);
 lvk::Format vkFormatToFormat(VkFormat format);
