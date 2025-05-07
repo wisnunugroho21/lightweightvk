@@ -5967,6 +5967,11 @@ void lvk::VulkanContext::createInstance() {
     instanceExtensionNames.push_back(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
   }
 
+  if (hasExtension(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME, allInstanceExtensions)) {
+    // required by the device extension VK_EXT_swapchain_maintenance1
+    instanceExtensionNames.push_back(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+  }
+
   for (const char* ext : config_.extensionsInstance) {
     if (ext) {
       instanceExtensionNames.push_back(ext);
