@@ -184,9 +184,9 @@ target_include_directories(LVKLibrary PUBLIC ${LVK_ROOT_DIR})
 target_include_directories(LVKLibrary PUBLIC ${LVK_ROOT_DIR}/src)
 
 if(LVK_WITH_TRACY)
-  target_compile_definitions(LVKLibrary PUBLIC "LVK_WITH_TRACY=1")
+  target_compile_definitions(LVKVulkan PUBLIC "LVK_WITH_TRACY=1")
   if(LVK_WITH_TRACY_GPU)
-    target_compile_definitions(LVKLibrary PUBLIC "LVK_WITH_TRACY_GPU=1")
+    target_compile_definitions(LVKVulkan PUBLIC "LVK_WITH_TRACY_GPU=1")
   endif()
 endif()
 
@@ -284,7 +284,7 @@ if(LVK_WITH_SAMPLES)
 endif()
 
 if(LVK_WITH_TRACY)
-  target_link_libraries(LVKLibrary PUBLIC TracyClient)
+  target_link_libraries(LVKVulkan PUBLIC TracyClient)
 endif()
 
 if(LVK_WITH_OPENXR)
