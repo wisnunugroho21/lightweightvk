@@ -1285,6 +1285,7 @@ VULKAN_APP_MAIN {
   auto updateIndirectBuffer = [](const std::vector<RenderOp>& ROPs) -> std::vector<DrawIndirectCommand> {
     for (const RenderOp& ROP : ROPs) {
     }
+    return {};
   };
 
   app.run([&](uint32_t width, uint32_t height, float aspectRatio, float deltaSeconds) {
