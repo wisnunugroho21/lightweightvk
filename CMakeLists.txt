@@ -217,6 +217,7 @@ set(MINILOG_RAW_OUTPUT     ON CACHE BOOL "")
 # cmake-format: on
 add_subdirectory(third-party/deps/src/minilog)
 lvk_set_folder(minilog "third-party")
+target_compile_definitions(minilog PUBLIC "-DMINILOG_ENABLE_VA_LIST=1")
 
 target_link_libraries(LVKLibrary PUBLIC minilog)
 target_include_directories(LVKLibrary PUBLIC "third-party/deps/src")

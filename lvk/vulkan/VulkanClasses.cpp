@@ -5808,8 +5808,6 @@ lvk::ColorSpace lvk::VulkanContext::getSwapchainColorSpace() const {
     return ColorSpace_SRGB_NONLINEAR;
   }
 
-  LLOGW("Vulkan color space: %u", (uint32_t)swapchain_->getSurfaceFormat().colorSpace);
-
   return vkColorSpaceToColorSpace(swapchain_->getSurfaceFormat().colorSpace);
 }
 
