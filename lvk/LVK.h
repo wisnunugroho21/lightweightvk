@@ -231,6 +231,7 @@ enum ColorSpace : uint8_t {
   ColorSpace_SRGB_NONLINEAR,
   ColorSpace_SRGB_EXTENDED_LINEAR,
   ColorSpace_HDR10,
+  ColorSpace_BT709_LINEAR,
 };
 
 enum TextureType : uint8_t {

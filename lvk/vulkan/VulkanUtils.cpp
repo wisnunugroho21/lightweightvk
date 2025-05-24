@@ -223,6 +223,8 @@ lvk::ColorSpace lvk::vkColorSpaceToColorSpace(VkColorSpaceKHR colorSpace) {
     return ColorSpace_SRGB_LINEAR;
   case VK_COLOR_SPACE_HDR10_ST2084_EXT:
     return ColorSpace_HDR10;
+  case VK_COLOR_SPACE_BT709_LINEAR_EXT:
+    return ColorSpace_BT709_LINEAR;
   default:
     LVK_ASSERT_MSG(false, "Unsupported color space %u", (uint32_t)colorSpace);
     return ColorSpace_SRGB_NONLINEAR;
