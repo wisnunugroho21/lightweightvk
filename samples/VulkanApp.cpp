@@ -141,14 +141,17 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
   int events = 0;
   android_poll_source* source = nullptr;
 
+  LLOGD("Waiting for an Android window...");
+
   while (!androidApp_->destroyRequested && !ctx_) {
     // poll until a Window is created
     if (ALooper_pollOnce(0, nullptr, &events, (void**)&source) >= 0) {
       if (source)
         source->process(androidApp_, source);
     }
-    LLOGD("Waiting for an Android window...");
   }
+
+  LLOGD("...Android window ready!");
 
   if (!ctx_)
     return;
