@@ -670,7 +670,7 @@ VULKAN_APP_MAIN {
 
   res.renderPipelineState_Mesh_ = ctx_->createRenderPipeline(lvk::RenderPipelineDesc{
       .vertexInput =
-          lvk::VertexInput{
+          {
               .attributes =
                   {
                       {.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(VertexData, position)},
@@ -692,7 +692,7 @@ VULKAN_APP_MAIN {
 
   res.renderPipelineState_MeshZPrepass_ = ctx_->createRenderPipeline(lvk::RenderPipelineDesc{
       .vertexInput =
-          lvk::VertexInput{
+          {
               .attributes =
                   {
                       {.location = 0, .format = lvk::VertexFormat::Float3, .offset = offsetof(VertexData, position)},
