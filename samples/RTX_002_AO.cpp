@@ -131,34 +131,26 @@ layout(push_constant) uniform constants {
 } pc;
 
 // output
-layout (location=0) flat out Material mtl;
+layout (location=0) out vec4 Ka;
+layout (location=1) out vec4 Kd;
 
 void main() {
   mat4 proj = pc.perFrame.proj;
   mat4 view = pc.perFrame.view;
   mat4 model = pc.perObject.model;
-  mtl = pc.materials.mtl[mtlIndex];
   gl_Position = proj * view * model * vec4(pos, 1.0);
+  Ka = pc.materials.mtl[mtlIndex].ambient;
+  Kd = pc.materials.mtl[mtlIndex].diffuse;
 }
 )";
 
 const char* kCodeZPrepassFS = R"(
 #version 460
 
-struct Material {
-  vec4 ambient;
-  vec4 diffuse;
-};
-
-layout (location=0) flat in Material mtl;
-
-layout(push_constant) uniform constants {
-  uvec2 perFrame;
-} pc;
+layout (location=0) in vec4 Ka;
+layout (location=1) in vec4 Kd;
 
 void main() {
-  vec4 Ka = mtl.ambient;
-  vec4 Kd = mtl.diffuse;
   if (Kd.a < 0.5)
     discard;
 };
@@ -201,9 +193,10 @@ struct PerVertex {
   vec3 worldPos;
   vec3 normal;
   vec2 uv;
+  vec4 Ka;
+  vec4 Kd;
 };
 layout (location=0) out PerVertex vtx;
-layout (location=5) flat out Material mtl;
 //
 
 // https://www.shadertoy.com/view/llfcRl
@@ -225,21 +218,19 @@ void main() {
   mat4 proj = pc.perFrame.proj;
   mat4 view = pc.perFrame.view;
   mat4 model = pc.perObject.model;
-  mtl = pc.materials.mtl[mtlIndex];
   gl_Position = proj * view * model * vec4(pos, 1.0);
-
   // Compute the normal in world-space
   mat3 norm_matrix = transpose(inverse(mat3(model)));
   vtx.worldPos = (model * vec4(pos, 1.0)).xyz;
   vtx.normal = normalize(norm_matrix * unpackOctahedral16(normal));
   vtx.uv = uv;
+  vtx.Ka = pc.materials.mtl[mtlIndex].ambient;
+  vtx.Kd = pc.materials.mtl[mtlIndex].diffuse;
 }
 )";
 
 const char* kCodeFS = R"(
 #version 460
-#extension GL_EXT_buffer_reference_uvec2 : require
-#extension GL_EXT_debug_printf : enable
 #extension GL_EXT_nonuniform_qualifier : require
 #extension GL_EXT_samplerless_texture_functions : require
 #extension GL_EXT_shader_explicit_arithmetic_types_float16 : require
@@ -255,15 +246,12 @@ layout(std430, buffer_reference) readonly buffer PerFrame {
   mat4 light;
 };
 
-struct Material {
-  vec4 ambient;
-  vec4 diffuse;
-};
-
 struct PerVertex {
   vec3 worldPos;
   vec3 normal;
   vec2 uv;
+  vec4 Ka;
+  vec4 Kd;
 };
 
 layout(push_constant) uniform constants {
@@ -282,7 +270,6 @@ layout(push_constant) uniform constants {
 } pc;
 
 layout (location=0) in PerVertex vtx;
-layout (location=5) flat in Material mtl;
 
 layout (location=0) out vec4 out_FragColor;
 
@@ -338,9 +325,7 @@ uint tea(uint val0, uint val1) {
 }
 
 void main() {
-  vec4 Ka = mtl.ambient;
-  vec4 Kd = mtl.diffuse;
-  if (Kd.a < 0.5)
+  if (vtx.Kd.a < 0.5)
     discard;
   vec3 n = normalize(vtx.normal);
 
@@ -379,7 +364,7 @@ void main() {
     if (rayQueryGetIntersectionTypeEXT(rq, true) != gl_RayQueryCommittedIntersectionNoneEXT) occlusion *= 0.5;
   }
 
-  out_FragColor = Ka + Kd * occlusion;
+  out_FragColor = vtx.Ka + vtx.Kd * occlusion;
 };
 )";
 
@@ -500,7 +485,7 @@ bool initModel(const std::string& folderContentRoot) {
       .debugName = "BLAS",
   };
   const lvk::AccelStructSizes blasSizes = ctx_->getAccelStructSizes(blasDesc);
-  LLOGL("Full model BLAS sizes (byts):\n   buildScratchSize = %llu,\n   accelerationStructureSize = %llu\n",
+  LLOGL("Full model BLAS sizes (bytes):\n   buildScratchSize = %llu,\n   accelerationStructureSize = %llu\n",
         blasSizes.buildScratchSize,
         blasSizes.accelerationStructureSize);
   const uint32_t maxStorageBufferSize = ctx_->getMaxStorageBufferRange();
@@ -842,15 +827,13 @@ VULKAN_APP_MAIN {
             ImGui::PopStyleVar();
             ImGui::EndDisabled();
           };
-
+#if !defined(ANDROID)
           const float indentSize = 16.0f;
           ImGui::Begin("Keyboard hints:", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-#if !defined(ANDROID)
           ImGui::Text("W/S/A/D - camera movement");
           ImGui::Text("1/2 - camera up/down");
           ImGui::Text("Shift - fast movement");
           ImGui::Separator();
-#endif
           ImGui::Checkbox("Time-varying noise", &timeVaryingNoise);
           ImGui::Checkbox("Ray traced shadows", &enableShadows_);
           ImGui::Indent(indentSize);
@@ -876,8 +859,8 @@ VULKAN_APP_MAIN {
           ImGui::SliderInt("AO samples", &aoSamples_, 1, 32);
           ImGui::Unindent(indentSize);
           imGuiPopFlagsAndStyles();
-
           ImGui::End();
+#endif // !defined(ANDROID)
         }
         app.drawFPS();
         app.imgui_->endFrame(buffer);
