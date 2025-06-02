@@ -1985,6 +1985,9 @@ VkResult lvk::VulkanPipelineBuilder::build(VkDevice device,
       .basePipelineIndex = -1,
   };
 
+#if defined(ANDROID)
+  LLOGD("vkCreateGraphicsPipelines(): %s\n", debugName);
+#endif // defined(ANDROID)
   const VkResult result = vkCreateGraphicsPipelines(device, pipelineCache, 1, &ci, nullptr, outPipeline);
 
   if (!LVK_VERIFY(result == VK_SUCCESS)) {
