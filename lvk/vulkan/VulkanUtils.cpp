@@ -220,7 +220,7 @@ lvk::ColorSpace lvk::vkColorSpaceToColorSpace(VkColorSpaceKHR colorSpace) {
   case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
     return ColorSpace_SRGB_NONLINEAR;
   case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
-    return ColorSpace_SRGB_LINEAR;
+    return ColorSpace_SRGB_EXTENDED_LINEAR;
   case VK_COLOR_SPACE_HDR10_ST2084_EXT:
     return ColorSpace_HDR10;
   case VK_COLOR_SPACE_BT709_LINEAR_EXT:

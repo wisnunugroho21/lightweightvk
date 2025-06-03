@@ -699,19 +699,17 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
 
   auto colorSpaceToVkSurfaceFormat = [](lvk::ColorSpace colorSpace, bool isBGR, bool hasSwapchainColorspaceExt) -> VkSurfaceFormatKHR {
     switch (colorSpace) {
-    case lvk::ColorSpace_SRGB_LINEAR:
-      // the closest thing to sRGB linear
-      return VkSurfaceFormatKHR{isBGR ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_BT709_LINEAR_EXT};
+    case lvk::ColorSpace_SRGB_NONLINEAR:
+      return VkSurfaceFormatKHR{isBGR ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
     case lvk::ColorSpace_SRGB_EXTENDED_LINEAR:
       if (hasSwapchainColorspaceExt)
         return VkSurfaceFormatKHR{VK_FORMAT_R16G16B16A16_SFLOAT, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT};
       [[fallthrough]];
     case lvk::ColorSpace_HDR10:
-      if (hasSwapchainColorspaceExt)
+      if (hasSwapchainColorspaceExt) {
         return VkSurfaceFormatKHR{isBGR ? VK_FORMAT_A2B10G10R10_UNORM_PACK32 : VK_FORMAT_A2R10G10B10_UNORM_PACK32,
                                   VK_COLOR_SPACE_HDR10_ST2084_EXT};
-      [[fallthrough]];
-    case lvk::ColorSpace_SRGB_NONLINEAR:
+      }
       [[fallthrough]];
     default:
       // default to normal sRGB non linear.
