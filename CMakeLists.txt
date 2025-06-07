@@ -184,6 +184,7 @@ target_include_directories(LVKLibrary PUBLIC ${LVK_ROOT_DIR})
 target_include_directories(LVKLibrary PUBLIC ${LVK_ROOT_DIR}/src)
 
 if(LVK_WITH_TRACY)
+  target_link_libraries(LVKVulkan PUBLIC TracyClient)
   target_compile_definitions(LVKVulkan PUBLIC "LVK_WITH_TRACY=1")
   if(LVK_WITH_TRACY_GPU)
     target_compile_definitions(LVKVulkan PUBLIC "LVK_WITH_TRACY_GPU=1")
@@ -286,10 +287,6 @@ if(LVK_WITH_SAMPLES)
   lvk_set_folder(meshoptimizer "third-party")
   lvk_set_folder(fast_obj_lib  "third-party")
   # cmake-format: on
-endif()
-
-if(LVK_WITH_TRACY)
-  target_link_libraries(LVKVulkan PUBLIC TracyClient)
 endif()
 
 if(LVK_WITH_OPENXR)
