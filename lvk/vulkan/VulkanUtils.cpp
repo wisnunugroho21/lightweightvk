@@ -92,10 +92,28 @@ const char* lvk::getVulkanResultString(VkResult result) {
     // Provided by VK_KHR_deferred_host_operations
     RESULT_CASE(VK_OPERATION_NOT_DEFERRED_KHR);
   default:
-    return "Unknown VkResult Value";
+    return "Unknown VkResult value";
   }
 #undef RESULT_CASE
 }
+
+const char* lvk::getVkDeviceFaultAddressTypeString(VkDeviceFaultAddressTypeEXT type) {
+#define RESULT_CASE(res) \
+  case res:              \
+    return #res
+  switch (type) {
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_NONE_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_READ_INVALID_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_WRITE_INVALID_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_EXECUTE_INVALID_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_INSTRUCTION_POINTER_UNKNOWN_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_INSTRUCTION_POINTER_INVALID_EXT);
+    RESULT_CASE(VK_DEVICE_FAULT_ADDRESS_TYPE_INSTRUCTION_POINTER_FAULT_EXT);
+  default:
+    return "Unknown VkDeviceFaultAddressTypeEXT value";
+  };
+#undef RESULT_CASE
+};
 
 void lvk::setResultFrom(Result* outResult, VkResult result) {
   if (outResult) {
@@ -202,9 +220,11 @@ lvk::ColorSpace lvk::vkColorSpaceToColorSpace(VkColorSpaceKHR colorSpace) {
   case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
     return ColorSpace_SRGB_NONLINEAR;
   case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
-    return ColorSpace_SRGB_LINEAR;
+    return ColorSpace_SRGB_EXTENDED_LINEAR;
   case VK_COLOR_SPACE_HDR10_ST2084_EXT:
     return ColorSpace_HDR10;
+  case VK_COLOR_SPACE_BT709_LINEAR_EXT:
+    return ColorSpace_BT709_LINEAR;
   default:
     LVK_ASSERT_MSG(false, "Unsupported color space %u", (uint32_t)colorSpace);
     return ColorSpace_SRGB_NONLINEAR;
@@ -409,12 +429,12 @@ VmaAllocator lvk::createVmaAllocator(VkPhysicalDevice physDev,
 glslang_resource_t lvk::getGlslangResource(const VkPhysicalDeviceLimits& limits) {
   const glslang_resource_t resource = {
       .max_lights = 32,
-      .max_clip_planes = 6,
+      .max_clip_planes = (int)limits.maxClipDistances,
       .max_texture_units = 32,
       .max_texture_coords = 32,
       .max_vertex_attribs = (int)limits.maxVertexInputAttributes,
-      .max_vertex_uniform_components = 4096,
-      .max_varying_floats = 64,
+      .max_vertex_uniform_components = (int)limits.maxUniformBufferRange / 4,
+      .max_varying_floats = (int)std::min(limits.maxVertexOutputComponents, limits.maxFragmentInputComponents),
       .max_vertex_texture_image_units = 32,
       .max_combined_texture_image_units = 80,
       .max_texture_image_units = 32,
@@ -423,10 +443,10 @@ glslang_resource_t lvk::getGlslangResource(const VkPhysicalDeviceLimits& limits)
       .max_vertex_uniform_vectors = 128,
       .max_varying_vectors = 8,
       .max_fragment_uniform_vectors = 16,
-      .max_vertex_output_vectors = 16,
-      .max_fragment_input_vectors = 15,
-      .min_program_texel_offset = -8,
-      .max_program_texel_offset = 7,
+      .max_vertex_output_vectors = (int)limits.maxVertexOutputComponents / 4,
+      .max_fragment_input_vectors = (int)limits.maxFragmentInputComponents / 4,
+      .min_program_texel_offset = limits.minTexelOffset,
+      .max_program_texel_offset = (int)limits.maxTexelOffset,
       .max_clip_distances = (int)limits.maxClipDistances,
       .max_compute_work_group_count_x = (int)limits.maxComputeWorkGroupCount[0],
       .max_compute_work_group_count_y = (int)limits.maxComputeWorkGroupCount[1],

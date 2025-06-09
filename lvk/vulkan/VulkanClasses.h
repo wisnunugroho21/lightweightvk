@@ -145,6 +145,7 @@ class VulkanSwapchain final {
   VkSurfaceFormatKHR surfaceFormat_ = {.format = VK_FORMAT_UNDEFINED};
   TextureHandle swapchainTextures_[LVK_MAX_SWAPCHAIN_IMAGES] = {};
   VkSemaphore acquireSemaphore_[LVK_MAX_SWAPCHAIN_IMAGES] = {};
+  VkFence presentFence_[LVK_MAX_SWAPCHAIN_IMAGES] = {};
   uint64_t timelineWaitValues_[LVK_MAX_SWAPCHAIN_IMAGES] = {};
 };
 
@@ -154,7 +155,7 @@ class VulkanImmediateCommands final {
   // an existing buffer becomes available
   static constexpr uint32_t kMaxCommandBuffers = 64;
 
-  VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, const char* debugName);
+  VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, bool has_EXT_device_fault, const char* debugName);
   ~VulkanImmediateCommands();
   VulkanImmediateCommands(const VulkanImmediateCommands&) = delete;
   VulkanImmediateCommands& operator=(const VulkanImmediateCommands&) = delete;
@@ -189,6 +190,7 @@ class VulkanImmediateCommands final {
   VkQueue queue_ = VK_NULL_HANDLE;
   VkCommandPool commandPool_ = VK_NULL_HANDLE;
   uint32_t queueFamilyIndex_ = 0;
+  bool has_EXT_device_fault_ = false;
   const char* debugName_ = "";
   CommandBufferWrapper buffers_[kMaxCommandBuffers];
   SubmitHandle lastSubmitHandle_ = SubmitHandle();
@@ -729,7 +731,9 @@ class VulkanContext final : public IContext {
   bool has_8BitIndices_ = false; // VK_KHR_index_type_uint8 or VK_EXT_index_type_uint8
   bool has_EXT_calibrated_timestamps_ = false;
   bool has_EXT_swapchain_colorspace_ = false;
+  bool has_EXT_swapchain_maintenance1_ = false;
   bool has_EXT_hdr_metadata_ = false;
+  bool has_EXT_device_fault_ = false;
 
   TextureHandle dummyTexture_;
 

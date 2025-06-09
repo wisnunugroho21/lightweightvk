@@ -699,19 +699,17 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
 
   auto colorSpaceToVkSurfaceFormat = [](lvk::ColorSpace colorSpace, bool isBGR, bool hasSwapchainColorspaceExt) -> VkSurfaceFormatKHR {
     switch (colorSpace) {
-    case lvk::ColorSpace_SRGB_LINEAR:
-      // the closest thing to sRGB linear
-      return VkSurfaceFormatKHR{isBGR ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_BT709_LINEAR_EXT};
+    case lvk::ColorSpace_SRGB_NONLINEAR:
+      return VkSurfaceFormatKHR{isBGR ? VK_FORMAT_B8G8R8A8_UNORM : VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR};
     case lvk::ColorSpace_SRGB_EXTENDED_LINEAR:
       if (hasSwapchainColorspaceExt)
         return VkSurfaceFormatKHR{VK_FORMAT_R16G16B16A16_SFLOAT, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT};
       [[fallthrough]];
     case lvk::ColorSpace_HDR10:
-      if (hasSwapchainColorspaceExt)
+      if (hasSwapchainColorspaceExt) {
         return VkSurfaceFormatKHR{isBGR ? VK_FORMAT_A2B10G10R10_UNORM_PACK32 : VK_FORMAT_A2R10G10B10_UNORM_PACK32,
                                   VK_COLOR_SPACE_HDR10_ST2084_EXT};
-      [[fallthrough]];
-    case lvk::ColorSpace_SRGB_NONLINEAR:
+      }
       [[fallthrough]];
     default:
       // default to normal sRGB non linear.
@@ -1149,7 +1147,7 @@ lvk::VulkanSwapchain::VulkanSwapchain(VulkanContext& ctx, uint32_t width, uint32
     vkGetPhysicalDeviceFormatProperties(pd, format, &props);
 
     const bool isStorageSupported = (caps.supportedUsageFlags & VK_IMAGE_USAGE_STORAGE_BIT) > 0;
-    const bool isTilingOptimalSupported = (props.optimalTilingFeatures & VK_IMAGE_USAGE_STORAGE_BIT) > 0;
+    const bool isTilingOptimalSupported = (props.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) > 0;
 
     if (isStorageSupported && isTilingOptimalSupported) {
       usageFlags |= VK_IMAGE_USAGE_STORAGE_BIT;
@@ -1256,6 +1254,10 @@ lvk::VulkanSwapchain::~VulkanSwapchain() {
   for (VkSemaphore sem : acquireSemaphore_) {
     vkDestroySemaphore(device_, sem, nullptr);
   }
+  for (VkFence fence : presentFence_) {
+    if (fence)
+      vkDestroyFence(device_, fence, nullptr);
+  }
 }
 
 VkImage lvk::VulkanSwapchain::getCurrentVkImage() const {
@@ -1278,6 +1280,11 @@ lvk::TextureHandle lvk::VulkanSwapchain::getCurrentTexture() {
   LVK_PROFILER_FUNCTION();
 
   if (getNextImage_) {
+    if (presentFence_[currentImageIndex_]) {
+      // VK_EXT_swapchain_maintenance1: before acquiring again, wait for the presentation operation to finish
+      VK_ASSERT(vkWaitForFences(device_, 1, &presentFence_[currentImageIndex_], VK_TRUE, UINT64_MAX));
+      VK_ASSERT(vkResetFences(device_, 1, &presentFence_[currentImageIndex_]));
+    }
     const VkSemaphoreWaitInfo waitInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
         .semaphoreCount = 1,
@@ -1318,14 +1325,25 @@ lvk::Result lvk::VulkanSwapchain::present(VkSemaphore waitSemaphore) {
   LVK_PROFILER_FUNCTION();
 
   LVK_PROFILER_ZONE("vkQueuePresent()", LVK_PROFILER_COLOR_PRESENT);
+  const VkSwapchainPresentFenceInfoEXT fenceInfo = {
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_PRESENT_FENCE_INFO_EXT,
+      .swapchainCount = 1,
+      .pFences = &presentFence_[currentImageIndex_],
+  };
   const VkPresentInfoKHR pi = {
       .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .pNext = ctx_.has_EXT_swapchain_maintenance1_ ? &fenceInfo : nullptr,
       .waitSemaphoreCount = 1,
       .pWaitSemaphores = &waitSemaphore,
       .swapchainCount = 1u,
       .pSwapchains = &swapchain_,
       .pImageIndices = &currentImageIndex_,
   };
+  if (ctx_.has_EXT_swapchain_maintenance1_) {
+    if (!presentFence_[currentImageIndex_]) {
+      presentFence_[currentImageIndex_] = lvk::createFence(device_, "Fence: present-fence");
+    }
+  }
   VkResult r = vkQueuePresentKHR(graphicsQueue_, &pi);
   if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR && r != VK_ERROR_OUT_OF_DATE_KHR) {
     VK_ASSERT(r);
@@ -1341,8 +1359,11 @@ lvk::Result lvk::VulkanSwapchain::present(VkSemaphore waitSemaphore) {
   return Result();
 }
 
-lvk::VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device, uint32_t queueFamilyIndex, const char* debugName) :
-  device_(device), queueFamilyIndex_(queueFamilyIndex), debugName_(debugName) {
+lvk::VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device,
+                                                      uint32_t queueFamilyIndex,
+                                                      bool has_EXT_device_fault,
+                                                      const char* debugName) :
+  device_(device), queueFamilyIndex_(queueFamilyIndex), has_EXT_device_fault_(has_EXT_device_fault), debugName_(debugName) {
   LVK_PROFILER_FUNCTION_COLOR(LVK_PROFILER_COLOR_CREATE);
 
   vkGetDeviceQueue(device, queueFamilyIndex, 0, &queue_);
@@ -1577,7 +1598,76 @@ lvk::SubmitHandle lvk::VulkanImmediateCommands::submit(const CommandBufferWrappe
       .signalSemaphoreInfoCount = numSignalSemaphores,
       .pSignalSemaphoreInfos = signalSemaphores,
   };
-  VK_ASSERT(vkQueueSubmit2(queue_, 1u, &si, wrapper.fence_));
+  const VkResult result = vkQueueSubmit2(queue_, 1u, &si, wrapper.fence_);
+  if (has_EXT_device_fault_ && result == VK_ERROR_DEVICE_LOST) {
+    VkDeviceFaultCountsEXT count = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_COUNTS_EXT,
+    };
+    vkGetDeviceFaultInfoEXT(device_, &count, nullptr);
+    std::vector<VkDeviceFaultAddressInfoEXT> addressInfo(count.addressInfoCount);
+    std::vector<VkDeviceFaultVendorInfoEXT> vendorInfo(count.vendorInfoCount);
+    std::vector<uint8_t> binary(count.vendorBinarySize);
+    VkDeviceFaultInfoEXT info = {
+        .sType = VK_STRUCTURE_TYPE_DEVICE_FAULT_INFO_EXT,
+        .pAddressInfos = addressInfo.data(),
+        .pVendorInfos = vendorInfo.data(),
+        .pVendorBinaryData = binary.data(),
+    };
+    vkGetDeviceFaultInfoEXT(device_, &count, &info);
+    LLOGW("VK_ERROR_DEVICE_LOST: %s\n", info.description);
+    for (const VkDeviceFaultAddressInfoEXT& aInfo : addressInfo) {
+      VkDeviceSize lowerAddress = aInfo.reportedAddress & ~(aInfo.addressPrecision - 1);
+      VkDeviceSize upperAddress = aInfo.reportedAddress | (aInfo.addressPrecision - 1);
+      LLOGW("...address range [ %" PRIx64 ", %" PRIx64 " ]: %s\n",
+            lowerAddress,
+            upperAddress,
+            getVkDeviceFaultAddressTypeString(aInfo.addressType));
+    }
+    for (const VkDeviceFaultVendorInfoEXT& vInfo : vendorInfo) {
+      LLOGW("...caused by `%s` with error code %" PRIx64 " and data %" PRIx64 "\n",
+            vInfo.description,
+            vInfo.vendorFaultCode,
+            vInfo.vendorFaultData);
+    }
+    const VkDeviceSize binarySize = count.vendorBinarySize;
+    if (info.pVendorBinaryData && binarySize >= sizeof(VkDeviceFaultVendorBinaryHeaderVersionOneEXT)) {
+      const VkDeviceFaultVendorBinaryHeaderVersionOneEXT* header =
+          std::launder(reinterpret_cast<const VkDeviceFaultVendorBinaryHeaderVersionOneEXT*>(info.pVendorBinaryData));
+      const char hexDigits[] = "0123456789abcdef";
+      char uuid[VK_UUID_SIZE * 2 + 1] = {};
+      for (uint32_t i = 0; i < VK_UUID_SIZE; ++i) {
+        uuid[i * 2 + 0] = hexDigits[(header->pipelineCacheUUID[i] >> 4) & 0xF];
+        uuid[i * 2 + 1] = hexDigits[header->pipelineCacheUUID[i] & 0xF];
+      }
+      LLOGW("VkDeviceFaultVendorBinaryHeaderVersionOne:");
+      LLOGW("   headerSize        : %u\n", header->headerSize);
+      LLOGW("   headerVersion     : %u\n", (uint32_t)header->headerVersion);
+      LLOGW("   vendorID          : %u\n", header->vendorID);
+      LLOGW("   deviceID          : %u\n", header->deviceID);
+      LLOGW("   driverVersion     : %u\n", header->driverVersion);
+      LLOGW("   pipelineCacheUUID : %s\n", uuid);
+      if (header->applicationNameOffset && header->applicationNameOffset < binarySize) {
+        LLOGW("   applicationName   : %s\n", (const char*)info.pVendorBinaryData + header->applicationNameOffset);
+      }
+      LLOGW("   applicationVersion: %i.%i.%i\n",
+            VK_API_VERSION_MAJOR(header->applicationVersion),
+            VK_API_VERSION_MINOR(header->applicationVersion),
+            VK_API_VERSION_PATCH(header->applicationVersion));
+      if (header->engineNameOffset && header->engineNameOffset < binarySize) {
+        LLOGW("   engineName        : %s\n", (const char*)info.pVendorBinaryData + header->engineNameOffset);
+      }
+      LLOGW("   engineVersion     : %i.%i.%i\n",
+            VK_API_VERSION_MAJOR(header->engineVersion),
+            VK_API_VERSION_MINOR(header->engineVersion),
+            VK_API_VERSION_PATCH(header->engineVersion));
+      LLOGW("   apiVersion        : %i.%i.%i.%i\n",
+            VK_API_VERSION_MAJOR(header->apiVersion),
+            VK_API_VERSION_MINOR(header->apiVersion),
+            VK_API_VERSION_PATCH(header->apiVersion),
+            VK_API_VERSION_VARIANT(header->apiVersion));
+    }
+  }
+  VK_ASSERT(result);
   LVK_PROFILER_ZONE_END();
 
   lastSubmitSemaphore_.semaphore = wrapper.semaphore_;
@@ -1893,6 +1983,9 @@ VkResult lvk::VulkanPipelineBuilder::build(VkDevice device,
       .basePipelineIndex = -1,
   };
 
+#if defined(ANDROID)
+  LLOGD("vkCreateGraphicsPipelines(): %s\n", debugName);
+#endif // defined(ANDROID)
   const VkResult result = vkCreateGraphicsPipelines(device, pipelineCache, 1, &ci, nullptr, outPipeline);
 
   if (!LVK_VERIFY(result == VK_SUCCESS)) {
@@ -3682,27 +3775,27 @@ lvk::Holder<lvk::BufferHandle> lvk::VulkanContext::createBuffer(const BufferDesc
     usageFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
   }
   if (desc.usage & BufferUsageBits_Uniform) {
-    usageFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    usageFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 
   if (desc.usage & BufferUsageBits_Storage) {
-    usageFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    usageFlags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 
   if (desc.usage & BufferUsageBits_Indirect) {
-    usageFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    usageFlags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 
   if (desc.usage & BufferUsageBits_ShaderBindingTable) {
-    usageFlags |= VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    usageFlags |= VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 
   if (desc.usage & BufferUsageBits_AccelStructBuildInputReadOnly) {
-    usageFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    usageFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 
   if (desc.usage & BufferUsageBits_AccelStructStorage) {
-    usageFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_KHR;
+    usageFlags |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 
   LVK_ASSERT_MSG(usageFlags, "Invalid buffer usage");
@@ -5895,6 +5988,15 @@ void lvk::VulkanContext::createInstance() {
     instanceExtensionNames.push_back(VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME);
   }
 
+  if (hasExtension(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME, allInstanceExtensions)) {
+    // required by the device extension VK_EXT_swapchain_maintenance1
+    instanceExtensionNames.push_back(VK_EXT_SURFACE_MAINTENANCE_1_EXTENSION_NAME);
+  }
+  if (hasExtension(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME, allInstanceExtensions)) {
+    // required by the instance extension VK_EXT_surface_maintenance1
+    instanceExtensionNames.push_back(VK_KHR_GET_SURFACE_CAPABILITIES_2_EXTENSION_NAME);
+  }
+
   for (const char* ext : config_.extensionsInstance) {
     if (ext) {
       instanceExtensionNames.push_back(ext);
@@ -6472,9 +6574,17 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR,
       .rayQuery = VK_TRUE,
   };
+  VkPhysicalDeviceSwapchainMaintenance1FeaturesEXT swapchainMaintenance1Features = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SWAPCHAIN_MAINTENANCE_1_FEATURES_EXT,
+      .swapchainMaintenance1 = VK_TRUE,
+  };
   VkPhysicalDeviceIndexTypeUint8FeaturesEXT indexTypeUint8Features = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INDEX_TYPE_UINT8_FEATURES_EXT,
       .indexTypeUint8 = VK_TRUE,
+  };
+  VkPhysicalDeviceFaultFeaturesEXT deviceFaultFeatures = {
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT,
+      .deviceFault = VK_TRUE,
   };
 
   auto addOptionalExtension = [&allDeviceExtensions, &deviceExtensionNames, &createInfoNext](
@@ -6513,6 +6623,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
                         &accelerationStructureFeatures);
   addOptionalExtension(VK_KHR_RAY_QUERY_EXTENSION_NAME, has_KHR_ray_query_, &rayQueryFeatures);
   addOptionalExtension(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, has_KHR_ray_tracing_pipeline_, &rayTracingFeatures);
+  addOptionalExtension(VK_EXT_SWAPCHAIN_MAINTENANCE_1_EXTENSION_NAME, has_EXT_swapchain_maintenance1_, &swapchainMaintenance1Features);
   if (config_.vulkanVersion <= lvk::VulkanVersion_1_3) {
 #if defined(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME)
     if (!addOptionalExtension(VK_KHR_INDEX_TYPE_UINT8_EXTENSION_NAME, has_8BitIndices_, &indexTypeUint8Features))
@@ -6522,6 +6633,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
     }
   }
   addOptionalExtension(VK_EXT_HDR_METADATA_EXTENSION_NAME, has_EXT_hdr_metadata_);
+  addOptionalExtension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, has_EXT_device_fault_, &deviceFaultFeatures);
 
   // check extensions
   {
@@ -6727,8 +6839,8 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
 
   VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_DEVICE, (uint64_t)vkDevice_, "Device: VulkanContext::vkDevice_"));
 
-  immediate_ =
-      std::make_unique<lvk::VulkanImmediateCommands>(vkDevice_, deviceQueues_.graphicsQueueFamilyIndex, "VulkanContext::immediate_");
+  immediate_ = std::make_unique<lvk::VulkanImmediateCommands>(
+      vkDevice_, deviceQueues_.graphicsQueueFamilyIndex, has_EXT_device_fault_, "VulkanContext::immediate_");
 
   // create Vulkan pipeline cache
   {

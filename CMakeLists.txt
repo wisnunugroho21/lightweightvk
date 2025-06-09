@@ -168,9 +168,10 @@ target_include_directories(LVKLibrary PUBLIC ${LVK_ROOT_DIR})
 target_include_directories(LVKLibrary PUBLIC ${LVK_ROOT_DIR}/src)
 
 if(LVK_WITH_TRACY)
-  target_compile_definitions(LVKLibrary PUBLIC "LVK_WITH_TRACY=1")
+  target_link_libraries(LVKVulkan PUBLIC TracyClient)
+  target_compile_definitions(LVKVulkan PUBLIC "LVK_WITH_TRACY=1")
   if(LVK_WITH_TRACY_GPU)
-    target_compile_definitions(LVKLibrary PUBLIC "LVK_WITH_TRACY_GPU=1")
+    target_compile_definitions(LVKVulkan PUBLIC "LVK_WITH_TRACY_GPU=1")
   endif()
 endif()
 
@@ -192,6 +193,7 @@ set(MINILOG_RAW_OUTPUT     ON CACHE BOOL "")
 # cmake-format: on
 add_subdirectory(third-party/deps/src/minilog)
 lvk_set_folder(minilog "third-party")
+target_compile_definitions(minilog PUBLIC "-DMINILOG_ENABLE_VA_LIST=1")
 
 target_link_libraries(LVKLibrary PUBLIC minilog)
 target_include_directories(LVKLibrary PUBLIC "third-party/deps/src")
@@ -214,10 +216,6 @@ if(LVK_WITH_GLFW)
   lvk_set_folder(glfw            "third-party/GLFW3")
   lvk_set_folder(update_mappings "third-party/GLFW3")
   # cmake-format: on
-endif()
-
-if(LVK_WITH_TRACY)
-  target_link_libraries(LVKLibrary PUBLIC TracyClient)
 endif()
 
 if(LVK_WITH_OPENXR)
