@@ -225,7 +225,6 @@ VkAttachmentStoreOp storeOpToVkAttachmentStoreOp(lvk::StoreOp a) {
   return VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
 
-
 VkResolveModeFlagBits resolveModeToVkResolveModeFlagBits(lvk::ResolveMode mode, VkResolveModeFlags supported) {
   switch (mode) {
   case lvk::ResolveMode_None:
@@ -6426,29 +6425,29 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   const uint32_t numQueues = ciQueue[0].queueFamilyIndex == ciQueue[1].queueFamilyIndex ? 1 : 2;
 
   std::vector<const char*> deviceExtensionNames = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #if defined(__APPLE__)
-    // All supported Vulkan 1.3 extensions
-    // https://github.com/KhronosGroup/MoltenVK/issues/1930
-    VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
-    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-    VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
-    VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
-    VK_EXT_4444_FORMATS_EXTENSION_NAME,
-    VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
-    VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME,
-    VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME,
-    VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,
-    VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME,
-    VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME,
-    VK_EXT_PRIVATE_DATA_EXTENSION_NAME,
-    VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME,
-    VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
-    VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME,
-    VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME,
+      // All supported Vulkan 1.3 extensions
+      // https://github.com/KhronosGroup/MoltenVK/issues/1930
+      VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
+      VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+      VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+      VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+      VK_EXT_4444_FORMATS_EXTENSION_NAME,
+      VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+      VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME,
+      VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME,
+      VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,
+      VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME,
+      VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME,
+      VK_EXT_PRIVATE_DATA_EXTENSION_NAME,
+      VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME,
+      VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
+      VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME,
+      VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME,
 #endif
 #if defined(LVK_WITH_VULKAN_PORTABILITY)
-    "VK_KHR_portability_subset",
+      "VK_KHR_portability_subset",
 #endif
   };
 
@@ -6543,9 +6542,9 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   };
 
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeatures = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
-    .pNext = &synchronization2Features,
-    .dynamicRendering = VK_TRUE,
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+      .pNext = &synchronization2Features,
+      .dynamicRendering = VK_TRUE,
   };
 
   void* createInfoNext = &dynamicRenderingFeatures;
@@ -7056,8 +7055,11 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
       lvk::getDSLBinding(kBinding_Textures, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures, stageFlags),
       lvk::getDSLBinding(kBinding_Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers, stageFlags),
       lvk::getDSLBinding(kBinding_StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures, stageFlags),
-      lvk::getDSLBinding(
-          kBinding_YUVImages, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)immutableSamplers.size(), stageFlags, immutableSamplersData),
+      lvk::getDSLBinding(kBinding_YUVImages,
+                         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                         (uint32_t)immutableSamplers.size(),
+                         stageFlags,
+                         immutableSamplersData),
       lvk::getDSLBinding(kBinding_AccelerationStructures, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, maxAccelStructs, stageFlags),
   };
   const uint32_t flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
@@ -7084,7 +7086,7 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
 
   {
     // create default descriptor pool and allocate 1 descriptor set
-    const VkDescriptorPoolSize poolSizes[kBinding_NumBindings]{
+    const VkDescriptorPoolSize poolSizes[kBinding_NumBindings] = {
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures},
