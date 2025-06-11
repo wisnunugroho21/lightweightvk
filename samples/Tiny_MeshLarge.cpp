@@ -31,12 +31,13 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/random.hpp>
 
-#include <ktx.h>
-#include <ktx-software/lib/vkformat_enum.h>
 #include <ktx-software/lib/gl_format.h>
+#include <ktx-software/lib/vkformat_enum.h>
+#include <ktx.h>
 #include <ldrutils/lmath/Colors.h>
 #include <ldrutils/lutils/ScopeExit.h>
 
+#include <fast_obj.h>
 #include <meshoptimizer.h>
 #include <shared/Camera.h>
 #include <shared/UtilsCubemap.h>
@@ -44,11 +45,10 @@
 #include <stb/stb_image.h>
 #include <stb/stb_image_resize2.h>
 #include <taskflow/taskflow.hpp>
-#include <fast_obj.h>
 
-#include <lvk/LVK.h>
-#include <lvk/HelpersImGui.h>
 #include <implot/implot.h>
+#include <lvk/HelpersImGui.h>
+#include <lvk/LVK.h>
 
 #if defined(ANDROID)
 #include <android_native_app_glue.h>
@@ -473,10 +473,6 @@ int width_ = 0;
 int height_ = 0;
 FramesPerSecondCounter fps_;
 
-constexpr uint32_t kNumBufferedFrames = 3;
-
-uint32_t mtlBufIndex = 0;
-
 std::unique_ptr<lvk::IContext> ctx_;
 lvk::Framebuffer fbMain_; // swapchain
 lvk::Framebuffer fbOffscreen_;
@@ -503,8 +499,8 @@ lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Shadow_;
 lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Skybox_;
 lvk::Holder<lvk::RenderPipelineHandle> renderPipelineState_Fullscreen_;
 lvk::Holder<lvk::BufferHandle> vb0_, ib0_; // buffers for vertices and indices
-std::vector<lvk::Holder<lvk::BufferHandle>> sbMaterials_; // storage buffer for materials
-std::vector<lvk::Holder<lvk::BufferHandle>> ubPerFrame_, ubPerFrameShadow_, ubPerObject_;
+lvk::Holder<lvk::BufferHandle> sbMaterials_; // storage buffer for materials
+lvk::Holder<lvk::BufferHandle> ubPerFrame_, ubPerFrameShadow_, ubPerObject_;
 lvk::Holder<lvk::SamplerHandle> sampler_;
 lvk::Holder<lvk::SamplerHandle> samplerShadow_;
 lvk::Holder<lvk::TextureHandle> textureDummyWhite_;
@@ -628,12 +624,10 @@ std::vector<LoadedMaterial> loadedMaterials_;
 std::mutex loadedMaterialsMutex_;
 std::atomic<bool> loaderShouldExit_ = false;
 std::atomic<uint32_t> remainingMaterialsToLoad_ = 0;
-std::unique_ptr<tf::Executor> loaderPool_ =
-    std::make_unique<tf::Executor>(std::max(2u, std::thread::hardware_concurrency() / 2));
+std::unique_ptr<tf::Executor> loaderPool_ = std::make_unique<tf::Executor>(std::max(2u, std::thread::hardware_concurrency() / 2));
 
 static bool endsWith(const std::string& str, const std::string& suffix) {
-  return str.size() >= suffix.size() &&
-         0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
+  return str.size() >= suffix.size() && 0 == str.compare(str.size() - suffix.size(), suffix.size(), suffix);
 }
 
 static std::string convertFileName(std::string fileName) {
@@ -653,9 +647,7 @@ static std::string convertFileName(std::string fileName) {
   // return absolute compressed filename
   return compressedPathPrefix + fileName + ".ktx";
 }
-static void stringReplaceAll(std::string& s,
-                             const std::string& searchString,
-                             const std::string& replaceString) {
+static void stringReplaceAll(std::string& s, const std::string& searchString, const std::string& replaceString) {
   size_t pos = 0;
   while ((pos = s.find(searchString, pos)) != std::string::npos) {
     s.replace(pos, searchString.length(), replaceString);
@@ -685,63 +677,55 @@ bool init() {
         nullptr);
   }
 
-  // create an Uniform buffers to store uniforms for 2 objects
-  for (uint32_t i = 0; i != kNumBufferedFrames; i++) {
-    ubPerFrame_.push_back(ctx_->createBuffer({.usage = lvk::BufferUsageBits_Uniform,
-                                                 .storage = lvk::StorageType_HostVisible,
-                                                 .size = sizeof(UniformsPerFrame),
-                                                 .debugName = "Buffer: uniforms (per frame)"},
-                                                nullptr));
-    ubPerFrameShadow_.push_back(
-        ctx_->createBuffer({.usage = lvk::BufferUsageBits_Uniform,
-                               .storage = lvk::StorageType_HostVisible,
-                               .size = sizeof(UniformsPerFrame),
-                               .debugName = "Buffer: uniforms (per frame shadow)"},
-                              nullptr));
-    ubPerObject_.push_back(ctx_->createBuffer({.usage = lvk::BufferUsageBits_Uniform,
-                                                  .storage = lvk::StorageType_HostVisible,
-                                                  .size = sizeof(UniformsPerObject),
-                                                  .debugName = "Buffer: uniforms (per object)"},
-                                                 nullptr));
-  }
+  ubPerFrame_ = ctx_->createBuffer({
+      .usage = lvk::BufferUsageBits_Uniform,
+      .storage = lvk::StorageType_HostVisible,
+      .size = sizeof(UniformsPerFrame),
+      .debugName = "Buffer: uniforms (per frame)",
+  });
+  ubPerFrameShadow_ = ctx_->createBuffer({
+      .usage = lvk::BufferUsageBits_Uniform,
+      .storage = lvk::StorageType_HostVisible,
+      .size = sizeof(UniformsPerFrame),
+      .debugName = "Buffer: uniforms (per frame shadow)",
+  });
+  ubPerObject_ = ctx_->createBuffer({
+      .usage = lvk::BufferUsageBits_Uniform,
+      .storage = lvk::StorageType_HostVisible,
+      .size = sizeof(UniformsPerObject),
+      .debugName = "Buffer: uniforms (per object)",
+  });
 
   depthState_ = {.compareOp = lvk::CompareOp_Less, .isDepthWriteEnabled = true};
   depthStateLEqual_ = {.compareOp = lvk::CompareOp_LessEqual, .isDepthWriteEnabled = true};
 
-  sampler_ = ctx_->createSampler(
-      {
-          .mipMap = lvk::SamplerMip_Linear,
-          .wrapU = lvk::SamplerWrap_Repeat,
-          .wrapV = lvk::SamplerWrap_Repeat,
-          .debugName = "Sampler: linear",
-      },
-      nullptr);
-  samplerShadow_ = ctx_->createSampler(
-      {
-          .wrapU = lvk::SamplerWrap_Clamp,
-          .wrapV = lvk::SamplerWrap_Clamp,
-          .depthCompareOp = lvk::CompareOp_LessEqual,
-          .depthCompareEnabled = true,
-          .debugName = "Sampler: shadow",
-      },
-      nullptr);
+  sampler_ = ctx_->createSampler({
+      .mipMap = lvk::SamplerMip_Linear,
+      .wrapU = lvk::SamplerWrap_Repeat,
+      .wrapV = lvk::SamplerWrap_Repeat,
+      .debugName = "Sampler: linear",
+  });
+  samplerShadow_ = ctx_->createSampler({
+      .wrapU = lvk::SamplerWrap_Clamp,
+      .wrapV = lvk::SamplerWrap_Clamp,
+      .depthCompareOp = lvk::CompareOp_LessEqual,
+      .depthCompareEnabled = true,
+      .debugName = "Sampler: shadow",
+  });
 
-  renderPassOffscreen_ = {
-      .color = {{
-          .loadOp = lvk::LoadOp_Clear,
-          .storeOp = kNumSamplesMSAA > 1 ? lvk::StoreOp_MsaaResolve : lvk::StoreOp_Store,
-          .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
-      }},
-      .depth = {
-          .loadOp = lvk::LoadOp_Clear,
-          .storeOp = lvk::StoreOp_Store,
-          .clearDepth = 1.0f,
-      }};
+  renderPassOffscreen_ = {.color = {{
+                              .loadOp = lvk::LoadOp_Clear,
+                              .storeOp = kNumSamplesMSAA > 1 ? lvk::StoreOp_MsaaResolve : lvk::StoreOp_Store,
+                              .clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
+                          }},
+                          .depth = {
+                              .loadOp = lvk::LoadOp_Clear,
+                              .storeOp = lvk::StoreOp_Store,
+                              .clearDepth = 1.0f,
+                          }};
 
   renderPassMain_ = {
-      .color = {{.loadOp = lvk::LoadOp_Clear,
-                 .storeOp = lvk::StoreOp_Store,
-                 .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
+      .color = {{.loadOp = lvk::LoadOp_Clear, .storeOp = lvk::StoreOp_Store, .clearColor = {0.0f, 0.0f, 0.0f, 1.0f}}},
   };
   renderPassShadow_ = {
       .color = {},
@@ -776,10 +760,10 @@ void destroy() {
 
   vb0_ = nullptr;
   ib0_ = nullptr;
-  sbMaterials_.clear();
-  ubPerFrame_.clear();
-  ubPerFrameShadow_.clear();
-  ubPerObject_.clear();
+  sbMaterials_ = nullptr;
+  ubPerFrame_ = nullptr;
+  ubPerFrameShadow_ = nullptr;
+  ubPerObject_ = nullptr;
   smMeshVert_ = nullptr;
   smMeshFrag_ = nullptr;
   smMeshWireframeVert_ = nullptr;
@@ -974,33 +958,29 @@ bool initModel() {
   }
 
   for (const auto& mtl : cachedMaterials_) {
-    materials_.push_back(GPUMaterial{vec4(mtl.ambient, 1.0f),
-                                     vec4(mtl.diffuse, 1.0f),
-                                     textureDummyWhite_.index(),
-                                     textureDummyWhite_.index()});
+    materials_.push_back(
+        GPUMaterial{vec4(mtl.ambient, 1.0f), vec4(mtl.diffuse, 1.0f), textureDummyWhite_.index(), textureDummyWhite_.index()});
   }
 
-  for (uint32_t i = 0; i != kNumBufferedFrames; i++) {
-    sbMaterials_.push_back(ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage,
-                                               .storage = lvk::StorageType_Device,
-                                               .size = sizeof(GPUMaterial) * materials_.size(),
-                                               .data = materials_.data(),
-                                               .debugName = "Buffer: materials"},
-                                              nullptr));
-  }
+  sbMaterials_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Storage,
+                                     .storage = lvk::StorageType_Device,
+                                     .size = sizeof(GPUMaterial) * materials_.size(),
+                                     .data = materials_.data(),
+                                     .debugName = "Buffer: materials"},
+                                    nullptr);
 
   vb0_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Vertex,
-                                .storage = lvk::StorageType_Device,
-                                .size = sizeof(VertexData) * vertexData_.size(),
-                                .data = vertexData_.data(),
-                                .debugName = "Buffer: vertex"},
-                               nullptr);
+                             .storage = lvk::StorageType_Device,
+                             .size = sizeof(VertexData) * vertexData_.size(),
+                             .data = vertexData_.data(),
+                             .debugName = "Buffer: vertex"},
+                            nullptr);
   ib0_ = ctx_->createBuffer({.usage = lvk::BufferUsageBits_Index,
-                                .storage = lvk::StorageType_Device,
-                                .size = sizeof(uint32_t) * indexData_.size(),
-                                .data = indexData_.data(),
-                                .debugName = "Buffer: index"},
-                               nullptr);
+                             .storage = lvk::StorageType_Device,
+                             .size = sizeof(uint32_t) * indexData_.size(),
+                             .data = indexData_.data(),
+                             .debugName = "Buffer: index"},
+                            nullptr);
   return true;
 }
 
@@ -1147,8 +1127,7 @@ void createOffscreenFramebuffer() {
     descDepth.numMipLevels = 1;
   }
 
-  const uint8_t usage = lvk::TextureUsageBits_Attachment | lvk::TextureUsageBits_Sampled |
-                        lvk::TextureUsageBits_Storage;
+  const uint8_t usage = lvk::TextureUsageBits_Attachment | lvk::TextureUsageBits_Sampled | lvk::TextureUsageBits_Storage;
   const lvk::Format format = lvk::Format_RGBA_UN8;
 
   lvk::TextureDesc descColor = {
@@ -1174,10 +1153,10 @@ void createOffscreenFramebuffer() {
 
   if (kNumSamplesMSAA > 1) {
     fbOffscreenResolve_ = ctx_->createTexture({.type = lvk::TextureType_2D,
-                                                      .format = format,
-                                                      .dimensions = {w, h},
-                                                      .usage = usage,
-                                                      .debugName = "Offscreen framebuffer (color resolve)"});
+                                               .format = format,
+                                               .dimensions = {w, h},
+                                               .usage = usage,
+                                               .debugName = "Offscreen framebuffer (color resolve)"});
     fb.color[0].resolveTexture = fbOffscreenResolve_;
   }
 
@@ -1194,8 +1173,9 @@ void resize() {
 
 void showTimeGPU();
 double getCurrentTimestamp();
+void processLoadedMaterials(lvk::ICommandBuffer& buffer);
 
-void render(double delta, uint32_t frameIndex) {
+void render(double delta) {
   LVK_PROFILER_FUNCTION();
 
   if (!width_ && !height_)
@@ -1281,28 +1261,25 @@ void render(double delta, uint32_t frameIndex) {
       .sampler = sampler_.index(),
       .samplerShadow = samplerShadow_.index(),
   };
-  ctx_->upload(ubPerFrame_[frameIndex], &perFrame_, sizeof(perFrame_));
 
-  {
+  const UniformsPerObject perObject = {
+      .model = glm::scale(mat4(1.0f), vec3(0.05f)),
+  };
+
+  lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
+
+  processLoadedMaterials(buffer);
+
+  buffer.cmdUpdateBuffer(ubPerFrame_, 0, sizeof(perFrame_), &perFrame_);
+  buffer.cmdUpdateBuffer(ubPerObject_, 0, sizeof(perObject), &perObject);
+
+  // Pass 1: shadows
+  if (isShadowMapDirty_) {
     const UniformsPerFrame perFrameShadow{
         .proj = shadowProj,
         .view = shadowView,
     };
-    ctx_->upload(ubPerFrameShadow_[frameIndex], &perFrameShadow, sizeof(perFrameShadow));
-  }
-
-  UniformsPerObject perObject;
-
-  perObject.model = glm::scale(mat4(1.0f), vec3(0.05f));
-
-  ctx_->upload(ubPerObject_[frameIndex], &perObject, sizeof(perObject));
-
-  // Command buffers (1-N per thread): create, submit and forget
-
-  // Pass 1: shadows
-  if (isShadowMapDirty_) {
-    lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
-
+    buffer.cmdUpdateBuffer(ubPerFrameShadow_, 0, sizeof(perFrameShadow), &perFrameShadow);
     buffer.cmdBeginRendering(renderPassShadow_, fbShadowMap_);
     {
       buffer.cmdBindRenderPipeline(renderPipelineState_Shadow_);
@@ -1313,8 +1290,8 @@ void render(double delta, uint32_t frameIndex) {
         uint64_t perFrame;
         uint64_t perObject;
       } bindings = {
-          .perFrame = ctx_->gpuAddress(ubPerFrameShadow_[frameIndex]),
-          .perObject = ctx_->gpuAddress(ubPerObject_[frameIndex]),
+          .perFrame = ctx_->gpuAddress(ubPerFrameShadow_),
+          .perObject = ctx_->gpuAddress(ubPerObject_),
       };
       buffer.cmdPushConstants(bindings);
       buffer.cmdBindIndexBuffer(ib0_, lvk::IndexFormat_UI32);
@@ -1324,8 +1301,6 @@ void render(double delta, uint32_t frameIndex) {
     buffer.cmdEndRendering();
     buffer.transitionToShaderReadOnly(fbShadowMap_.depthStencil.texture);
     buffer.cmdGenerateMipmap(fbShadowMap_.depthStencil.texture);
-    ctx_->submit(buffer);
-
     isShadowMapDirty_ = false;
   }
 
@@ -1333,8 +1308,6 @@ void render(double delta, uint32_t frameIndex) {
 
   // Pass 2: mesh
   {
-    lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
-
     buffer.cmdResetQueryPool(queryPoolTimestamps_, 0, GPUTimestamp_NUM_TIMESTAMPS);
 
     GPU_TIMESTAMP(GPUTimestamp_BeginSceneRendering);
@@ -1343,7 +1316,7 @@ void render(double delta, uint32_t frameIndex) {
     buffer.cmdBeginRendering(renderPassOffscreen_, fbOffscreen_);
     {
       // Scene
-      buffer.cmdBindRenderPipeline(drawNormals_ ? renderPipelineState_MeshNormals_: renderPipelineState_Mesh_);
+      buffer.cmdBindRenderPipeline(drawNormals_ ? renderPipelineState_MeshNormals_ : renderPipelineState_Mesh_);
       buffer.cmdPushDebugGroupLabel("Render Mesh", 0xff0000ff);
       buffer.cmdBindDepthState(depthState_);
       buffer.cmdBindVertexBuffer(0, vb0_, 0);
@@ -1353,9 +1326,9 @@ void render(double delta, uint32_t frameIndex) {
         uint64_t perObject;
         uint64_t materials;
       } bindings = {
-          .perFrame = ctx_->gpuAddress(ubPerFrame_[frameIndex]),
-          .perObject = ctx_->gpuAddress(ubPerObject_[frameIndex]),
-          .materials = ctx_->gpuAddress(sbMaterials_[mtlBufIndex]),
+          .perFrame = ctx_->gpuAddress(ubPerFrame_),
+          .perObject = ctx_->gpuAddress(ubPerObject_),
+          .materials = ctx_->gpuAddress(sbMaterials_),
       };
       buffer.cmdPushConstants(bindings);
       buffer.cmdBindIndexBuffer(ib0_, lvk::IndexFormat_UI32);
@@ -1376,14 +1349,10 @@ void render(double delta, uint32_t frameIndex) {
     buffer.cmdEndRendering();
 
     GPU_TIMESTAMP(GPUTimestamp_EndSceneRendering);
-
-    ctx_->submit(buffer);
   }
 
   // Pass 3: compute shader post-processing
   {
-    lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
-
     GPU_TIMESTAMP(GPUTimestamp_BeginComputePass);
 
     if (enableComputePass_) {
@@ -1412,14 +1381,10 @@ void render(double delta, uint32_t frameIndex) {
           });
     }
     GPU_TIMESTAMP(GPUTimestamp_EndComputePass);
-
-    ctx_->submit(buffer);
   }
 
   // Pass 4: render into the swapchain image
   {
-    lvk::ICommandBuffer& buffer = ctx_->acquireCommandBuffer();
-
     GPU_TIMESTAMP(GPUTimestamp_BeginPresent);
 
     lvk::TextureHandle tex = kNumSamplesMSAA > 1 ? fbOffscreen_.color[0].resolveTexture : fbOffscreen_.color[0].texture;
@@ -1444,9 +1409,9 @@ void render(double delta, uint32_t frameIndex) {
     buffer.cmdEndRendering();
 
     GPU_TIMESTAMP(GPUTimestamp_EndPresent);
-
-    ctx_->submit(buffer, fbMain_.color[0].texture);
   }
+
+  ctx_->submit(buffer, fbMain_.color[0].texture);
 
   timestampEndRendering = getCurrentTimestamp();
 
@@ -1564,9 +1529,9 @@ LoadedImage loadImage(const char* fileName, int channels) {
     return LoadedImage();
   }
 
-  char debugStr[512] = { 0 };
+  char debugStr[512] = {0};
 
-  snprintf(debugStr, sizeof(debugStr)-1, "%s (%i)", fileName, channels);
+  snprintf(debugStr, sizeof(debugStr) - 1, "%s (%i)", fileName, channels);
 
   const std::string debugName(debugStr);
 
@@ -1593,8 +1558,7 @@ LoadedImage loadImage(const char* fileName, int channels) {
       .compressedFileName = convertFileName(fileName),
   };
 
-  if (img.pixels && kEnableCompression && (channels != 1) &&
-      !std::filesystem::exists(img.compressedFileName.c_str())) {
+  if (img.pixels && kEnableCompression && (channels != 1) && !std::filesystem::exists(img.compressedFileName.c_str())) {
     generateCompressedTexture(img);
   }
 
@@ -1614,13 +1578,11 @@ void loadMaterial(size_t i) {
     remainingMaterialsToLoad_.fetch_sub(1u, std::memory_order_release);
   };
 
-#define LOAD_TEX(result, tex, channels)                                          \
-  const LoadedImage result =                                                     \
-      std::string(cachedMaterials_[i].tex).empty()                               \
-          ? LoadedImage()                                                        \
-          : loadImage((pathPrefix + cachedMaterials_[i].tex).c_str(), channels); \
-  if (loaderShouldExit_.load(std::memory_order_acquire)) {                       \
-    return;                                                                      \
+#define LOAD_TEX(result, tex, channels)                                                                                                   \
+  const LoadedImage result =                                                                                                              \
+      std::string(cachedMaterials_[i].tex).empty() ? LoadedImage() : loadImage((pathPrefix + cachedMaterials_[i].tex).c_str(), channels); \
+  if (loaderShouldExit_.load(std::memory_order_acquire)) {                                                                                \
+    return;                                                                                                                               \
   }
 
   LOAD_TEX(ambient, ambient_texname, 4);
@@ -1726,17 +1688,17 @@ ktxTexture1* bitmapToCube(Bitmap& bmp) {
   const int numFacePixels = w * h;
 
   for (size_t face = 0; face != 6; face++) {
-     const vec3* src = reinterpret_cast<vec3*>(bmp.data_.data()) + face * numFacePixels;
-     size_t offset = 0;
-     (void)LVK_VERIFY(ktxTexture_GetImageOffset(ktxTexture(texture), 0, 0, face, &offset) == KTX_SUCCESS);
-     float* dst = (float*)(texture->pData + offset);
-     for (int y = 0; y != h; y++) {
+    const vec3* src = reinterpret_cast<vec3*>(bmp.data_.data()) + face * numFacePixels;
+    size_t offset = 0;
+    (void)LVK_VERIFY(ktxTexture_GetImageOffset(ktxTexture(texture), 0, 0, face, &offset) == KTX_SUCCESS);
+    float* dst = (float*)(texture->pData + offset);
+    for (int y = 0; y != h; y++) {
       for (int x = 0; x != w; x++) {
         const vec4 rgba = vec4(src[x + y * w], 1.0f);
         memcpy(dst, &rgba, sizeof(rgba));
         dst += 4;
       }
-     }
+    }
   }
 
   return texture;
@@ -1917,7 +1879,7 @@ lvk::TextureHandle createTexture(const LoadedImage& img) {
   return handle;
 }
 
-void processLoadedMaterials() {
+void processLoadedMaterials(lvk::ICommandBuffer& buffer) {
   LoadedMaterial mtl;
 
   {
@@ -1947,8 +1909,7 @@ void processLoadedMaterials() {
   LVK_ASSERT(materials_[mtl.idx].texAmbient >= 0);
   LVK_ASSERT(materials_[mtl.idx].texDiffuse >= 0);
   LVK_ASSERT(materials_[mtl.idx].texAlpha >= 0);
-  mtlBufIndex = (mtlBufIndex + 1) % sbMaterials_.size();
-  ctx_->upload(sbMaterials_[mtlBufIndex], materials_.data(), sizeof(GPUMaterial) * materials_.size());
+  buffer.cmdUpdateBuffer(sbMaterials_, 0, sizeof(GPUMaterial) * materials_.size(), materials_.data());
 }
 
 inline ImVec4 toVec4(const vec4& c) {
@@ -2106,13 +2067,13 @@ int main(int argc, char* argv[]) {
                                                width_,
                                                height_,
                                                {
-                                                 .enableValidation = kEnableValidationLayers,
+                                                   .enableValidation = kEnableValidationLayers,
                                                },
                                                kPreferIntegratedGPU ? lvk::HWDeviceType_Integrated : lvk::HWDeviceType_Discrete);
   if (!ctx_) {
     return EXIT_FAILURE;
   }
-  
+
   if (kEnableCompression) {
     printf("Compressing textures... It can take a while in debug builds...(needs to be done once)\n");
   }
@@ -2231,12 +2192,10 @@ int main(int argc, char* argv[]) {
   });
 
   double prevTime = getCurrentTimestamp();
-  uint32_t frameIndex = 0;
 
   // Main loop
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
-    processLoadedMaterials();
 
     const double newTime = getCurrentTimestamp();
     const double delta = newTime - prevTime;
@@ -2247,9 +2206,7 @@ int main(int argc, char* argv[]) {
 
     fps_.tick(delta);
 
-    render(delta, frameIndex);
-
-    frameIndex = (frameIndex + 1) % kNumBufferedFrames;
+    render(delta);
   }
 
   // destroy all the Vulkan stuff before closing the window
@@ -2278,10 +2235,9 @@ void handle_cmd(android_app* app, int32_t cmd) {
                                                    width_,
                                                    height_,
                                                    {
-                                                     .enableValidation = kEnableValidationLayers,
+                                                       .enableValidation = kEnableValidationLayers,
                                                    },
-                                                   kPreferIntegratedGPU ? lvk::HWDeviceType_Integrated : 
-                                                                          lvk::HWDeviceType_Discrete);
+                                                   kPreferIntegratedGPU ? lvk::HWDeviceType_Integrated : lvk::HWDeviceType_Discrete);
       if (!init()) {
         LLOGW("Failed to initialize the app\n");
         std::terminate();
@@ -2332,7 +2288,6 @@ void android_main(android_app* app) {
   fps_.printFPS_ = false;
 
   double prevTime = getCurrentTimestamp();
-  uint32_t frameIndex = 0;
 
   int events = 0;
   android_poll_source* source = nullptr;
@@ -2344,15 +2299,13 @@ void android_main(android_app* app) {
     }
     prevTime = newTime;
     if (ctx_) {
-      render(delta, frameIndex);
-      processLoadedMaterials();
+      render(delta);
     }
     if (ALooper_pollOnce(0, nullptr, &events, (void**)&source) >= 0) {
       if (source) {
         source->process(app, source);
       }
     }
-    frameIndex = (frameIndex + 1) % kNumBufferedFrames;
   } while (!app->destroyRequested);
 }
 } // extern "C"
