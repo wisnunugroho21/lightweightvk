@@ -12,6 +12,9 @@
 #include <filesystem>
 #include <vector>
 
+#include <stb/stb_image.h>
+#include <stb/stb_image_write.h>
+
 #if defined(ANDROID)
 #include <android/asset_manager_jni.h>
 #include <android/native_window_jni.h>
@@ -348,8 +351,39 @@ void VulkanApp::run(DrawFrameFunc drawFrame) {
 
     positioner_.update(deltaSeconds, mouseState_.pos, ImGui::GetIO().WantCaptureMouse ? false : mouseState_.pressedLeft);
 
+    lvk::TextureHandle tex = ctx_->getCurrentSwapchainTexture();
+
     if (ctx_ && canRender_) {
       drawFrame((uint32_t)width_, (uint32_t)height_, ratio, deltaSeconds);
+    }
+
+    if (cfg_.screenshotFrameNumber == ++frameCount_) {
+      ctx_->wait({});
+      const lvk::Dimensions dim = ctx_->getDimensions(tex);
+      const lvk::Format format = ctx_->getFormat(tex);
+      LLOGL("Saving screenshot...%ux%u\n", dim.width, dim.height);
+      if (format != lvk::Format_BGRA_UN8 && format != lvk::Format_BGRA_SRGB8 && format != lvk::Format_RGBA_UN8 &&
+          format != lvk::Format_RGBA_SRGB8) {
+        LLOGW("Unsupported pixel format %u\n", (uint32_t)format);
+        break;
+      }
+      std::vector<uint8_t> pixelsRGBA(dim.width * dim.height * 4);
+      std::vector<uint8_t> pixelsRGB(dim.width * dim.height * 3);
+      ctx_->download(tex, {.dimensions = {dim.width, dim.height}}, pixelsRGBA.data());
+      if (format == lvk::Format_BGRA_UN8 || format == lvk::Format_BGRA_SRGB8) {
+        // swap R-B
+        for (uint32_t i = 0; i < pixelsRGBA.size(); i += 4) {
+          std::swap(pixelsRGBA[i + 0], pixelsRGBA[i + 2]);
+        }
+      }
+      // convert to RGB
+      for (uint32_t i = 0; i < pixelsRGB.size() / 3; i++) {
+        pixelsRGB[3 * i + 0] = pixelsRGBA[4 * i + 0];
+        pixelsRGB[3 * i + 1] = pixelsRGBA[4 * i + 1];
+        pixelsRGB[3 * i + 2] = pixelsRGBA[4 * i + 2];
+      }
+      stbi_write_png(cfg_.screenshotFileName, (int)dim.width, (int)dim.height, 3, pixelsRGB.data(), 0);
+      break;
     }
   }
 

@@ -126,4 +126,6 @@ class VulkanApp {
   std::vector<GLFWmousebuttonfun> callbacksMouseButton;
   std::vector<GLFWkeyfun> callbacksKey;
 #endif // ANDROID
+
+  uint64_t frameCount_ = 0;
 };
