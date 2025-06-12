@@ -202,3 +202,75 @@ jobs:
             cmake ${{ env.CMAKE_GENERATOR }} -S "${{ github.workspace }}" -B build ${{ matrix.config.cmake_args }}
             cd build
             cmake --build . --parallel ${{ steps.cpu-cores.outputs.count }}
+
+  cmake-test-ubuntu:
+      strategy:
+        fail-fast: false
+        matrix:
+          config:
+          - {
+              name: "Ubuntu - Clang",
+              os: ubuntu-latest,
+              build_type: "Debug",
+              cc: "clang-16",
+              cxx: "clang++-16",
+              generators: "Unix Makefiles",
+            }
+      runs-on: ${{ matrix.config.os }}
+
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            submodules: recursive
+
+        - name: Install Ubuntu packages
+          shell: bash
+          run: |
+            sudo apt-get update
+            sudo apt-get install -y gcc-13 clang-16 xorg-dev libxinerama-dev libxcursor-dev libgles2-mesa-dev libegl1-mesa-dev libglfw3-dev libglew-dev libstdc++-12-dev extra-cmake-modules libxkbcommon-x11-dev wayland-protocols ninja-build
+            sudo apt-get install -y mesa-vulkan-drivers libvulkan1 vulkan-tools vulkan-validationlayers
+            sudo apt remove cmake -y
+            sudo pip install cmake==4.0.0
+            which make
+            cmake --version
+            vulkaninfo
+
+        - name: Install Vulkan SDK
+          uses: jakoch/install-vulkan-sdk-action@v1.1.1
+          with:
+            vulkan_version: 1.4.304.1
+            install_runtime: true
+            cache: true
+            stripdown: true
+
+        - name: Get the number of CPU cores
+          uses: SimenB/github-actions-cpu-cores@v2
+
+        - name: Build
+          shell: bash
+          env:
+            CC:  ${{ matrix.config.cc }}
+            CXX: ${{ matrix.config.cxx }}
+          run: |
+            cmake ${{ env.CMAKE_GENERATOR }} -S "${{ github.workspace }}" -B build ${{ matrix.config.cmake_args }} -DCMAKE_BUILD_TYPE=Debug
+            cd build
+            cmake --build . --parallel ${{ steps.cpu-cores.outputs.count }}
+
+        - name: Run tests
+          run: |
+            ls build/samples
+            ./build/samples/001_HelloTriangle    --headless --screenshot-frame 1 --screenshot-file 001_HelloTriangle.png    --log-file 001_HelloTriangle.txt
+            ./build/samples/005_MeshShaders      --headless --screenshot-frame 1 --screenshot-file 005_MeshShaders.png      --log-file 005_MeshShaders.txt
+
+        - name: Upload artifacts
+          uses: actions/upload-artifact@v4
+          with:
+            name: LogsAndScreenshots
+            path: |
+              001_HelloTriangle.png
+              001_HelloTriangle.txt
+              005_MeshShaders.png
+              005_MeshShaders.txt
+            if-no-files-found: error
+            retention-days: 3
+            overwrite: true
