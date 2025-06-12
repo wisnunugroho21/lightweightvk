@@ -169,75 +169,78 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
 
   imgui_ = std::make_unique<lvk::ImGuiRenderer>(
       *ctx_, (folderThirdParty_ + "3D-Graphics-Rendering-Cookbook/data/OpenSans-Light.ttf").c_str(), 30.0f);
+
 #if !defined(ANDROID)
-  glfwSetWindowUserPointer(window_, this);
+  if (window_) {
+    glfwSetWindowUserPointer(window_, this);
 
-  glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* window, int width, int height) {
-    VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
-    if (app->width_ == width && app->height_ == height)
-      return;
-    app->width_ = width;
-    app->height_ = height;
-    app->ctx_->recreateSwapchain(width, height);
-    app->depthTexture_.reset();
-  });
-  glfwSetMouseButtonCallback(window_, [](GLFWwindow* window, int button, int action, int mods) {
-    VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-      app->mouseState_.pressedLeft = action == GLFW_PRESS;
-    }
-    double xpos, ypos;
-    glfwGetCursorPos(window, &xpos, &ypos);
-    const ImGuiMouseButton_ imguiButton = (button == GLFW_MOUSE_BUTTON_LEFT)
-                                              ? ImGuiMouseButton_Left
-                                              : (button == GLFW_MOUSE_BUTTON_RIGHT ? ImGuiMouseButton_Right : ImGuiMouseButton_Middle);
-    ImGuiIO& io = ImGui::GetIO();
-    io.MousePos = ImVec2((float)xpos, (float)ypos);
-    io.MouseDown[imguiButton] = action == GLFW_PRESS;
-    for (auto& cb : app->callbacksMouseButton) {
-      cb(window, button, action, mods);
-    }
-  });
-  glfwSetScrollCallback(window_, [](GLFWwindow* window, double dx, double dy) {
-    ImGuiIO& io = ImGui::GetIO();
-    io.MouseWheelH = (float)dx;
-    io.MouseWheel = (float)dy;
-  });
-  glfwSetCursorPosCallback(window_, [](GLFWwindow* window, double x, double y) {
-    VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-    ImGui::GetIO().MousePos = ImVec2(x, y);
-    app->mouseState_.pos.x = static_cast<float>(x / width);
-    app->mouseState_.pos.y = 1.0f - static_cast<float>(y / height);
-  });
-  glfwSetKeyCallback(window_, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
-    VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
-    const bool pressed = action != GLFW_RELEASE;
-    if (key == GLFW_KEY_ESCAPE && pressed)
-      glfwSetWindowShouldClose(window, GLFW_TRUE);
-    if (key == GLFW_KEY_W)
-      app->positioner_.movement_.forward_ = pressed;
-    if (key == GLFW_KEY_S)
-      app->positioner_.movement_.backward_ = pressed;
-    if (key == GLFW_KEY_A)
-      app->positioner_.movement_.left_ = pressed;
-    if (key == GLFW_KEY_D)
-      app->positioner_.movement_.right_ = pressed;
-    if (key == GLFW_KEY_1)
-      app->positioner_.movement_.up_ = pressed;
-    if (key == GLFW_KEY_2)
-      app->positioner_.movement_.down_ = pressed;
+    glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* window, int width, int height) {
+      VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
+      if (app->width_ == width && app->height_ == height)
+        return;
+      app->width_ = width;
+      app->height_ = height;
+      app->ctx_->recreateSwapchain(width, height);
+      app->depthTexture_.reset();
+    });
+    glfwSetMouseButtonCallback(window_, [](GLFWwindow* window, int button, int action, int mods) {
+      VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
+      if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        app->mouseState_.pressedLeft = action == GLFW_PRESS;
+      }
+      double xpos, ypos;
+      glfwGetCursorPos(window, &xpos, &ypos);
+      const ImGuiMouseButton_ imguiButton = (button == GLFW_MOUSE_BUTTON_LEFT)
+                                                ? ImGuiMouseButton_Left
+                                                : (button == GLFW_MOUSE_BUTTON_RIGHT ? ImGuiMouseButton_Right : ImGuiMouseButton_Middle);
+      ImGuiIO& io = ImGui::GetIO();
+      io.MousePos = ImVec2((float)xpos, (float)ypos);
+      io.MouseDown[imguiButton] = action == GLFW_PRESS;
+      for (auto& cb : app->callbacksMouseButton) {
+        cb(window, button, action, mods);
+      }
+    });
+    glfwSetScrollCallback(window_, [](GLFWwindow* window, double dx, double dy) {
+      ImGuiIO& io = ImGui::GetIO();
+      io.MouseWheelH = (float)dx;
+      io.MouseWheel = (float)dy;
+    });
+    glfwSetCursorPosCallback(window_, [](GLFWwindow* window, double x, double y) {
+      VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
+      int width, height;
+      glfwGetFramebufferSize(window, &width, &height);
+      ImGui::GetIO().MousePos = ImVec2(x, y);
+      app->mouseState_.pos.x = static_cast<float>(x / width);
+      app->mouseState_.pos.y = 1.0f - static_cast<float>(y / height);
+    });
+    glfwSetKeyCallback(window_, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+      VulkanApp* app = (VulkanApp*)glfwGetWindowUserPointer(window);
+      const bool pressed = action != GLFW_RELEASE;
+      if (key == GLFW_KEY_ESCAPE && pressed)
+        glfwSetWindowShouldClose(window, GLFW_TRUE);
+      if (key == GLFW_KEY_W)
+        app->positioner_.movement_.forward_ = pressed;
+      if (key == GLFW_KEY_S)
+        app->positioner_.movement_.backward_ = pressed;
+      if (key == GLFW_KEY_A)
+        app->positioner_.movement_.left_ = pressed;
+      if (key == GLFW_KEY_D)
+        app->positioner_.movement_.right_ = pressed;
+      if (key == GLFW_KEY_1)
+        app->positioner_.movement_.up_ = pressed;
+      if (key == GLFW_KEY_2)
+        app->positioner_.movement_.down_ = pressed;
 
-    app->positioner_.movement_.fastSpeed_ = (mods & GLFW_MOD_SHIFT) != 0;
+      app->positioner_.movement_.fastSpeed_ = (mods & GLFW_MOD_SHIFT) != 0;
 
-    if (key == GLFW_KEY_SPACE) {
-      app->positioner_.lookAt(app->cfg_.initialCameraPos, app->cfg_.initialCameraTarget, app->cfg_.initialCameraUpVector);
-    }
-    for (auto& cb : app->callbacksKey) {
-      cb(window, key, scancode, action, mods);
-    }
-  });
+      if (key == GLFW_KEY_SPACE) {
+        app->positioner_.lookAt(app->cfg_.initialCameraPos, app->cfg_.initialCameraTarget, app->cfg_.initialCameraUpVector);
+      }
+      for (auto& cb : app->callbacksKey) {
+        cb(window, key, scancode, action, mods);
+      }
+    });
+  }
 #endif // !ANDROID
 }
 
@@ -298,15 +301,16 @@ void VulkanApp::run(DrawFrameFunc drawFrame) {
       source->process(androidApp_, source);
     }
 #else
-
+    if (window_) {
 #if defined(__APPLE__)
-    // a hacky workaround for retina displays
-    glfwGetWindowSize(window_, &width_, &height_);
+      // a hacky workaround for retina displays
+      glfwGetWindowSize(window_, &width_, &height_);
 #else
-    glfwGetFramebufferSize(window_, &width_, &height_);
+      glfwGetFramebufferSize(window_, &width_, &height_);
 #endif // __APPLE__
 
-    glfwPollEvents();
+      glfwPollEvents();
+    }
 #endif // ANDROID
 
     if (!width_ || !height_)
