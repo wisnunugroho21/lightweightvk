@@ -279,7 +279,7 @@ void VulkanApp::run(DrawFrameFunc drawFrame) {
 #if defined(ANDROID)
   while (!androidApp_->destroyRequested) {
 #else
-  while (!glfwWindowShouldClose(window_)) {
+  while (cfg_.contextConfig.enableHeadlessSurface || !glfwWindowShouldClose(window_)) {
 #endif // !ANDROID
     if (fpsCounter_.tick(deltaSeconds)) {
       LLOGL("FPS: %.1f\n", fpsCounter_.getFPS());
