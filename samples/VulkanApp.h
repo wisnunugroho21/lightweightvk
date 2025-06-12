@@ -43,7 +43,7 @@ double glfwGetTime();
 #  define VULKAN_APP_EXIT() return
 #else
 #  define VULKAN_APP_MAIN int main(int argc, char* argv[])
-#  define VULKAN_APP_DECLARE(app, config) VulkanApp app(config)
+#  define VULKAN_APP_DECLARE(app, config) VulkanApp app(argc, argv, config)
 #  define VULKAN_APP_EXIT() return 0
 #endif
 // clang-format on
@@ -68,6 +68,8 @@ struct VulkanAppConfig {
   vec3 initialCameraPos = vec3(0.0f, 0.0f, -2.5f);
   vec3 initialCameraTarget = vec3(0.0f, 0.0f, 0.0f);
   vec3 initialCameraUpVector = vec3(0.0f, 1.0f, 0.0f);
+  uint64_t screenshotFrameNumber = 0; // frames start from 1
+  const char* screenshotFileName = "screenshot.png";
   lvk::ContextConfig contextConfig;
 };
 
@@ -76,7 +78,7 @@ class VulkanApp {
 #if defined(ANDROID)
   explicit VulkanApp(android_app* androidApp, const VulkanAppConfig& cfg = {});
 #else
-  explicit VulkanApp(const VulkanAppConfig& cfg = {});
+  explicit VulkanApp(int argc, char* argv[], const VulkanAppConfig& cfg = {});
 #endif // ANDROID
   virtual ~VulkanApp();
 
@@ -109,7 +111,7 @@ class VulkanApp {
   FramesPerSecondCounter fpsCounter_ = FramesPerSecondCounter(0.5f);
   std::unique_ptr<lvk::ImGuiRenderer> imgui_;
 
-  const VulkanAppConfig cfg_ = {};
+  VulkanAppConfig cfg_ = {};
 
   CameraPositioner_FirstPerson positioner_ = {cfg_.initialCameraPos, cfg_.initialCameraTarget, cfg_.initialCameraUpVector};
   Camera camera_ = Camera(positioner_);

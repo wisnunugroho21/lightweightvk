@@ -101,10 +101,39 @@ static void resize_callback(ANativeActivity* activity, ANativeWindow* window) {
 
 #if defined(ANDROID)
 VulkanApp::VulkanApp(android_app* androidApp, const VulkanAppConfig& cfg) : androidApp_(androidApp), cfg_(cfg) {
+  const char* logFileName = nullptr;
 #else
-VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
+VulkanApp::VulkanApp(int argc, char* argv[], const VulkanAppConfig& cfg) : cfg_(cfg) {
+  const char* logFileName = nullptr;
+  for (int i = 1; i < argc; i++) {
+    if (!strcmp(argv[i], "--headless")) {
+      cfg_.contextConfig.enableHeadlessSurface = true;
+    } else if (!strcmp(argv[i], "--log-file")) {
+      if (i + 1 < argc) {
+        logFileName = argv[++i];
+      } else {
+        LLOGW("Specify a file name for `--log-file <filename>`");
+      }
+    } else if (!strcmp(argv[i], "--screenshot-frame")) {
+      if (i + 1 < argc) {
+        cfg_.screenshotFrameNumber = strtoull(argv[++i], nullptr, 10);
+      } else {
+        LLOGW("Specify a frame number for `--screenshot-frame <framenumber>`");
+      }
+    } else if (!strcmp(argv[i], "--screenshot-file")) {
+      if (i + 1 < argc) {
+        cfg_.screenshotFileName = argv[++i];
+      } else {
+        LLOGW("Specify a file name for `--screenshot-file <filename>`");
+      }
+    }
+  }
 #endif // ANDROID
-  minilog::initialize(nullptr, {.threadNames = false});
+  minilog::initialize(logFileName,
+                      {
+                          .logLevelPrintToConsole = cfg_.contextConfig.enableHeadlessSurface ? minilog::Debug : minilog::Log,
+                          .threadNames = false,
+                      });
 
   // we use minilog
   fpsCounter_.printFPS_ = false;
@@ -159,12 +188,12 @@ VulkanApp::VulkanApp(const VulkanAppConfig& cfg) : cfg_(cfg) {
   androidApp_->activity->instance = this;
   androidApp_->activity->callbacks->onNativeWindowResized = resize_callback;
 #else
-  width_ = cfg.width;
-  height_ = cfg.height;
+  width_ = cfg_.width;
+  height_ = cfg_.height;
 
-  window_ = lvk::initWindow("Simple example", width_, height_, cfg.resizable);
+  window_ = lvk::initWindow("Simple example", width_, height_, cfg_.resizable);
 
-  ctx_ = lvk::createVulkanContextWithSwapchain(window_, width_, height_, cfg.contextConfig);
+  ctx_ = lvk::createVulkanContextWithSwapchain(window_, width_, height_, cfg_.contextConfig);
 #endif // ANDROID
 
   imgui_ = std::make_unique<lvk::ImGuiRenderer>(
@@ -324,7 +353,7 @@ void VulkanApp::run(DrawFrameFunc drawFrame) {
     }
   }
 
-  LLOGD("Terminating Android app...");
+  LLOGD("Terminating app...");
 }
 
 void VulkanApp::drawFPS() {
