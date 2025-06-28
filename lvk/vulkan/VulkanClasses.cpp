@@ -63,11 +63,11 @@ enum Bindings {
   kBinding_NumBindings = 5,
 };
 
-uint32_t getAlignedSize(uint32_t value, uint32_t alignment) {
+VkDeviceSize getAlignedSize(uint64_t value, uint64_t alignment) {
   return (value + alignment - 1) & ~(alignment - 1);
 }
 
-uint64_t getAlignedAddress(uint64_t addr, uint32_t align) {
+uint64_t getAlignedAddress(uint64_t addr, uint64_t align) {
   const uint64_t offs = addr % align;
   return offs ? addr + (align - offs) : addr;
 }
@@ -3079,10 +3079,7 @@ lvk::VulkanStagingDevice::VulkanStagingDevice(VulkanContext& ctx) : ctx_(ctx) {
 
   const VkPhysicalDeviceLimits& limits = ctx_.getVkPhysicalDeviceProperties().limits;
 
-  // use default value of 128Mb clamped to the max limits
-  maxBufferSize_ = std::min(limits.maxStorageBufferRange, 128u * 1024u * 1024u);
-
-  LVK_ASSERT(minBufferSize_ <= maxBufferSize_);
+  LVK_ASSERT(minBufferSize_ <= ctx_.config_.maxStagingBufferSize);
 }
 
 void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOffset, size_t size, const void* data) {
@@ -3100,7 +3097,7 @@ void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOff
   while (size) {
     // get next staging buffer free offset
     MemoryRegionDesc desc = getNextFreeOffset((uint32_t)size);
-    const uint32_t chunkSize = std::min((uint32_t)size, desc.size_);
+    const uint32_t chunkSize = std::min((uint64_t)size, desc.size_);
 
     // copy data into staging buffer
     stagingBuffer->bufferSubData(ctx_, desc.offset_, chunkSize, data);
@@ -3450,11 +3447,11 @@ void lvk::VulkanStagingDevice::ensureStagingBufferSize(uint32_t sizeNeeded) {
 
   const uint32_t alignedSize = std::max(getAlignedSize(sizeNeeded, kStagingBufferAlignment), minBufferSize_);
 
-  sizeNeeded = alignedSize < maxBufferSize_ ? alignedSize : maxBufferSize_;
+  sizeNeeded = alignedSize < ctx_.config_.maxStagingBufferSize ? alignedSize : ctx_.config_.maxStagingBufferSize;
 
   if (!stagingBuffer_.empty()) {
     const bool isEnoughSize = sizeNeeded <= stagingBufferSize_;
-    const bool isMaxSize = stagingBufferSize_ == maxBufferSize_;
+    const bool isMaxSize = stagingBufferSize_ == ctx_.config_.maxStagingBufferSize;
 
     if (isEnoughSize || isMaxSize) {
       return;
@@ -3468,7 +3465,7 @@ void lvk::VulkanStagingDevice::ensureStagingBufferSize(uint32_t sizeNeeded) {
 
   // if the combined size of the new staging buffer and the existing one is larger than the limit imposed by some architectures on buffers
   // that are device and host visible, we need to wait for the current buffer to be destroyed before we can allocate a new one
-  if ((sizeNeeded + stagingBufferSize_) > maxBufferSize_) {
+  if ((sizeNeeded + stagingBufferSize_) > ctx_.config_.maxStagingBufferSize) {
     ctx_.waitDeferredTasks();
   }
 
@@ -3544,10 +3541,10 @@ lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFree
   regions_.clear();
 
   // store the unused size in the deque first...
-  const uint32_t unusedSize = stagingBufferSize_ > requestedAlignedSize ? stagingBufferSize_ - requestedAlignedSize : 0;
+  const uint64_t unusedSize = stagingBufferSize_ > requestedAlignedSize ? stagingBufferSize_ - requestedAlignedSize : 0;
 
   if (unusedSize) {
-    const uint32_t unusedOffset = stagingBufferSize_ - unusedSize;
+    const uint64_t unusedOffset = stagingBufferSize_ - unusedSize;
     regions_.insert(regions_.begin(), {unusedOffset, unusedSize, SubmitHandle()});
   }
 

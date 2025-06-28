@@ -472,8 +472,8 @@ class VulkanStagingDevice final {
   enum { kStagingBufferAlignment = 16 }; // updated to support BC7 compressed image
 
   struct MemoryRegionDesc {
-    uint32_t offset_ = 0;
-    uint32_t size_ = 0;
+    uint64_t offset_ = 0;
+    uint64_t size_ = 0;
     SubmitHandle handle_ = {};
   };
 
@@ -484,10 +484,9 @@ class VulkanStagingDevice final {
  private:
   VulkanContext& ctx_;
   lvk::Holder<BufferHandle> stagingBuffer_;
-  uint32_t stagingBufferSize_ = 0;
+  VkDeviceSize stagingBufferSize_ = 0;
   uint32_t stagingBufferCounter_ = 0;
-  uint32_t maxBufferSize_ = 0;
-  const uint32_t minBufferSize_ = 4u * 2048u * 2048u;
+  const VkDeviceSize minBufferSize_ = 4u * 2048u * 2048u;
   std::vector<MemoryRegionDesc> regions_;
 };
 

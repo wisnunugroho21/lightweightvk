@@ -1178,6 +1178,8 @@ struct ContextConfig {
 
   // LVK knows about these extensions and can manage them automatically upon request
   bool enableHeadlessSurface = false; // VK_EXT_headless_surface
+
+  uint64_t maxStagingBufferSize = 128ull * 1024ull * 1024ull; // a reasonable default
 };
 
 [[nodiscard]] bool isDepthOrStencilFormat(lvk::Format format);
