@@ -486,7 +486,9 @@ class VulkanStagingDevice final {
   lvk::Holder<BufferHandle> stagingBuffer_;
   VkDeviceSize stagingBufferSize_ = 0;
   uint32_t stagingBufferCounter_ = 0;
-  const VkDeviceSize minBufferSize_ = 4u * 2048u * 2048u;
+  // the staging buffer grows from minBufferSize up to maxBufferSize as needed
+  VkDeviceSize maxBufferSize_ = 0;
+  VkDeviceSize minBufferSize_ = 4u * 2048u * 2048u; // ad hoc value to avoid frequent reallocations
   std::vector<MemoryRegionDesc> regions_;
 };
 

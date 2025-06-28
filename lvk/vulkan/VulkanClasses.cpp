@@ -3077,9 +3077,13 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
 lvk::VulkanStagingDevice::VulkanStagingDevice(VulkanContext& ctx) : ctx_(ctx) {
   LVK_PROFILER_FUNCTION();
 
-  const VkPhysicalDeviceLimits& limits = ctx_.getVkPhysicalDeviceProperties().limits;
+  const VkDeviceSize maxMemoryAllocationSize = ctx_.vkPhysicalDeviceVulkan11Properties_.maxMemoryAllocationSize;
 
-  LVK_ASSERT(minBufferSize_ <= ctx_.config_.maxStagingBufferSize);
+  LVK_ASSERT(ctx_.config_.maxStagingBufferSize <= maxMemoryAllocationSize);
+
+  // clamped to the max limits
+  maxBufferSize_ = std::min(maxMemoryAllocationSize, ctx_.config_.maxStagingBufferSize);
+  minBufferSize_ = std::min(minBufferSize_, maxBufferSize_);
 }
 
 void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOffset, size_t size, const void* data) {
@@ -4133,8 +4137,11 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
         {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, .pNext = numPlanes > 2 ? &planes[2] : nullptr, .image = img},
     };
 
+    const VkDeviceSize maxMemoryAllocationSize = vkPhysicalDeviceVulkan11Properties_.maxMemoryAllocationSize;
+
     for (uint32_t p = 0; p != numPlanes; p++) {
       vkGetImageMemoryRequirements2(vkDevice_, &imgRequirements[p], &memRequirements[p]);
+      LVK_ASSERT(memRequirements[p].memoryRequirements.size <= maxMemoryAllocationSize);
       VK_ASSERT(lvk::allocateMemory2(vkPhysicalDevice_, vkDevice_, &memRequirements[p], memFlags, &image.vkMemory_[p]));
     }
 
