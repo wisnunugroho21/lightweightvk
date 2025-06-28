@@ -7134,8 +7134,9 @@ lvk::BufferHandle lvk::VulkanContext::createBuffer(VkDeviceSize bufferSize,
   const VkPhysicalDeviceLimits& limits = getVkPhysicalDeviceProperties().limits;
 
   ENSURE_BUFFER_SIZE(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, limits.maxUniformBufferRange);
+  ENSURE_BUFFER_SIZE(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, limits.maxStorageBufferRange);
   // any buffer
-  ENSURE_BUFFER_SIZE(VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM, limits.maxStorageBufferRange);
+  ENSURE_BUFFER_SIZE(VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM, vkPhysicalDeviceVulkan11Properties_.maxMemoryAllocationSize);
 #undef ENSURE_BUFFER_SIZE
 
   VulkanBuffer buf = {
