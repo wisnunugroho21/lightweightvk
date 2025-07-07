@@ -30,8 +30,10 @@ add_library(LVKVulkanApp VulkanApp.cpp VulkanApp.h)
 lvk_set_cxxstd(LVKVulkanApp 20)
 lvk_set_folder(LVKVulkanApp "LVK")
 target_link_libraries(LVKVulkanApp PUBLIC LVKLibrary)
+target_link_libraries(LVKVulkanApp PUBLIC LVKstb)
 if(ANDROID)
   target_include_directories(LVKVulkanApp PUBLIC "${NDK_PATH}/sources/android/native_app_glue")
+  target_link_libraries(LVKVulkanApp PUBLIC android)
 endif()
 
 macro(ADD_DEMO app)
@@ -46,7 +48,6 @@ macro(ADD_DEMO app)
     if(UNIX AND NOT APPLE)
       target_link_libraries(${app} PRIVATE EGL)
     endif()
-    target_link_libraries(${app} PRIVATE LVKstb)
   endif()
 
   # Android
@@ -108,8 +109,8 @@ macro(ADD_DEMO app)
                   "${app}.cpp"
                   "${NDK_PATH}/sources/android/native_app_glue/android_native_app_glue.c")
       lvk_set_cxxstd(lvk_android_native_${app} 20)
-      target_link_libraries(lvk_android_native_${app} PRIVATE
-                            LVKVulkanApp LVKLibrary LVKstb meshoptimizer fast_obj_lib android log)
+      target_link_libraries(lvk_android_native_${app} PUBLIC
+                            LVKVulkanApp LVKLibrary LVKVulkan LVKstb meshoptimizer fast_obj_lib)
     endif()
   endif()
 endmacro()
