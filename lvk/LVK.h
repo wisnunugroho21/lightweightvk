@@ -1127,7 +1127,7 @@ class IContext {
 
 #pragma region Texture functions
   // `data` contains mip-levels and layers as in https://registry.khronos.org/KTX/specs/1.0/ktxspec.v1.html
-  virtual Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data) = 0;
+  virtual Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data, uint32_t bufferRowLength = 0) = 0;
   virtual Result download(TextureHandle handle, const TextureRangeDesc& range, void* outData) = 0;
   [[nodiscard]] virtual Dimensions getDimensions(TextureHandle handle) const = 0;
   [[nodiscard]] virtual float getAspectRatio(TextureHandle handle) const = 0;

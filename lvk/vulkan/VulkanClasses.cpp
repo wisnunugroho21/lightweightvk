@@ -3160,28 +3160,35 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
                                            uint32_t layer,
                                            uint32_t numLayers,
                                            VkFormat format,
-                                           const void* data) {
+                                           const void* data,
+                                           uint32_t bufferRowLength) {
   LVK_PROFILER_FUNCTION();
 
   LVK_ASSERT(numMipLevels <= LVK_MAX_MIP_LEVELS);
 
+  const Format texFormat = vkFormatToFormat(format);
+
   // divide the width and height by 2 until we get to the size of level 'baseMipLevel'
-  uint32_t width = image.vkExtent_.width >> baseMipLevel;
-  uint32_t height = image.vkExtent_.height >> baseMipLevel;
+  const uint32_t width = image.vkExtent_.width >> baseMipLevel;
+  const uint32_t height = image.vkExtent_.height >> baseMipLevel;
+  const bool coversFullImage = !imageRegion.offset.x && !imageRegion.offset.y && imageRegion.extent.width == width &&
+                               imageRegion.extent.height == height;
 
-  const Format texFormat(vkFormatToFormat(format));
+  LVK_ASSERT(coversFullImage || image.vkImageLayout_ != VK_IMAGE_LAYOUT_UNDEFINED);
 
-  LVK_ASSERT_MSG(!imageRegion.offset.x && !imageRegion.offset.y && imageRegion.extent.width == width && imageRegion.extent.height == height,
-                 "Uploading mip-levels with an image region that is smaller than the base mip level is not supported");
+  if (numMipLevels > 1 || numLayers > 1) {
+    LVK_ASSERT(!bufferRowLength);
+    LVK_ASSERT_MSG(coversFullImage, "Uploading mip-levels with an image region that is smaller than the base mip-level is not supported");
+  }
 
   // find the storage size for all mip-levels being uploaded
   uint32_t layerStorageSize = 0;
   for (uint32_t i = 0; i < numMipLevels; ++i) {
-    const uint32_t mipSize = lvk::getTextureBytesPerLayer(image.vkExtent_.width, image.vkExtent_.height, texFormat, i);
+    const uint32_t mipSize =
+        lvk::getTextureBytesPerLayer(bufferRowLength ? bufferRowLength : imageRegion.extent.width, imageRegion.extent.height, texFormat, i);
     layerStorageSize += mipSize;
-    width = width <= 1 ? 1 : width >> 1;
-    height = height <= 1 ? 1 : height >> 1;
   }
+
   const uint32_t storageSize = layerStorageSize * numLayers;
 
   ensureStagingBufferSize(storageSize);
@@ -3237,7 +3244,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
                                image.vkImage_,
                                StageAccess{.stage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, .access = VK_ACCESS_2_NONE},
                                StageAccess{.stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT, .access = VK_ACCESS_2_TRANSFER_WRITE_BIT},
-                               VK_IMAGE_LAYOUT_UNDEFINED,
+                               coversFullImage ? VK_IMAGE_LAYOUT_UNDEFINED : image.vkImageLayout_,
                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                VkImageSubresourceRange{imageAspect, currentMipLevel, 1, layer, 1});
 
@@ -3261,7 +3268,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
         const VkBufferImageCopy copy = {
             // the offset for this level is at the start of all mip-levels plus the size of all previous mip-levels being uploaded
             .bufferOffset = desc.offset_ + offset + planeOffset,
-            .bufferRowLength = 0,
+            .bufferRowLength = bufferRowLength,
             .bufferImageHeight = 0,
             .imageSubresource =
                 VkImageSubresourceLayers{numPlanes > 1 ? VK_IMAGE_ASPECT_PLANE_0_BIT << plane : imageAspect, currentMipLevel, layer, 1},
@@ -5528,7 +5535,10 @@ lvk::Result lvk::VulkanContext::download(lvk::TextureHandle handle, const Textur
   return Result();
 }
 
-lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureRangeDesc& range, const void* data) {
+lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle,
+                                       const TextureRangeDesc& range,
+                                       const void* data,
+                                       uint32_t bufferRowLength) {
   LVK_PROFILER_FUNCTION();
 
   if (!LVK_VERIFY(data)) {
@@ -5562,7 +5572,8 @@ lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureR
         .offset = {.x = range.offset.x, .y = range.offset.y},
         .extent = {.width = range.dimensions.width, .height = range.dimensions.height},
     };
-    stagingDevice_->imageData2D(*texture, imageRegion, range.mipLevel, range.numMipLevels, range.layer, range.numLayers, vkFormat, data);
+    stagingDevice_->imageData2D(
+        *texture, imageRegion, range.mipLevel, range.numMipLevels, range.layer, range.numLayers, vkFormat, data, bufferRowLength);
   }
 
   return Result();

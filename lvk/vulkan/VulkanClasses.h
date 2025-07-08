@@ -459,7 +459,8 @@ class VulkanStagingDevice final {
                    uint32_t layer,
                    uint32_t numLayers,
                    VkFormat format,
-                   const void* data);
+                   const void* data,
+                   uint32_t bufferRowLength);
   void imageData3D(VulkanImage& image, const VkOffset3D& offset, const VkExtent3D& extent, VkFormat format, const void* data);
   void getImageData(VulkanImage& image,
                     const VkOffset3D& offset,
@@ -538,7 +539,7 @@ class VulkanContext final : public IContext {
   uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) const override;
   void flushMappedMemory(BufferHandle handle, size_t offset, size_t size) const override;
 
-  Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data) override;
+  Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data, uint32_t bufferRowLength = 0) override;
   Result download(TextureHandle handle, const TextureRangeDesc& range, void* outData) override;
   Dimensions getDimensions(TextureHandle handle) const override;
   float getAspectRatio(TextureHandle handle) const override;
