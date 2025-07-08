@@ -154,6 +154,14 @@ if(LVK_WITH_OPENXR)
   # cmake-format: on
 endif()
 
+# cmake-format: off
+set(MINILOG_BUILD_EXAMPLE OFF CACHE BOOL "")
+set(MINILOG_RAW_OUTPUT     ON CACHE BOOL "")
+# cmake-format: on
+add_subdirectory(third-party/deps/src/minilog)
+lvk_set_folder(minilog "third-party")
+target_compile_definitions(minilog PUBLIC "-DMINILOG_ENABLE_VA_LIST=1")
+
 # temporary
 if(NOT LVK_USE_CUSTOM_MOLTENVK AND NOT LVK_WITH_SLANG)
   find_package(Vulkan REQUIRED)
@@ -186,14 +194,6 @@ endif()
 if(LVK_DEPLOY_DEPS)
   add_dependencies(LVKLibrary LVKDependencies)
 endif()
-
-# cmake-format: off
-set(MINILOG_BUILD_EXAMPLE OFF CACHE BOOL "")
-set(MINILOG_RAW_OUTPUT     ON CACHE BOOL "")
-# cmake-format: on
-add_subdirectory(third-party/deps/src/minilog)
-lvk_set_folder(minilog "third-party")
-target_compile_definitions(minilog PUBLIC "-DMINILOG_ENABLE_VA_LIST=1")
 
 target_link_libraries(LVKLibrary PUBLIC minilog)
 target_include_directories(LVKLibrary PUBLIC "third-party/deps/src")

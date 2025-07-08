@@ -4,7 +4,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/KhronosGroup/glslang.git",
-        "revision": "15.3.0"
+        "revision": "15.4.0"
     }
 },
 {
@@ -12,7 +12,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/KhronosGroup/SPIRV-Reflect.git",
-        "revision": "c07ddbd7f3ef6f4be3edcf9a091d745d11bf0e2a"
+        "revision": "74cd6a01f274d6cc7fc9f14c9e3608047b09c5af"
     }
 },
 {
@@ -28,7 +28,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/KhronosGroup/OpenXR-SDK.git",
-        "sha1": "release-1.1.47"
+        "sha1": "release-1.1.49"
     }
 },
 {
@@ -36,7 +36,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/ocornut/imgui.git",
-        "revision": "v1.91.8"
+        "revision": "v1.92.0"
     }
 },
 {
@@ -68,7 +68,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/wolfpld/tracy.git",
-        "revision": "v0.12.1"
+        "revision": "v0.12.2"
     }
 },
 {
@@ -76,7 +76,7 @@
     "source": {
         "type": "git",
         "url": "https://github.com/corporateshark/minilog",
-        "revision": "784664e0ae28c9c1a01eece6a6c1a29855ac7856"
+        "revision": "a981e9888308e8060f2995de0c638d3b1d8c87d6"
     }
 },
 {

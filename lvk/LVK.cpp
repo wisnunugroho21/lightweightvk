@@ -140,6 +140,7 @@ uint32_t lvk::getVertexFormatSize(lvk::VertexFormat format) {
     return 0;
   }
 #undef SIZE4
+#undef SIZE2_4_NORM
 }
 
 uint32_t lvk::getTextureBytesPerLayer(uint32_t width, uint32_t height, lvk::Format format, uint32_t level) {
@@ -399,6 +400,11 @@ std::unique_ptr<lvk::IContext> lvk::createVulkanContextWithSwapchain(LVKwindow* 
     } else if (preferredDeviceType == HWDeviceType_Integrated) {
       numDevices = ctx->queryDevices(HWDeviceType_Discrete, devices, LVK_ARRAY_NUM_ELEMENTS(devices));
     }
+  }
+
+  if (!numDevices) {
+    // LavaPipe etc
+    numDevices = ctx->queryDevices(HWDeviceType_Software, devices, LVK_ARRAY_NUM_ELEMENTS(devices));
   }
 
   if (!numDevices) {

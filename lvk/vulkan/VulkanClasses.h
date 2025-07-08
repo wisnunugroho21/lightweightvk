@@ -459,7 +459,8 @@ class VulkanStagingDevice final {
                    uint32_t layer,
                    uint32_t numLayers,
                    VkFormat format,
-                   const void* data);
+                   const void* data,
+                   uint32_t bufferRowLength);
   void imageData3D(VulkanImage& image, const VkOffset3D& offset, const VkExtent3D& extent, VkFormat format, const void* data);
   void getImageData(VulkanImage& image,
                     const VkOffset3D& offset,
@@ -472,8 +473,8 @@ class VulkanStagingDevice final {
   enum { kStagingBufferAlignment = 16 }; // updated to support BC7 compressed image
 
   struct MemoryRegionDesc {
-    uint32_t offset_ = 0;
-    uint32_t size_ = 0;
+    uint64_t offset_ = 0;
+    uint64_t size_ = 0;
     SubmitHandle handle_ = {};
   };
 
@@ -484,10 +485,11 @@ class VulkanStagingDevice final {
  private:
   VulkanContext& ctx_;
   lvk::Holder<BufferHandle> stagingBuffer_;
-  uint32_t stagingBufferSize_ = 0;
+  VkDeviceSize stagingBufferSize_ = 0;
   uint32_t stagingBufferCounter_ = 0;
-  uint32_t maxBufferSize_ = 0;
-  const uint32_t minBufferSize_ = 4u * 2048u * 2048u;
+  // the staging buffer grows from minBufferSize up to maxBufferSize as needed
+  VkDeviceSize maxBufferSize_ = 0;
+  VkDeviceSize minBufferSize_ = 4u * 2048u * 2048u; // ad hoc value to avoid frequent reallocations
   std::vector<MemoryRegionDesc> regions_;
 };
 
@@ -537,7 +539,7 @@ class VulkanContext final : public IContext {
   uint64_t gpuAddress(BufferHandle handle, size_t offset = 0) const override;
   void flushMappedMemory(BufferHandle handle, size_t offset, size_t size) const override;
 
-  Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data) override;
+  Result upload(TextureHandle handle, const TextureRangeDesc& range, const void* data, uint32_t bufferRowLength = 0) override;
   Result download(TextureHandle handle, const TextureRangeDesc& range, void* outData) override;
   Dimensions getDimensions(TextureHandle handle) const override;
   float getAspectRatio(TextureHandle handle) const override;

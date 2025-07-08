@@ -63,11 +63,11 @@ enum Bindings {
   kBinding_NumBindings = 5,
 };
 
-uint32_t getAlignedSize(uint32_t value, uint32_t alignment) {
+VkDeviceSize getAlignedSize(uint64_t value, uint64_t alignment) {
   return (value + alignment - 1) & ~(alignment - 1);
 }
 
-uint64_t getAlignedAddress(uint64_t addr, uint32_t align) {
+uint64_t getAlignedAddress(uint64_t addr, uint64_t align) {
   const uint64_t offs = addr % align;
   return offs ? addr + (align - offs) : addr;
 }
@@ -224,7 +224,6 @@ VkAttachmentStoreOp storeOpToVkAttachmentStoreOp(lvk::StoreOp a) {
   LVK_ASSERT(false);
   return VK_ATTACHMENT_STORE_OP_DONT_CARE;
 }
-
 
 VkResolveModeFlagBits resolveModeToVkResolveModeFlagBits(lvk::ResolveMode mode, VkResolveModeFlags supported) {
   switch (mode) {
@@ -736,11 +735,6 @@ VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>
   LLOGL("Could not find a native swap chain format that matched our designed swapchain format. Defaulting to first supported format.");
 
   return formats[0];
-}
-
-VkDeviceSize bufferSize(lvk::VulkanContext& ctx, const lvk::Holder<lvk::BufferHandle>& handle) {
-  lvk::VulkanBuffer* buffer = ctx.buffersPool_.get(handle);
-  return buffer ? buffer->bufferSize_ : 0;
 }
 
 } // namespace
@@ -1374,7 +1368,7 @@ lvk::VulkanImmediateCommands::VulkanImmediateCommands(VkDevice device,
       .queueFamilyIndex = queueFamilyIndex,
   };
   VK_ASSERT(vkCreateCommandPool(device, &ci, nullptr, &commandPool_));
-  lvk::setDebugObjectName(device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)commandPool_, debugName);
+  VK_ASSERT(lvk::setDebugObjectName(device, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)commandPool_, debugName));
 
   const VkCommandBufferAllocateInfo ai = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
@@ -3005,7 +2999,7 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
   accelerationStructureBuildSizesInfo.updateScratchSize += alignment;
   accelerationStructureBuildSizesInfo.buildScratchSize += alignment;
 
-  if (!as->scratchBuffer.valid() || bufferSize(*ctx_, as->scratchBuffer) < accelerationStructureBuildSizesInfo.updateScratchSize) {
+  if (!as->scratchBuffer.valid() || getBufferSize(ctx_, as->scratchBuffer) < accelerationStructureBuildSizesInfo.updateScratchSize) {
     LLOGD("Recreating scratch buffer for TLAS update");
     as->scratchBuffer = ctx_->createBuffer(
         lvk::BufferDesc{
@@ -3083,12 +3077,13 @@ void lvk::CommandBuffer::cmdUpdateTLAS(AccelStructHandle handle, BufferHandle in
 lvk::VulkanStagingDevice::VulkanStagingDevice(VulkanContext& ctx) : ctx_(ctx) {
   LVK_PROFILER_FUNCTION();
 
-  const VkPhysicalDeviceLimits& limits = ctx_.getVkPhysicalDeviceProperties().limits;
+  const VkDeviceSize maxMemoryAllocationSize = ctx_.vkPhysicalDeviceVulkan11Properties_.maxMemoryAllocationSize;
 
-  // use default value of 128Mb clamped to the max limits
-  maxBufferSize_ = std::min(limits.maxStorageBufferRange, 128u * 1024u * 1024u);
+  LVK_ASSERT(ctx_.config_.maxStagingBufferSize <= maxMemoryAllocationSize);
 
-  LVK_ASSERT(minBufferSize_ <= maxBufferSize_);
+  // clamped to the max limits
+  maxBufferSize_ = std::min(maxMemoryAllocationSize, ctx_.config_.maxStagingBufferSize);
+  minBufferSize_ = std::min(minBufferSize_, maxBufferSize_);
 }
 
 void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOffset, size_t size, const void* data) {
@@ -3106,7 +3101,7 @@ void lvk::VulkanStagingDevice::bufferSubData(VulkanBuffer& buffer, size_t dstOff
   while (size) {
     // get next staging buffer free offset
     MemoryRegionDesc desc = getNextFreeOffset((uint32_t)size);
-    const uint32_t chunkSize = std::min((uint32_t)size, desc.size_);
+    const uint32_t chunkSize = std::min((uint64_t)size, desc.size_);
 
     // copy data into staging buffer
     stagingBuffer->bufferSubData(ctx_, desc.offset_, chunkSize, data);
@@ -3165,28 +3160,35 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
                                            uint32_t layer,
                                            uint32_t numLayers,
                                            VkFormat format,
-                                           const void* data) {
+                                           const void* data,
+                                           uint32_t bufferRowLength) {
   LVK_PROFILER_FUNCTION();
 
   LVK_ASSERT(numMipLevels <= LVK_MAX_MIP_LEVELS);
 
+  const Format texFormat = vkFormatToFormat(format);
+
   // divide the width and height by 2 until we get to the size of level 'baseMipLevel'
-  uint32_t width = image.vkExtent_.width >> baseMipLevel;
-  uint32_t height = image.vkExtent_.height >> baseMipLevel;
+  const uint32_t width = image.vkExtent_.width >> baseMipLevel;
+  const uint32_t height = image.vkExtent_.height >> baseMipLevel;
+  const bool coversFullImage = !imageRegion.offset.x && !imageRegion.offset.y && imageRegion.extent.width == width &&
+                               imageRegion.extent.height == height;
 
-  const Format texFormat(vkFormatToFormat(format));
+  LVK_ASSERT(coversFullImage || image.vkImageLayout_ != VK_IMAGE_LAYOUT_UNDEFINED);
 
-  LVK_ASSERT_MSG(!imageRegion.offset.x && !imageRegion.offset.y && imageRegion.extent.width == width && imageRegion.extent.height == height,
-                 "Uploading mip-levels with an image region that is smaller than the base mip level is not supported");
+  if (numMipLevels > 1 || numLayers > 1) {
+    LVK_ASSERT(!bufferRowLength);
+    LVK_ASSERT_MSG(coversFullImage, "Uploading mip-levels with an image region that is smaller than the base mip-level is not supported");
+  }
 
   // find the storage size for all mip-levels being uploaded
   uint32_t layerStorageSize = 0;
   for (uint32_t i = 0; i < numMipLevels; ++i) {
-    const uint32_t mipSize = lvk::getTextureBytesPerLayer(image.vkExtent_.width, image.vkExtent_.height, texFormat, i);
+    const uint32_t mipSize =
+        lvk::getTextureBytesPerLayer(bufferRowLength ? bufferRowLength : imageRegion.extent.width, imageRegion.extent.height, texFormat, i);
     layerStorageSize += mipSize;
-    width = width <= 1 ? 1 : width >> 1;
-    height = height <= 1 ? 1 : height >> 1;
   }
+
   const uint32_t storageSize = layerStorageSize * numLayers;
 
   ensureStagingBufferSize(storageSize);
@@ -3242,7 +3244,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
                                image.vkImage_,
                                StageAccess{.stage = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, .access = VK_ACCESS_2_NONE},
                                StageAccess{.stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT, .access = VK_ACCESS_2_TRANSFER_WRITE_BIT},
-                               VK_IMAGE_LAYOUT_UNDEFINED,
+                               coversFullImage ? VK_IMAGE_LAYOUT_UNDEFINED : image.vkImageLayout_,
                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                VkImageSubresourceRange{imageAspect, currentMipLevel, 1, layer, 1});
 
@@ -3266,7 +3268,7 @@ void lvk::VulkanStagingDevice::imageData2D(VulkanImage& image,
         const VkBufferImageCopy copy = {
             // the offset for this level is at the start of all mip-levels plus the size of all previous mip-levels being uploaded
             .bufferOffset = desc.offset_ + offset + planeOffset,
-            .bufferRowLength = 0,
+            .bufferRowLength = bufferRowLength,
             .bufferImageHeight = 0,
             .imageSubresource =
                 VkImageSubresourceLayers{numPlanes > 1 ? VK_IMAGE_ASPECT_PLANE_0_BIT << plane : imageAspect, currentMipLevel, layer, 1},
@@ -3456,11 +3458,11 @@ void lvk::VulkanStagingDevice::ensureStagingBufferSize(uint32_t sizeNeeded) {
 
   const uint32_t alignedSize = std::max(getAlignedSize(sizeNeeded, kStagingBufferAlignment), minBufferSize_);
 
-  sizeNeeded = alignedSize < maxBufferSize_ ? alignedSize : maxBufferSize_;
+  sizeNeeded = alignedSize < ctx_.config_.maxStagingBufferSize ? alignedSize : ctx_.config_.maxStagingBufferSize;
 
   if (!stagingBuffer_.empty()) {
     const bool isEnoughSize = sizeNeeded <= stagingBufferSize_;
-    const bool isMaxSize = stagingBufferSize_ == maxBufferSize_;
+    const bool isMaxSize = stagingBufferSize_ == ctx_.config_.maxStagingBufferSize;
 
     if (isEnoughSize || isMaxSize) {
       return;
@@ -3474,7 +3476,7 @@ void lvk::VulkanStagingDevice::ensureStagingBufferSize(uint32_t sizeNeeded) {
 
   // if the combined size of the new staging buffer and the existing one is larger than the limit imposed by some architectures on buffers
   // that are device and host visible, we need to wait for the current buffer to be destroyed before we can allocate a new one
-  if ((sizeNeeded + stagingBufferSize_) > maxBufferSize_) {
+  if ((sizeNeeded + stagingBufferSize_) > ctx_.config_.maxStagingBufferSize) {
     ctx_.waitDeferredTasks();
   }
 
@@ -3550,10 +3552,10 @@ lvk::VulkanStagingDevice::MemoryRegionDesc lvk::VulkanStagingDevice::getNextFree
   regions_.clear();
 
   // store the unused size in the deque first...
-  const uint32_t unusedSize = stagingBufferSize_ > requestedAlignedSize ? stagingBufferSize_ - requestedAlignedSize : 0;
+  const uint64_t unusedSize = stagingBufferSize_ > requestedAlignedSize ? stagingBufferSize_ - requestedAlignedSize : 0;
 
   if (unusedSize) {
-    const uint32_t unusedOffset = stagingBufferSize_ - unusedSize;
+    const uint64_t unusedOffset = stagingBufferSize_ - unusedSize;
     regions_.insert(regions_.begin(), {unusedOffset, unusedSize, SubmitHandle()});
   }
 
@@ -3775,7 +3777,7 @@ lvk::Holder<lvk::BufferHandle> lvk::VulkanContext::createBuffer(const BufferDesc
     usageFlags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
   }
   if (desc.usage & BufferUsageBits_Uniform) {
-    usageFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+    usageFlags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
   }
 
   if (desc.usage & BufferUsageBits_Storage) {
@@ -3839,7 +3841,7 @@ lvk::Holder<lvk::QueryPoolHandle> lvk::VulkanContext::createQueryPool(uint32_t n
   }
 
   if (debugName && *debugName) {
-    lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_QUERY_POOL, (uint64_t)queryPool, debugName);
+    VK_ASSERT(lvk::setDebugObjectName(vkDevice_, VK_OBJECT_TYPE_QUERY_POOL, (uint64_t)queryPool, debugName));
   }
 
   lvk::QueryPoolHandle handle = queriesPool_.create(std::move(queryPool));
@@ -4142,8 +4144,11 @@ lvk::Holder<lvk::TextureHandle> lvk::VulkanContext::createTexture(const TextureD
         {.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2, .pNext = numPlanes > 2 ? &planes[2] : nullptr, .image = img},
     };
 
+    const VkDeviceSize maxMemoryAllocationSize = vkPhysicalDeviceVulkan11Properties_.maxMemoryAllocationSize;
+
     for (uint32_t p = 0; p != numPlanes; p++) {
       vkGetImageMemoryRequirements2(vkDevice_, &imgRequirements[p], &memRequirements[p]);
+      LVK_ASSERT(memRequirements[p].memoryRequirements.size <= maxMemoryAllocationSize);
       VK_ASSERT(lvk::allocateMemory2(vkPhysicalDevice_, vkDevice_, &memRequirements[p], memFlags, &image.vkMemory_[p]));
     }
 
@@ -4691,7 +4696,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RenderPipelineHandle handle, uint32
     const VkPushConstantRange range = {
         .stageFlags = rps->shaderStageFlags_,
         .offset = 0,
-        .size = pushConstantsSize,
+        .size = (uint32_t)getAlignedSize(pushConstantsSize, 16),
     };
     const VkPipelineLayoutCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -4852,7 +4857,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(RayTracingPipelineHandle handle) {
     const VkDescriptorSetLayout dsls[] = {vkDSL_, vkDSL_, vkDSL_, vkDSL_};
     const VkPushConstantRange range = {
         .stageFlags = rtps->shaderStageFlags_,
-        .size = pushConstantsSize,
+        .size = (uint32_t)getAlignedSize(pushConstantsSize, 16),
     };
 
     const VkPipelineLayoutCreateInfo ciPipelineLayout = {
@@ -5059,7 +5064,7 @@ VkPipeline lvk::VulkanContext::getVkPipeline(ComputePipelineHandle handle) {
       const VkPushConstantRange range = {
           .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
           .offset = 0,
-          .size = sm->pushConstantsSize,
+          .size = (uint32_t)getAlignedSize(sm->pushConstantsSize, 16),
       };
       const VkPipelineLayoutCreateInfo ci = {
           .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -5425,7 +5430,7 @@ lvk::Result lvk::VulkanContext::upload(lvk::BufferHandle handle, const void* dat
   LVK_PROFILER_FUNCTION();
 
   if (!LVK_VERIFY(data)) {
-    return lvk::Result();
+    return Result(Result::Code::ArgumentOutOfRange);
   }
 
   LVK_ASSERT_MSG(size, "Data size should be non-zero");
@@ -5433,23 +5438,23 @@ lvk::Result lvk::VulkanContext::upload(lvk::BufferHandle handle, const void* dat
   lvk::VulkanBuffer* buf = buffersPool_.get(handle);
 
   if (!LVK_VERIFY(buf)) {
-    return lvk::Result();
+    return Result(Result::Code::ArgumentOutOfRange);
   }
 
   if (!LVK_VERIFY(offset + size <= buf->bufferSize_)) {
-    return lvk::Result(Result::Code::ArgumentOutOfRange, "Out of range");
+    return Result(Result::Code::ArgumentOutOfRange, "Out of range");
   }
 
   stagingDevice_->bufferSubData(*buf, offset, size, data);
 
-  return lvk::Result();
+  return Result();
 }
 
 lvk::Result lvk::VulkanContext::download(lvk::BufferHandle handle, void* data, size_t size, size_t offset) {
   LVK_PROFILER_FUNCTION();
 
   if (!LVK_VERIFY(data)) {
-    return lvk::Result();
+    return Result(Result::Code::ArgumentOutOfRange);
   }
 
   LVK_ASSERT_MSG(size, "Data size should be non-zero");
@@ -5457,16 +5462,16 @@ lvk::Result lvk::VulkanContext::download(lvk::BufferHandle handle, void* data, s
   lvk::VulkanBuffer* buf = buffersPool_.get(handle);
 
   if (!LVK_VERIFY(buf)) {
-    return lvk::Result();
+    return Result(Result::Code::ArgumentOutOfRange);
   }
 
   if (!LVK_VERIFY(offset + size <= buf->bufferSize_)) {
-    return lvk::Result(Result::Code::ArgumentOutOfRange, "Out of range");
+    return Result(Result::Code::ArgumentOutOfRange, "Out of range");
   }
 
   buf->getBufferSubData(*this, offset, size, data);
 
-  return lvk::Result();
+  return Result();
 }
 
 uint8_t* lvk::VulkanContext::getMappedPtr(BufferHandle handle) const {
@@ -5530,21 +5535,26 @@ lvk::Result lvk::VulkanContext::download(lvk::TextureHandle handle, const Textur
   return Result();
 }
 
-lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureRangeDesc& range, const void* data) {
-  if (!data) {
+lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle,
+                                       const TextureRangeDesc& range,
+                                       const void* data,
+                                       uint32_t bufferRowLength) {
+  LVK_PROFILER_FUNCTION();
+
+  if (!LVK_VERIFY(data)) {
     return Result(Result::Code::ArgumentOutOfRange);
   }
 
   lvk::VulkanImage* texture = texturesPool_.get(handle);
 
-  if (!texture) {
-    return Result(Result::Code::RuntimeError);
+  if (!LVK_VERIFY(texture)) {
+    return Result(Result::Code::ArgumentOutOfRange);
   }
 
   const Result result = validateRange(texture->vkExtent_, texture->numLevels_, range);
 
   if (!LVK_VERIFY(result.isOk())) {
-    return result;
+    return Result(Result::Code::ArgumentOutOfRange);
   }
 
   const uint32_t numLayers = std::max(range.numLayers, 1u);
@@ -5562,7 +5572,8 @@ lvk::Result lvk::VulkanContext::upload(lvk::TextureHandle handle, const TextureR
         .offset = {.x = range.offset.x, .y = range.offset.y},
         .extent = {.width = range.dimensions.width, .height = range.dimensions.height},
     };
-    stagingDevice_->imageData2D(*texture, imageRegion, range.mipLevel, range.numMipLevels, range.layer, range.numLayers, vkFormat, data);
+    stagingDevice_->imageData2D(
+        *texture, imageRegion, range.mipLevel, range.numMipLevels, range.layer, range.numLayers, vkFormat, data, bufferRowLength);
   }
 
   return Result();
@@ -6130,7 +6141,7 @@ void lvk::VulkanContext::createHeadlessSurface() {
       .pNext = nullptr,
       .flags = 0,
   };
-  LVK_ASSERT(vkCreateHeadlessSurfaceEXT(vkInstance_, &ci, nullptr, &vkSurface_));
+  VK_ASSERT(vkCreateHeadlessSurfaceEXT(vkInstance_, &ci, nullptr, &vkSurface_));
 }
 
 void lvk::VulkanContext::createSurface(void* window, void* display) {
@@ -6207,7 +6218,7 @@ uint32_t lvk::VulkanContext::queryDevices(HWDeviceType deviceType, HWDeviceDesc*
     const HWDeviceType deviceType = convertVulkanDeviceTypeToLVK(deviceProperties.deviceType);
 
     // filter non-suitable hardware devices
-    if (desiredDeviceType != HWDeviceType_Software && desiredDeviceType != deviceType) {
+    if (desiredDeviceType != deviceType) {
       continue;
     }
 
@@ -6426,29 +6437,29 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   const uint32_t numQueues = ciQueue[0].queueFamilyIndex == ciQueue[1].queueFamilyIndex ? 1 : 2;
 
   std::vector<const char*> deviceExtensionNames = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 #if defined(__APPLE__)
-    // All supported Vulkan 1.3 extensions
-    // https://github.com/KhronosGroup/MoltenVK/issues/1930
-    VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
-    VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-    VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
-    VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
-    VK_EXT_4444_FORMATS_EXTENSION_NAME,
-    VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
-    VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME,
-    VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME,
-    VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,
-    VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME,
-    VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME,
-    VK_EXT_PRIVATE_DATA_EXTENSION_NAME,
-    VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME,
-    VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
-    VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME,
-    VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME,
+      // All supported Vulkan 1.3 extensions
+      // https://github.com/KhronosGroup/MoltenVK/issues/1930
+      VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME,
+      VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+      VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+      VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+      VK_EXT_4444_FORMATS_EXTENSION_NAME,
+      VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+      VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME,
+      VK_EXT_IMAGE_ROBUSTNESS_EXTENSION_NAME,
+      VK_EXT_INLINE_UNIFORM_BLOCK_EXTENSION_NAME,
+      VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME,
+      VK_EXT_PIPELINE_CREATION_FEEDBACK_EXTENSION_NAME,
+      VK_EXT_PRIVATE_DATA_EXTENSION_NAME,
+      VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME,
+      VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,
+      VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME,
+      VK_EXT_TEXTURE_COMPRESSION_ASTC_HDR_EXTENSION_NAME,
 #endif
 #if defined(LVK_WITH_VULKAN_PORTABILITY)
-    "VK_KHR_portability_subset",
+      "VK_KHR_portability_subset",
 #endif
   };
 
@@ -6509,6 +6520,7 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   VkPhysicalDeviceVulkan13Features deviceFeatures13 = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
       .pNext = &deviceFeatures12,
+      .shaderDemoteToHelperInvocation = vkFeatures13_.shaderDemoteToHelperInvocation, // enable if supported
       .subgroupSizeControl = VK_TRUE,
       .synchronization2 = VK_TRUE,
       .dynamicRendering = VK_TRUE,
@@ -6543,9 +6555,9 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
   };
 
   VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamicRenderingFeatures = {
-    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
-    .pNext = &synchronization2Features,
-    .dynamicRendering = VK_TRUE,
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+      .pNext = &synchronization2Features,
+      .dynamicRendering = VK_TRUE,
   };
 
   void* createInfoNext = &dynamicRenderingFeatures;
@@ -6940,8 +6952,8 @@ lvk::Result lvk::VulkanContext::initContext(const HWDeviceDesc& desc) {
         .queueFamilyIndex = deviceQueues_.graphicsQueueFamilyIndex,
     };
     VK_ASSERT(vkCreateCommandPool(vkDevice_, &ciCommandPool, nullptr, &pimpl_->tracyCommandPool_));
-    lvk::setDebugObjectName(
-        vkDevice_, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)pimpl_->tracyCommandPool_, "Command Pool: VulkanContextImpl::tracyCommandPool_");
+    VK_ASSERT(lvk::setDebugObjectName(
+        vkDevice_, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t)pimpl_->tracyCommandPool_, "Command Pool: VulkanContextImpl::tracyCommandPool_"));
     const VkCommandBufferAllocateInfo aiCommandBuffer = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = pimpl_->tracyCommandPool_,
@@ -6974,13 +6986,14 @@ lvk::Result lvk::VulkanContext::initSwapchain(uint32_t width, uint32_t height) {
 
   if (swapchain_) {
     // destroy the old swapchain first
+    // TODO: replace with VK_EXT_swapchain_maintenance1
     VK_ASSERT(vkDeviceWaitIdle(vkDevice_));
     swapchain_ = nullptr;
     vkDestroySemaphore(vkDevice_, timelineSemaphore_, nullptr);
   }
 
   if (!width || !height) {
-    return Result();
+    return Result(Result::Code::ArgumentOutOfRange, "Width and Height cannot be 0");
   }
 
   swapchain_ = std::make_unique<lvk::VulkanSwapchain>(*this, width, height);
@@ -7056,8 +7069,11 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
       lvk::getDSLBinding(kBinding_Textures, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures, stageFlags),
       lvk::getDSLBinding(kBinding_Samplers, VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers, stageFlags),
       lvk::getDSLBinding(kBinding_StorageImages, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures, stageFlags),
-      lvk::getDSLBinding(
-          kBinding_YUVImages, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, (uint32_t)immutableSamplers.size(), stageFlags, immutableSamplersData),
+      lvk::getDSLBinding(kBinding_YUVImages,
+                         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                         (uint32_t)immutableSamplers.size(),
+                         stageFlags,
+                         immutableSamplersData),
       lvk::getDSLBinding(kBinding_AccelerationStructures, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, maxAccelStructs, stageFlags),
   };
   const uint32_t flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT |
@@ -7084,7 +7100,7 @@ lvk::Result lvk::VulkanContext::growDescriptorPool(uint32_t maxTextures, uint32_
 
   {
     // create default descriptor pool and allocate 1 descriptor set
-    const VkDescriptorPoolSize poolSizes[kBinding_NumBindings]{
+    const VkDescriptorPoolSize poolSizes[kBinding_NumBindings] = {
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, maxTextures},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_SAMPLER, maxSamplers},
         VkDescriptorPoolSize{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, maxTextures},
@@ -7133,8 +7149,9 @@ lvk::BufferHandle lvk::VulkanContext::createBuffer(VkDeviceSize bufferSize,
   const VkPhysicalDeviceLimits& limits = getVkPhysicalDeviceProperties().limits;
 
   ENSURE_BUFFER_SIZE(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, limits.maxUniformBufferRange);
+  ENSURE_BUFFER_SIZE(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, limits.maxStorageBufferRange);
   // any buffer
-  ENSURE_BUFFER_SIZE(VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM, limits.maxStorageBufferRange);
+  ENSURE_BUFFER_SIZE(VK_BUFFER_USAGE_FLAG_BITS_MAX_ENUM, vkPhysicalDeviceVulkan11Properties_.maxMemoryAllocationSize);
 #undef ENSURE_BUFFER_SIZE
 
   VulkanBuffer buf = {
