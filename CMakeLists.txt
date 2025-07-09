@@ -21,7 +21,7 @@ option(LVK_WITH_WAYLAND            "Enable Wayland"                          OFF
 option(LVK_WITH_IMPLOT             "Enable ImPlot"                           ON)
 option(LVK_WITH_OPENXR             "Enable OpenXR"                           OFF)
 option(LVK_WITH_ANDROID_VALIDATION "Enable validation layers on Android"     ON)
-option(LVK_WITH_SLANG              "Enable Slang compiler"                   OFF)
+option(LVK_WITH_SLANG              "Enable Slang compiler"                   ON)
 
 cmake_dependent_option(LVK_WITH_VULKAN_PORTABILITY "Enable portability extension" ON "APPLE" OFF)
 
