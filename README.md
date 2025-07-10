@@ -12,6 +12,8 @@ Designed for rapid prototyping of Vulkan-based renderers.
 
 There are no plans to keep this fork in sync with the upstream.
 
+Discord: https://discord.com/invite/bEyHyKCrvq
+
 ## Supported rendering backends
 
  * Vulkan 1.3 (Windows, Linux, Android)
