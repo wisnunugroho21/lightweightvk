@@ -151,8 +151,6 @@ layout (location=0) in vec4 Ka;
 layout (location=1) in vec4 Kd;
 
 void main() {
-  if (Kd.a < 0.5)
-    discard;
 };
 )";
 
@@ -325,8 +323,6 @@ uint tea(uint val0, uint val1) {
 }
 
 void main() {
-  if (vtx.Kd.a < 0.5)
-    discard;
   vec3 n = normalize(vtx.normal);
 
   float occlusion = 1.0;
