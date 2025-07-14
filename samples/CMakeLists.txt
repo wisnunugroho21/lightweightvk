@@ -45,9 +45,6 @@ macro(ADD_DEMO app)
     target_link_libraries(${app} PRIVATE meshoptimizer)
     target_link_libraries(${app} PRIVATE fast_obj_lib)
     target_link_libraries(${app} PRIVATE LVKVulkanApp)
-    if(UNIX AND NOT APPLE)
-      target_link_libraries(${app} PRIVATE EGL)
-    endif()
   endif()
 
   # Android
