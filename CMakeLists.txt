@@ -15,8 +15,6 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # cmake-format: off
 option(LVK_DEPLOY_DEPS             "Deploy dependencies via CMake"           ON)
 option(LVK_WITH_GLFW               "Enable GLFW"                             ON)
-option(LVK_WITH_SAMPLES            "Enable sample demo apps"                 ON)
-option(LVK_WITH_SAMPLES_ANDROID    "Generate Android projects for demo apps" OFF)
 option(LVK_WITH_TRACY              "Enable Tracy profiler"                   ON)
 option(LVK_WITH_TRACY_GPU          "Enable Tracy GPU profiler"               OFF)
 option(LVK_WITH_WAYLAND            "Enable Wayland"                          OFF)
@@ -30,11 +28,6 @@ cmake_dependent_option(LVK_WITH_VULKAN_PORTABILITY "Enable portability extension
 set(LVK_ANDROID_ABI "arm64-v8a" CACHE STRING "Enabled ABI on Android")
 set(LVK_CUSTOM_MOLTENVK_PATH "" CACHE STRING "Path to custom MoltenVK")
 # cmake-format: on
-
-if(LVK_WITH_SAMPLES AND NOT LVK_WITH_GLFW)
-  message(STATUS "WARNING: Setting LVK_WITH_SAMPLES=ON forces LVK_WITH_GLFW=ON")
-  set(LVK_WITH_GLFW ON)
-endif()
 
 if(ANDROID)
   message(STATUS "WARNING: LVK_WITH_GLFW and LVK_WITH_SLANG were set to OFF for Android")
@@ -84,21 +77,12 @@ endfunction()
 # cmake-format: off
 message(STATUS "LVK_DEPLOY_DEPS             = ${LVK_DEPLOY_DEPS}")
 message(STATUS "LVK_WITH_GLFW               = ${LVK_WITH_GLFW}")
-message(STATUS "LVK_WITH_SAMPLES            = ${LVK_WITH_SAMPLES}")
-message(STATUS "LVK_WITH_SAMPLES_ANDROID    = ${LVK_WITH_SAMPLES_ANDROID}")
 message(STATUS "LVK_WITH_TRACY              = ${LVK_WITH_TRACY}")
 message(STATUS "LVK_WITH_TRACY_GPU          = ${LVK_WITH_TRACY_GPU}")
 message(STATUS "LVK_WITH_VULKAN_PORTABILITY = ${LVK_WITH_VULKAN_PORTABILITY}")
 message(STATUS "LVK_WITH_WAYLAND            = ${LVK_WITH_WAYLAND}")
 message(STATUS "LVK_WITH_IMPLOT             = ${LVK_WITH_IMPLOT}")
 message(STATUS "LVK_WITH_OPENXR             = ${LVK_WITH_OPENXR}")
-# cmake-format: on
-
-# cmake-format: off
-if(LVK_WITH_SAMPLES_ANDROID)
-  message(STATUS "LVK_ANDROID_ABI             = ${LVK_ANDROID_ABI}")
-  message(STATUS "LVK_WITH_ANDROID_VALIDATION = ${LVK_WITH_ANDROID_VALIDATION}")
-endif()
 # cmake-format: on
 
 if(NOT DEFINED CMAKE_BUILD_TYPE)
@@ -211,15 +195,6 @@ if(LVK_DEPLOY_DEPS)
   add_dependencies(LVKLibrary LVKDependencies)
 endif()
 
-add_library(LVKstb third-party/deps/patches/stb_impl/stb_image.c third-party/deps/patches/stb_impl/stb_image_resize2.c
-                   third-party/deps/patches/stb_impl/stb_image_write.c)
-target_include_directories(LVKstb PUBLIC "third-party/deps/src/stb")
-if(ANDROID)
-  target_compile_definitions(LVKstb PUBLIC "STBI_NO_SIMD=1")
-  target_compile_definitions(LVKstb PUBLIC "STBIR_NO_SIMD=1")
-endif()
-lvk_set_folder(LVKstb "LVK")
-
 target_link_libraries(LVKLibrary PUBLIC minilog)
 target_include_directories(LVKLibrary PUBLIC "third-party/deps/src")
 
@@ -240,52 +215,6 @@ if(LVK_WITH_GLFW)
   add_subdirectory(third-party/deps/src/glfw)
   lvk_set_folder(glfw            "third-party/GLFW3")
   lvk_set_folder(update_mappings "third-party/GLFW3")
-  # cmake-format: on
-endif()
-  
-if(LVK_WITH_SAMPLES)
-  include_directories("third-party/deps/src")
-  include_directories("third-party/deps/src/ktx-software")
-  include_directories("third-party/deps/src/glm")
-  include_directories("third-party/deps/src/stb")
-  include_directories("third-party/deps/src/taskflow")
-  include_directories("third-party/deps/src/3D-Graphics-Rendering-Cookbook")
-  if(UNIX AND NOT ANDROID)
-    find_package(OpenGL REQUIRED)
-  endif()
-  # cmake-format: off
-  set(KTX_FEATURE_DOC            OFF CACHE BOOL "")
-  set(KTX_FEATURE_GL_UPLOAD      OFF CACHE BOOL "")
-  set(KTX_FEATURE_JNI            OFF CACHE BOOL "")
-  set(KTX_FEATURE_KTX1            ON CACHE BOOL "")
-  set(KTX_FEATURE_KTX2            ON CACHE BOOL "")
-  set(KTX_FEATURE_LOADTEST_APPS  OFF CACHE BOOL "")
-  set(KTX_FEATURE_STATIC_LIBRARY  ON CACHE BOOL "")
-  set(KTX_FEATURE_TESTS          OFF CACHE BOOL "")
-  set(KTX_FEATURE_TOOLS          OFF CACHE BOOL "")
-  set(KTX_FEATURE_VK_UPLOAD      OFF CACHE BOOL "")
-  # cmake-format: on
-  add_subdirectory(third-party/deps/src/ldrutils)
-  lvk_set_folder(LUtils "third-party")
-  add_subdirectory(third-party/deps/src/ktx-software)
-  if(MSVC)
-    target_compile_options(ktx PRIVATE "/wd5287")
-    target_compile_options(ktx_read PRIVATE "/wd5287")
-  endif()
-  lvk_set_folder(ktx "third-party/ktx-software")
-  lvk_set_folder(ktx_read "third-party/ktx-software")
-  lvk_set_folder(ktx_version "third-party/ktx-software")
-  lvk_set_folder(obj_basisu_cbind "third-party/ktx-software")
-  lvk_set_folder(objUtil "third-party/ktx-software")
-  if(TARGET astcenc-avx2-static)
-    lvk_set_folder(astcenc-avx2-static "third-party/ktx-software")
-  endif()
-  add_subdirectory(third-party/deps/src/meshoptimizer)
-  add_subdirectory(third-party/deps/src/fast_obj)
-  add_subdirectory(samples)
-  # cmake-format: off
-  lvk_set_folder(meshoptimizer "third-party")
-  lvk_set_folder(fast_obj_lib  "third-party")
   # cmake-format: on
 endif()
 
