@@ -2089,6 +2089,30 @@ void lvk::CommandBuffer::cmdDispatchThreadGroups(const Dimensions& threadgroupCo
   vkCmdDispatch(wrapper_->cmdBuf_, threadgroupCount.width, threadgroupCount.height, threadgroupCount.depth);
 }
 
+void lvk::CommandBuffer::cmdDispatchThreadGroupsIndirect(BufferHandle indirectBuffer, size_t indirectBufferOffset, const Dependencies& deps) {
+  LVK_PROFILER_FUNCTION();
+  LVK_PROFILER_GPU_ZONE("cmdDispatchThreadGroupsIndirect()", ctx_, wrapper_->cmdBuf_, LVK_PROFILER_COLOR_CMD_DISPATCH);  
+
+  lvk::VulkanBuffer* bufIndirect = ctx_->buffersPool_.get(indirectBuffer);
+  LVK_ASSERT(bufIndirect);
+
+  LVK_ASSERT(!isRendering_);
+
+  for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.textures[i]; i++) {
+    useComputeTexture(deps.textures[i], VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+  }
+  for (uint32_t i = 0; i != Dependencies::LVK_MAX_SUBMIT_DEPENDENCIES && deps.buffers[i]; i++) {
+    const lvk::VulkanBuffer* buf = ctx_->buffersPool_.get(deps.buffers[i]);
+    LVK_ASSERT_MSG(buf->vkUsageFlags_ & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                   "Did you forget to specify BufferUsageBits_Storage on your buffer?");
+    bufferBarrier(deps.buffers[i],
+                  VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+                  VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT);
+  }
+
+  vkCmdDispatchIndirect(wrapper_->cmdBuf_, bufIndirect->vkBuffer_, indirectBufferOffset);
+}
+
 void lvk::CommandBuffer::cmdPushDebugGroupLabel(const char* label, uint32_t colorRGBA) const {
   LVK_ASSERT(label);
 
